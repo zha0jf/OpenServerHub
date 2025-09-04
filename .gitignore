@@ -286,3 +286,18 @@ dist
 # Temporary folders
 tmp/
 temp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
