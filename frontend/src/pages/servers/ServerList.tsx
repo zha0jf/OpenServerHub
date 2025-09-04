@@ -27,6 +27,44 @@ import { ColumnsType } from 'antd/es/table';
 const { Title } = Typography;
 const { Option } = Select;
 
+// 验证规则常量，与后端保持一致
+const VALIDATION_RULES = {
+  name: {
+    minLength: 1,
+    maxLength: 100,
+  },
+  ipmiIp: {
+    pattern: /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
+  },
+  ipmiUsername: {
+    minLength: 1,
+    maxLength: 50,
+  },
+  ipmiPassword: {
+    minLength: 1,
+    maxLength: 128,
+  },
+  ipmiPort: {
+    min: 1,
+    max: 65535,
+  },
+  manufacturer: {
+    maxLength: 100,
+  },
+  model: {
+    maxLength: 100,
+  },
+  serialNumber: {
+    maxLength: 100,
+  },
+  description: {
+    maxLength: 500,
+  },
+  tags: {
+    maxLength: 200,
+  },
+};
+
 const ServerList: React.FC = () => {
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,11 +206,6 @@ const ServerList: React.FC = () => {
       key: 'name',
     },
     {
-      title: '主机名',
-      dataIndex: 'hostname',
-      key: 'hostname',
-    },
-    {
       title: 'IPMI地址',
       dataIndex: 'ipmi_ip',
       key: 'ipmi_ip',
@@ -294,21 +327,26 @@ const ServerList: React.FC = () => {
           form={form}
           layout="vertical"
           onFinish={handleSubmit}
+          validateTrigger={['onChange', 'onBlur']}
         >
           <Form.Item
             name="name"
             label="服务器名称"
-            rules={[{ required: true, message: '请输入服务器名称' }]}
+            rules={[
+              { required: true, message: '请输入服务器名称' },
+              { 
+                min: VALIDATION_RULES.name.minLength,
+                max: VALIDATION_RULES.name.maxLength,
+                message: `服务器名称长度应为${VALIDATION_RULES.name.minLength}-${VALIDATION_RULES.name.maxLength}个字符`
+              },
+            ]}
+            hasFeedback
           >
-            <Input placeholder="请输入服务器名称" />
-          </Form.Item>
-
-          <Form.Item
-            name="hostname"
-            label="主机名"
-            rules={[{ required: true, message: '请输入主机名' }]}
-          >
-            <Input placeholder="请输入主机名" />
+            <Input 
+              placeholder="请输入服务器名称"
+              showCount
+              maxLength={VALIDATION_RULES.name.maxLength}
+            />
           </Form.Item>
 
           <Form.Item
@@ -316,46 +354,129 @@ const ServerList: React.FC = () => {
             label="IPMI地址"
             rules={[
               { required: true, message: '请输入IPMI地址' },
-              { pattern: /^(\d{1,3}\.){3}\d{1,3}$/, message: '请输入有效的IP地址' }
+              {
+                pattern: VALIDATION_RULES.ipmiIp.pattern,
+                message: '请输入有效的IP地址',
+              },
             ]}
+            hasFeedback
           >
-            <Input placeholder="请输入IPMI地址" />
+            <Input placeholder="请输入IPMI地址（格式：192.168.1.100）" />
           </Form.Item>
 
           <Form.Item
             name="ipmi_username"
             label="IPMI用户名"
-            rules={[{ required: true, message: '请输入IPMI用户名' }]}
+            rules={[
+              { required: true, message: '请输入IPMI用户名' },
+              { 
+                min: VALIDATION_RULES.ipmiUsername.minLength,
+                max: VALIDATION_RULES.ipmiUsername.maxLength,
+                message: `IPMI用户名长度应为${VALIDATION_RULES.ipmiUsername.minLength}-${VALIDATION_RULES.ipmiUsername.maxLength}个字符`
+              },
+            ]}
+            hasFeedback
           >
-            <Input placeholder="请输入IPMI用户名" />
+            <Input 
+              placeholder="请输入IPMI用户名"
+              showCount
+              maxLength={VALIDATION_RULES.ipmiUsername.maxLength}
+            />
           </Form.Item>
 
           <Form.Item
             name="ipmi_password"
             label="IPMI密码"
-            rules={[{ required: true, message: '请输入IPMI密码' }]}
+            rules={[
+              { required: true, message: '请输入IPMI密码' },
+              { 
+                min: VALIDATION_RULES.ipmiPassword.minLength,
+                max: VALIDATION_RULES.ipmiPassword.maxLength,
+                message: `IPMI密码长度应为${VALIDATION_RULES.ipmiPassword.minLength}-${VALIDATION_RULES.ipmiPassword.maxLength}个字符`
+              },
+            ]}
+            hasFeedback
           >
-            <Input.Password placeholder="请输入IPMI密码" />
+            <Input.Password 
+              placeholder="请输入IPMI密码"
+              showCount
+              maxLength={VALIDATION_RULES.ipmiPassword.maxLength}
+            />
           </Form.Item>
 
           <Form.Item
             name="ipmi_port"
             label="IPMI端口"
             initialValue={623}
+            rules={[
+              {
+                type: 'number',
+                min: VALIDATION_RULES.ipmiPort.min,
+                max: VALIDATION_RULES.ipmiPort.max,
+                message: `IPMI端口应为${VALIDATION_RULES.ipmiPort.min}-${VALIDATION_RULES.ipmiPort.max}之间的数字`,
+                transform: (value) => Number(value),
+              },
+            ]}
+            hasFeedback
           >
-            <Input type="number" placeholder="IPMI端口，默认623" />
+            <Input 
+              type="number" 
+              placeholder="IPMI端口，默认623"
+              min={VALIDATION_RULES.ipmiPort.min}
+              max={VALIDATION_RULES.ipmiPort.max}
+            />
           </Form.Item>
 
-          <Form.Item name="manufacturer" label="厂商">
-            <Input placeholder="服务器厂商" />
+          <Form.Item 
+            name="manufacturer" 
+            label="厂商"
+            rules={[
+              { 
+                max: VALIDATION_RULES.manufacturer.maxLength,
+                message: `厂商名称不能超过${VALIDATION_RULES.manufacturer.maxLength}个字符`
+              },
+            ]}
+          >
+            <Input 
+              placeholder="服务器厂商"
+              showCount
+              maxLength={VALIDATION_RULES.manufacturer.maxLength}
+            />
           </Form.Item>
 
-          <Form.Item name="model" label="型号">
-            <Input placeholder="服务器型号" />
+          <Form.Item 
+            name="model" 
+            label="型号"
+            rules={[
+              { 
+                max: VALIDATION_RULES.model.maxLength,
+                message: `型号不能超过${VALIDATION_RULES.model.maxLength}个字符`
+              },
+            ]}
+          >
+            <Input 
+              placeholder="服务器型号"
+              showCount
+              maxLength={VALIDATION_RULES.model.maxLength}
+            />
           </Form.Item>
 
-          <Form.Item name="description" label="描述">
-            <Input.TextArea placeholder="服务器描述信息" />
+          <Form.Item 
+            name="description" 
+            label="描述"
+            rules={[
+              { 
+                max: VALIDATION_RULES.description.maxLength,
+                message: `描述不能超过${VALIDATION_RULES.description.maxLength}个字符`
+              },
+            ]}
+          >
+            <Input.TextArea 
+              placeholder="服务器描述信息"
+              showCount
+              maxLength={VALIDATION_RULES.description.maxLength}
+              rows={3}
+            />
           </Form.Item>
 
           <Form.Item>

@@ -62,13 +62,12 @@ CREATE TABLE clusters (
 CREATE TABLE servers (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    hostname VARCHAR(255) UNIQUE,
     
-    -- BMC连接信息
-    bmc_ip INET NOT NULL,
-    bmc_port INTEGER DEFAULT 623,
-    bmc_username VARCHAR(50) NOT NULL,
-    bmc_password VARCHAR(255) NOT NULL, -- 加密存储
+    -- IPMI连接信息
+    ipmi_ip INET NOT NULL,
+    ipmi_port INTEGER DEFAULT 623,
+    ipmi_username VARCHAR(50) NOT NULL,
+    ipmi_password VARCHAR(255) NOT NULL, -- 加密存储
     
     -- 硬件信息
     manufacturer VARCHAR(50),
@@ -178,7 +177,7 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_active ON users(is_active) WHERE is_active = true;
 
 -- 服务器表索引
-CREATE INDEX idx_servers_bmc_ip ON servers(bmc_ip);
+CREATE INDEX idx_servers_ipmi_ip ON servers(ipmi_ip);
 CREATE INDEX idx_servers_cluster ON servers(cluster_id);
 CREATE INDEX idx_servers_active ON servers(is_active) WHERE is_active = true;
 CREATE INDEX idx_servers_power_state ON servers(power_state);

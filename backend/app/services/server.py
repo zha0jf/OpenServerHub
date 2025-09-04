@@ -28,7 +28,6 @@ class ServerService:
         # 创建服务器
         db_server = Server(
             name=server_data.name,
-            hostname=server_data.hostname,
             ipmi_ip=server_data.ipmi_ip,
             ipmi_username=server_data.ipmi_username,
             ipmi_password=server_data.ipmi_password,

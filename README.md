@@ -34,7 +34,7 @@ OpenServerHub 是一个现代化的服务器管理平台，基于 FastAPI + Reac
 ### 后端
 - **Framework**: FastAPI
 - **Database**: SQLite (开发) / PostgreSQL (生产)
-- **ORM**: SQLAlchemy + Alembic
+- **ORM**: SQLAlchemy (不再使用Alembic迁移)
 - **Authentication**: JWT
 - **IPMI**: pyghmi
 - **Language**: Python 3.9+
@@ -66,7 +66,7 @@ pip install -r requirements.txt
 # 复制环境配置
 cp .env.example .env
 
-# 初始化数据库
+# 初始化数据库（会创建默认管理员和测试数据）
 python init_db.py
 
 # 启动开发服务器
@@ -92,10 +92,12 @@ npm start
 - 后端API: http://localhost:8000
 - API文档: http://localhost:8000/docs
 
-### 默认账号
+### 默认账号和测试数据
 
 - 用户名: `admin`
 - 密码: `admin123`
+- 测试服务器分组: "测试环境"
+- 测试服务器: "测试服务器01" (IPMI: 192.168.1.100)
 
 ## 项目结构
 
@@ -195,7 +197,9 @@ OpenServerHub/
 2. **IPMI 测试**: 需要真实的服务器设备或 IPMI 模拟器进行测试
 3. **安全配置**: 生产环境请修改默认密钥和密码
 4. **端口配置**: 前端默认3000端口，后端默认8000端口
-5. **验收测试**: 请使用启动脚本进行完整测试，确保所有功能正常工作
+5. **数据库迁移**: 已移除Alembic迁移工具，用于init_db.py直接创建表结构
+6. **服务器字段**: 已移除hostname字段，现在只使用name和ipmi_ip进行服务器标识
+7. **验收测试**: 请使用启动脚本进行完整测试，确保所有功能正常工作
 
 ## 贡献指南
 

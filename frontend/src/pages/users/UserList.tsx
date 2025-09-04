@@ -28,6 +28,22 @@ import { useAuth } from '../../contexts/AuthContext';
 const { Title } = Typography;
 const { Option } = Select;
 
+// 验证规则常量，与后端保持一致
+const VALIDATION_RULES = {
+  username: {
+    pattern: /^[a-zA-Z0-9_-]+$/,
+    minLength: 3,
+    maxLength: 50,
+  },
+  email: {
+    pattern: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
+  },
+  password: {
+    minLength: 6,
+    maxLength: 128,
+  },
+};
+
 const UserList: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -247,13 +263,30 @@ const UserList: React.FC = () => {
           form={form}
           layout="vertical"
           onFinish={handleSubmit}
+          validateTrigger={['onChange', 'onBlur']}
         >
           <Form.Item
             name="username"
             label="用户名"
-            rules={[{ required: true, message: '请输入用户名' }]}
+            rules={[
+              { required: true, message: '请输入用户名' },
+              { 
+                min: VALIDATION_RULES.username.minLength, 
+                max: VALIDATION_RULES.username.maxLength, 
+                message: `用户名长度应为${VALIDATION_RULES.username.minLength}-${VALIDATION_RULES.username.maxLength}个字符` 
+              },
+              {
+                pattern: VALIDATION_RULES.username.pattern,
+                message: '用户名只能包含字母、数字、下划线和短横线',
+              },
+            ]}
+            hasFeedback
           >
-            <Input placeholder="请输入用户名" />
+            <Input 
+              placeholder="请输入用户名（3-50个字符，只能包含字母、数字、下划线和短横线）"
+              showCount
+              maxLength={VALIDATION_RULES.username.maxLength}
+            />
           </Form.Item>
 
           <Form.Item
@@ -261,18 +294,50 @@ const UserList: React.FC = () => {
             label="邮箱"
             rules={[
               { required: true, message: '请输入邮箱' },
-              { type: 'email', message: '请输入有效的邮箱地址' }
+              {
+                pattern: VALIDATION_RULES.email.pattern,
+                message: '请输入有效的邮箱地址',
+              },
             ]}
+            hasFeedback
           >
-            <Input placeholder="请输入邮箱" />
+            <Input 
+              placeholder="请输入邮箱地址"
+              type="email"
+            />
           </Form.Item>
 
           <Form.Item
             name="password"
             label={editingUser ? '密码（留空表示不修改）' : '密码'}
-            rules={editingUser ? [] : [{ required: true, message: '请输入密码' }]}
+            rules={[
+              ...(editingUser ? [] : [{ required: true, message: '请输入密码' }]),
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || value.length === 0) {
+                    // 如果是编辑模式且密码为空，允许通过验证
+                    if (editingUser) {
+                      return Promise.resolve();
+                    }
+                    return Promise.reject(new Error('请输入密码'));
+                  }
+                  if (value.length < VALIDATION_RULES.password.minLength) {
+                    return Promise.reject(new Error(`密码长度至少${VALIDATION_RULES.password.minLength}个字符`));
+                  }
+                  if (value.length > VALIDATION_RULES.password.maxLength) {
+                    return Promise.reject(new Error(`密码长度不能超过${VALIDATION_RULES.password.maxLength}个字符`));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+            hasFeedback
           >
-            <Input.Password placeholder={editingUser ? '留空表示不修改密码' : '请输入密码'} />
+            <Input.Password 
+              placeholder={editingUser ? '留空表示不修改密码' : `请输入密码（至少${VALIDATION_RULES.password.minLength}个字符）`}
+              showCount
+              maxLength={VALIDATION_RULES.password.maxLength}
+            />
           </Form.Item>
 
           <Form.Item

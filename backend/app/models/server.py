@@ -21,7 +21,6 @@ class Server(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, index=True)
-    hostname = Column(String(255), nullable=False)
     ipmi_ip = Column(String(15), nullable=False, index=True)
     ipmi_username = Column(String(50), nullable=False)
     ipmi_password = Column(String(255), nullable=False)

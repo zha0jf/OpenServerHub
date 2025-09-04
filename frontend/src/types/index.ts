@@ -42,7 +42,6 @@ export interface AuthResponse {
 export interface Server {
   id: number;
   name: string;
-  hostname: string;
   ipmi_ip: string;
   ipmi_username: string;
   ipmi_port: number;
@@ -61,7 +60,6 @@ export interface Server {
 
 export interface CreateServerRequest {
   name: string;
-  hostname: string;
   ipmi_ip: string;
   ipmi_username: string;
   ipmi_password: string;
@@ -76,7 +74,6 @@ export interface CreateServerRequest {
 
 export interface UpdateServerRequest {
   name?: string;
-  hostname?: string;
   ipmi_ip?: string;
   ipmi_username?: string;
   ipmi_password?: string;

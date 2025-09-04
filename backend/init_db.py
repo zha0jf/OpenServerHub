@@ -10,8 +10,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal, engine
-from app.models import Base, User, UserRole
+from app.models import Base, User, UserRole, Server, ServerGroup
 from app.services.user import UserService
+from app.services.server import ServerService
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +30,7 @@ def init_database():
     db = SessionLocal()
     try:
         user_service = UserService(db)
+        server_service = ServerService(db)
         
         # 检查是否已存在管理员用户
         admin_user = user_service.get_user_by_username("admin")
@@ -46,6 +48,41 @@ def init_database():
             logger.info(f"创建默认管理员用户: {admin_user.username}")
         else:
             logger.info("管理员用户已存在，跳过创建")
+            
+        # 创建测试服务器分组
+        test_group = server_service.get_server_group_by_name("测试环境")
+        if not test_group:
+            from app.schemas.server import ServerGroupCreate
+            group_data = ServerGroupCreate(
+                name="测试环境",
+                description="用于测试的服务器分组"
+            )
+            test_group = server_service.create_server_group(group_data)
+            logger.info(f"创建测试服务器分组: {test_group.name}")
+        else:
+            logger.info("测试服务器分组已存在，跳过创建")
+            
+        # 创建测试服务器数据（注意：已移除hostname字段）
+        test_server = server_service.get_server_by_name("测试服务器01")
+        if not test_server:
+            from app.schemas.server import ServerCreate
+            server_data = ServerCreate(
+                name="测试服务器01",
+                ipmi_ip="192.168.1.100",
+                ipmi_username="admin",
+                ipmi_password="admin123",
+                ipmi_port=623,
+                manufacturer="Dell",
+                model="PowerEdge R740",
+                serial_number="TEST001",
+                description="用于测试的服务器实例",
+                tags="test,demo",
+                group_id=test_group.id
+            )
+            test_server = server_service.create_server(server_data)
+            logger.info(f"创建测试服务器: {test_server.name}")
+        else:
+            logger.info("测试服务器已存在，跳过创建")
             
     except Exception as e:
         logger.error(f"创建默认用户失败: {e}")
