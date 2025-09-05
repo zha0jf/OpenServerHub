@@ -194,3 +194,64 @@ export interface UpdateServerGroupRequest {
   name?: string;
   description?: string;
 }
+
+// 设备发现相关类型
+export interface NetworkScanRequest {
+  network: string;
+  port?: number;
+  timeout?: number;
+  max_workers?: number;
+}
+
+export interface DiscoveredDevice {
+  ip: string;
+  port: number;
+  username: string;
+  password: string;
+  manufacturer: string;
+  model: string;
+  serial_number: string;
+  bmc_version: string;
+  accessible: boolean;
+  auth_required: boolean;
+}
+
+export interface NetworkScanResponse {
+  total_scanned: number;
+  devices_found: number;
+  devices: DiscoveredDevice[];
+  scan_duration: number;
+}
+
+export interface BatchImportRequest {
+  devices: any[];
+  default_username?: string;
+  default_password?: string;
+  group_id?: number;
+}
+
+export interface BatchImportResponse {
+  total_count: number;
+  success_count: number;
+  failed_count: number;
+  failed_details: Array<{
+    ip: string;
+    error: string;
+  }>;
+}
+
+export interface CSVImportRequest {
+  csv_content: string;
+  group_id?: number;
+}
+
+export interface CSVImportResponse {
+  success_count: number;
+  failed_count: number;
+  failed_details: Array<{
+    row: number;
+    name: string;
+    ipmi_ip: string;
+    error: string;
+  }>;
+}

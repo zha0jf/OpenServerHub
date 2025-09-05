@@ -19,6 +19,7 @@ import {
   MonitorOutlined,
   ClusterOutlined,
   LogoutOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -49,6 +50,11 @@ const MainLayout: React.FC = () => {
       key: '/clusters',
       icon: <ClusterOutlined />,
       label: '集群管理',
+    },
+    {
+      key: '/discovery',
+      icon: <SearchOutlined />,
+      label: '设备发现',
     },
     {
       key: '/monitoring',

@@ -8,6 +8,7 @@ import ServerList from './pages/servers/ServerList';
 import UserList from './pages/users/UserList';
 import MonitoringDashboard from './pages/monitoring/MonitoringDashboard';
 import ClusterManagement from './pages/clusters/ClusterManagement';
+import DeviceDiscovery from './pages/discovery/DeviceDiscovery';
 import PrivateRoute from './components/auth/PrivateRoute';
 
 const App: React.FC = () => {
@@ -25,6 +26,7 @@ const App: React.FC = () => {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="servers" element={<ServerList />} />
             <Route path="clusters" element={<ClusterManagement />} />
+            <Route path="discovery" element={<DeviceDiscovery />} />
             <Route path="users" element={<UserList />} />
             <Route path="monitoring" element={<MonitoringDashboard />} />
           </Route>

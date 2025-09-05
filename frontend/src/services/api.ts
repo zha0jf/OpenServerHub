@@ -4,7 +4,7 @@ import { message } from 'antd';
 // 创建axios实例
 const api: AxiosInstance = axios.create({
   baseURL: '/api/v1',
-  timeout: 10000,
+  timeout: 60000, // 增加到60秒，适应长时间运行的任务如网络扫描
 });
 
 // 请求拦截器
@@ -95,7 +95,11 @@ api.interceptors.response.use(
     } else if (error.request) {
       // 请求已发出但没有收到响应
       console.error('网络请求失败:', error.request);
-      message.error('网络连接失败，请检查网络连接');
+      
+      // 对于超时错误，不在这里显示错误消息，由组件层处理
+      if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+        message.error('网络连接失败，请检查网络连接');
+      }
     } else {
       // 设置请求时发生了一些事情，触发了一个错误
       console.error('请求配置错误:', error.message);

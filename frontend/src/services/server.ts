@@ -13,6 +13,9 @@ import {
   ClusterStats,
 } from '../types';
 
+// 导出类型以供其他模块使用
+export type { ServerGroup } from '../types';
+
 export const serverService = {
   // 获取服务器列表
   async getServers(skip = 0, limit = 100, groupId?: number): Promise<Server[]> {
