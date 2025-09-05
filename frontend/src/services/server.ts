@@ -5,8 +5,12 @@ import {
   CreateServerRequest,
   UpdateServerRequest,
   CreateServerGroupRequest,
+  UpdateServerGroupRequest,
   PowerAction,
   PowerControlResponse,
+  BatchPowerRequest,
+  BatchPowerResponse,
+  ClusterStats,
 } from '../types';
 
 export const serverService = {
@@ -53,15 +57,47 @@ export const serverService = {
     return response.data;
   },
 
-  // 获取服务器分组列表
+  // 批量电源控制
+  async batchPowerControl(request: BatchPowerRequest): Promise<BatchPowerResponse> {
+    const response = await api.post<BatchPowerResponse>('/servers/batch/power', request);
+    return response.data;
+  },
+
+  // 获取集群统计信息
+  async getClusterStats(groupId?: number): Promise<ClusterStats> {
+    const response = await api.get<ClusterStats>('/servers/stats', {
+      params: groupId ? { group_id: groupId } : {},
+    });
+    return response.data;
+  },
+
+  // 服务器分组管理
+  // 获取分组列表
   async getServerGroups(): Promise<ServerGroup[]> {
     const response = await api.get<ServerGroup[]>('/servers/groups/');
     return response.data;
   },
 
-  // 创建服务器分组
-  async createServerGroup(groupData: CreateServerGroupRequest): Promise<ServerGroup> {
-    const response = await api.post<ServerGroup>('/servers/groups/', groupData);
+  // 获取单个分组
+  async getServerGroup(id: number): Promise<ServerGroup> {
+    const response = await api.get<ServerGroup>(`/servers/groups/${id}`);
     return response.data;
+  },
+
+  // 创建分组
+  async createServerGroup(data: CreateServerGroupRequest): Promise<ServerGroup> {
+    const response = await api.post<ServerGroup>('/servers/groups/', data);
+    return response.data;
+  },
+
+  // 更新分组
+  async updateServerGroup(id: number, data: UpdateServerGroupRequest): Promise<ServerGroup> {
+    const response = await api.put<ServerGroup>(`/servers/groups/${id}`, data);
+    return response.data;
+  },
+
+  // 删除分组
+  async deleteServerGroup(id: number): Promise<void> {
+    await api.delete(`/servers/groups/${id}`);
   },
 };

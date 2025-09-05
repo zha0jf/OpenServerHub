@@ -1,9 +1,12 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
+import asyncio
+from concurrent.futures import as_completed
+from collections import defaultdict
 
 from app.models.server import Server, ServerGroup, ServerStatus, PowerState
-from app.schemas.server import ServerCreate, ServerUpdate, ServerGroupCreate
+from app.schemas.server import ServerCreate, ServerUpdate, ServerGroupCreate, BatchOperationResult
 from app.services.ipmi import IPMIService
 from app.core.exceptions import ValidationError, IPMIError
 import logging
@@ -236,3 +239,189 @@ class ServerService:
         self.db.delete(db_group)
         self.db.commit()
         return True
+
+    def update_server_group(self, group_id: int, group_data: ServerGroupCreate) -> Optional[ServerGroup]:
+        """更新服务器分组"""
+        db_group = self.get_server_group(group_id)
+        if not db_group:
+            return None
+        
+        # 检查名称唯一性（排除自己）
+        if group_data.name != db_group.name:
+            if self.get_server_group_by_name(group_data.name):
+                raise ValidationError("分组名称已存在")
+        
+        # 更新分组信息
+        db_group.name = group_data.name
+        db_group.description = group_data.description
+        
+        self.db.commit()
+        self.db.refresh(db_group)
+        return db_group
+
+    # 批量操作功能
+    async def batch_power_control(self, server_ids: List[int], action: str) -> List[BatchOperationResult]:
+        """批量电源控制"""
+        results = []
+        
+        # 获取所有有效的服务器
+        servers = self.db.query(Server).filter(Server.id.in_(server_ids)).all()
+        
+        # 检查是否有不存在的服务器ID
+        found_ids = {server.id for server in servers}
+        missing_ids = set(server_ids) - found_ids
+        
+        # 为不存在的服务器添加错误结果
+        for missing_id in missing_ids:
+            results.append(BatchOperationResult(
+                server_id=missing_id,
+                server_name=f"服务器{missing_id}",
+                success=False,
+                message="失败",
+                error="服务器不存在"
+            ))
+        
+        # 创建并发任务列表
+        tasks = []
+        for server in servers:
+            task = self._single_power_control(server, action)
+            tasks.append(task)
+        
+        # 并发执行所有任务，最大并发数为10
+        semaphore = asyncio.Semaphore(10)
+        
+        async def limited_task(server, action):
+            async with semaphore:
+                return await self._single_power_control(server, action)
+        
+        # 执行所有任务
+        task_results = await asyncio.gather(
+            *[limited_task(server, action) for server in servers],
+            return_exceptions=True
+        )
+        
+        # 整理结果
+        for i, server in enumerate(servers):
+            if i < len(task_results):
+                if isinstance(task_results[i], Exception):
+                    results.append(BatchOperationResult(
+                        server_id=server.id,
+                        server_name=server.name,
+                        success=False,
+                        message="失败",
+                        error=str(task_results[i])
+                    ))
+                else:
+                    results.append(task_results[i])
+        
+        return results
+    
+    async def _single_power_control(self, server: Server, action: str) -> BatchOperationResult:
+        """单个服务器电源控制"""
+        try:
+            await self.ipmi_service.power_control(
+                ip=server.ipmi_ip,
+                username=server.ipmi_username,
+                password=server.ipmi_password,
+                action=action,
+                port=server.ipmi_port
+            )
+            
+            # 更新服务器最后操作时间
+            server.last_seen = datetime.now()
+            self.db.commit()
+            
+            return BatchOperationResult(
+                server_id=server.id,
+                server_name=server.name,
+                success=True,
+                message=f"电源{action}操作成功"
+            )
+            
+        except IPMIError as e:
+            # 更新服务器状态为错误
+            server.status = ServerStatus.ERROR
+            self.db.commit()
+            
+            return BatchOperationResult(
+                server_id=server.id,
+                server_name=server.name,
+                success=False,
+                message="失败",
+                error=f"IPMI操作失败: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"服务器 {server.id} 电源控制异常: {str(e)}")
+            return BatchOperationResult(
+                server_id=server.id,
+                server_name=server.name,
+                success=False,
+                message="失败",
+                error=f"内部错误: {str(e)}"
+            )
+    
+    def get_cluster_statistics(self, group_id: Optional[int] = None) -> Dict[str, Any]:
+        """获取集群统计信息"""
+        # 基本查询
+        query = self.db.query(Server)
+        if group_id is not None:
+            query = query.filter(Server.group_id == group_id)
+        
+        servers = query.all()
+        
+        # 基础统计
+        total_servers = len(servers)
+        online_servers = sum(1 for s in servers if s.status == ServerStatus.ONLINE)
+        offline_servers = sum(1 for s in servers if s.status == ServerStatus.OFFLINE)
+        unknown_servers = sum(1 for s in servers if s.status == ServerStatus.UNKNOWN)
+        
+        # 电源状态统计
+        power_on_servers = sum(1 for s in servers if s.power_state == PowerState.ON)
+        power_off_servers = sum(1 for s in servers if s.power_state == PowerState.OFF)
+        
+        # 分组统计
+        group_stats = defaultdict(lambda: {
+            'total': 0,
+            'online': 0, 
+            'offline': 0,
+            'unknown': 0,
+            'power_on': 0,
+            'power_off': 0
+        })
+        
+        for server in servers:
+            group_name = "未分组"
+            if server.group_id:
+                group = self.get_server_group(server.group_id)
+                if group:
+                    group_name = group.name
+            
+            group_stats[group_name]['total'] += 1
+            if server.status == ServerStatus.ONLINE:
+                group_stats[group_name]['online'] += 1
+            elif server.status == ServerStatus.OFFLINE:
+                group_stats[group_name]['offline'] += 1
+            else:
+                group_stats[group_name]['unknown'] += 1
+            
+            if server.power_state == PowerState.ON:
+                group_stats[group_name]['power_on'] += 1
+            elif server.power_state == PowerState.OFF:
+                group_stats[group_name]['power_off'] += 1
+        
+        # 厂商统计
+        manufacturer_stats = defaultdict(int)
+        for server in servers:
+            manufacturer = server.manufacturer or "未知"
+            manufacturer_stats[manufacturer] += 1
+        
+        return {
+            'total_servers': total_servers,
+            'online_servers': online_servers,
+            'offline_servers': offline_servers,
+            'unknown_servers': unknown_servers,
+            'power_on_servers': power_on_servers,
+            'power_off_servers': power_off_servers,
+            'group_stats': dict(group_stats),
+            'manufacturer_stats': dict(manufacturer_stats)
+        }

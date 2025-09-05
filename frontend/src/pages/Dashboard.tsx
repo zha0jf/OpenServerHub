@@ -8,34 +8,28 @@ import {
   Space,
   Spin,
   Alert,
+  Progress,
+  Divider,
 } from 'antd';
 import {
   CloudServerOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   ClockCircleOutlined,
+  ThunderboltOutlined,
+  PoweroffOutlined,
+  BuildOutlined,
 } from '@ant-design/icons';
 import { serverService } from '../services/server';
 import { useAuth } from '../contexts/AuthContext';
+import { ClusterStats } from '../types';
 
 const { Title } = Typography;
-
-interface DashboardStats {
-  total: number;
-  online: number;
-  offline: number;
-  unknown: number;
-}
 
 const Dashboard: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats>({
-    total: 0,
-    online: 0,
-    offline: 0,
-    unknown: 0,
-  });
+  const [stats, setStats] = useState<ClusterStats | null>(null);
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
@@ -53,16 +47,11 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      const servers = await serverService.getServers(0, 1000); // 获取所有服务器
       
-      const dashboardStats: DashboardStats = {
-        total: servers.length,
-        online: servers.filter(s => s.status === 'online').length,
-        offline: servers.filter(s => s.status === 'offline').length,
-        unknown: servers.filter(s => s.status === 'unknown').length,
-      };
+      // 使用新的集群统计API
+      const clusterStats = await serverService.getClusterStats();
+      setStats(clusterStats);
       
-      setStats(dashboardStats);
     } catch (err: any) {
       console.error('加载仪表板数据失败:', err);
       setError('加载仪表板数据失败');
@@ -97,12 +86,13 @@ const Dashboard: React.FC = () => {
     <div>
       <Title level={2}>仪表板</Title>
       
+      {/* 基础统计 */}
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic
               title="服务器总数"
-              value={stats.total}
+              value={stats?.total_servers || 0}
               prefix={<CloudServerOutlined />}
               valueStyle={{ color: '#1890ff' }}
             />
@@ -113,7 +103,7 @@ const Dashboard: React.FC = () => {
           <Card>
             <Statistic
               title="在线服务器"
-              value={stats.online}
+              value={stats?.online_servers || 0}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#52c41a' }}
             />
@@ -124,7 +114,7 @@ const Dashboard: React.FC = () => {
           <Card>
             <Statistic
               title="离线服务器"
-              value={stats.offline}
+              value={stats?.offline_servers || 0}
               prefix={<ExclamationCircleOutlined />}
               valueStyle={{ color: '#f5222d' }}
             />
@@ -135,13 +125,103 @@ const Dashboard: React.FC = () => {
           <Card>
             <Statistic
               title="状态未知"
-              value={stats.unknown}
+              value={stats?.unknown_servers || 0}
               prefix={<ClockCircleOutlined />}
               valueStyle={{ color: '#faad14' }}
             />
           </Card>
         </Col>
       </Row>
+
+      {/* 电源状态统计 */}
+      <Row gutter={[16, 16]} style={{ marginTop: '24px' }}>
+        <Col xs={24} sm={12}>
+          <Card>
+            <Statistic
+              title="开机服务器"
+              value={stats?.power_on_servers || 0}
+              prefix={<ThunderboltOutlined />}
+              valueStyle={{ color: '#52c41a' }}
+            />
+          </Card>
+        </Col>
+        
+        <Col xs={24} sm={12}>
+          <Card>
+            <Statistic
+              title="关机服务器"
+              value={stats?.power_off_servers || 0}
+              prefix={<PoweroffOutlined />}
+              valueStyle={{ color: '#8c8c8c' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 在线率进度条 */}
+      {stats && stats.total_servers > 0 && (
+        <Row gutter={[16, 16]} style={{ marginTop: '24px' }}>
+          <Col span={24}>
+            <Card title="服务器在线率">
+              <Progress
+                percent={Math.round((stats.online_servers / stats.total_servers) * 100)}
+                status={stats.online_servers === stats.total_servers ? 'success' : 'active'}
+                format={(percent) => `${percent}% (${stats.online_servers}/${stats.total_servers})`}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
+
+      {/* 分组统计 */}
+      {stats && Object.keys(stats.group_stats).length > 0 && (
+        <Row gutter={[16, 16]} style={{ marginTop: '24px' }}>
+          <Col span={24}>
+            <Card title="分组统计">
+              <Row gutter={[16, 16]}>
+                {Object.entries(stats.group_stats).map(([groupName, groupStats]) => (
+                  <Col xs={24} sm={12} md={8} lg={6} key={groupName}>
+                    <Card size="small" title={groupName}>
+                      <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                        <div>总数: {groupStats.total}</div>
+                        <div style={{ color: '#52c41a' }}>在线: {groupStats.online}</div>
+                        <div style={{ color: '#f5222d' }}>离线: {groupStats.offline}</div>
+                        <div style={{ color: '#faad14' }}>未知: {groupStats.unknown}</div>
+                      </Space>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </Card>
+          </Col>
+        </Row>
+      )}
+
+      {/* 厂商统计 */}
+      {stats && Object.keys(stats.manufacturer_stats).length > 0 && (
+        <Row gutter={[16, 16]} style={{ marginTop: '24px' }}>
+          <Col span={24}>
+            <Card title="厂商分布">
+              <Row gutter={[16, 16]}>
+                {Object.entries(stats.manufacturer_stats)
+                  .sort((a, b) => b[1] - a[1]) // 按数量降序排列
+                  .map(([manufacturer, count]) => (
+                  <Col xs={12} sm={8} md={6} lg={4} key={manufacturer}>
+                    <Card size="small">
+                      <Statistic
+                        title={manufacturer}
+                        value={count}
+                        prefix={<BuildOutlined />}
+                        valueStyle={{ fontSize: '18px' }}
+                      />
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </Card>
+          </Col>
+        </Row>
+      )}
 
       <Row gutter={[16, 16]} style={{ marginTop: '24px' }}>
         <Col span={24}>

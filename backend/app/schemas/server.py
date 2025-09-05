@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.models.server import ServerStatus, PowerState
 import re
@@ -73,3 +73,42 @@ class ServerGroupResponse(ServerGroupBase):
 
     class Config:
         from_attributes = True
+
+# 批量操作相关模式
+class BatchPowerRequest(BaseModel):
+    """批量电源操作请求"""
+    server_ids: List[int] = Field(..., min_items=1, max_items=50, description="服务器ID列表")
+    action: str = Field(..., description="电源操作类型: on, off, restart, force_off")
+    
+    @validator('action')
+    def validate_action(cls, v):
+        allowed_actions = ['on', 'off', 'restart', 'force_off']
+        if v not in allowed_actions:
+            raise ValueError(f'不支持的操作类型，支持的操作: {", ".join(allowed_actions)}')
+        return v
+
+class BatchOperationResult(BaseModel):
+    """批量操作结果"""
+    server_id: int
+    server_name: str
+    success: bool
+    message: str
+    error: Optional[str] = None
+
+class BatchPowerResponse(BaseModel):
+    """批量电源操作响应"""
+    total_count: int = Field(description="总服务器数量")
+    success_count: int = Field(description="成功操作数量")
+    failed_count: int = Field(description="失败操作数量")
+    results: List[BatchOperationResult] = Field(description="详细操作结果")
+    
+class ClusterStatsResponse(BaseModel):
+    """集群统计信息响应"""
+    total_servers: int = Field(description="服务器总数")
+    online_servers: int = Field(description="在线服务器数")
+    offline_servers: int = Field(description="离线服务器数")
+    unknown_servers: int = Field(description="状态未知服务器数")
+    power_on_servers: int = Field(description="开机服务器数")
+    power_off_servers: int = Field(description="关机服务器数")
+    group_stats: Dict[str, Any] = Field(description="分组统计信息")
+    manufacturer_stats: Dict[str, int] = Field(description="厂商分布统计")

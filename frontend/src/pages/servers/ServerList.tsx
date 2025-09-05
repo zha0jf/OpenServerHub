@@ -19,9 +19,11 @@ import {
   ReloadOutlined,
   EditOutlined,
   DeleteOutlined,
+  ThunderboltOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
-import { Server, CreateServerRequest, PowerAction } from '../../types';
+import { Server, ServerGroup, CreateServerRequest, PowerAction, BatchPowerRequest } from '../../types';
 import { ColumnsType } from 'antd/es/table';
 
 const { Title } = Typography;
@@ -67,14 +69,21 @@ const VALIDATION_RULES = {
 
 const ServerList: React.FC = () => {
   const [servers, setServers] = useState<Server[]>([]);
+  const [groups, setGroups] = useState<ServerGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
+  const [changingGroupServer, setChangingGroupServer] = useState<Server | null>(null);
   const [refreshingStatus, setRefreshingStatus] = useState<number | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+  const [batchLoading, setBatchLoading] = useState(false);
   const [form] = Form.useForm();
+  const [groupForm] = Form.useForm();
 
   useEffect(() => {
     loadServers();
+    loadGroups();
   }, []);
 
   const loadServers = async () => {
@@ -87,6 +96,15 @@ const ServerList: React.FC = () => {
       console.error('加载服务器列表失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGroups = async () => {
+    try {
+      const data = await serverService.getServerGroups();
+      setGroups(data);
+    } catch (error) {
+      console.error('加载分组列表失败:', error);
     }
   };
 
@@ -138,6 +156,78 @@ const ServerList: React.FC = () => {
     }
   };
 
+  // 处理分组切换
+  const handleChangeGroup = (server: Server) => {
+    setChangingGroupServer(server);
+    groupForm.setFieldsValue({ group_id: server.group_id });
+    setGroupModalVisible(true);
+  };
+
+  const handleGroupSubmit = async (values: { group_id?: number }) => {
+    if (!changingGroupServer) return;
+    
+    try {
+      await serverService.updateServer(changingGroupServer.id, {
+        group_id: values.group_id || undefined
+      });
+      
+      const groupName = values.group_id 
+        ? groups.find(g => g.id === values.group_id)?.name || '未知分组'
+        : '未分组';
+      
+      message.success(`${changingGroupServer.name} 已移动到 ${groupName}`);
+      setGroupModalVisible(false);
+      loadServers();
+    } catch (error) {
+      message.error('分组切换失败');
+      console.error('分组切换失败:', error);
+    }
+  };
+
+  // 批量切换分组
+  const handleBatchChangeGroup = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请选择要操作的服务器');
+      return;
+    }
+    
+    // 设置为批量模式
+    setChangingGroupServer({ id: -1, name: `${selectedRowKeys.length}台服务器` } as Server);
+    groupForm.resetFields();
+    setGroupModalVisible(true);
+  };
+
+  const handleBatchGroupSubmit = async (values: { group_id?: number }) => {
+    if (selectedRowKeys.length === 0) return;
+    
+    try {
+      setBatchLoading(true);
+      
+      // 批量更新服务器分组
+      const updatePromises = selectedRowKeys.map(serverId => 
+        serverService.updateServer(serverId, {
+          group_id: values.group_id || undefined
+        })
+      );
+      
+      await Promise.all(updatePromises);
+      
+      const groupName = values.group_id 
+        ? groups.find(g => g.id === values.group_id)?.name || '未知分组'
+        : '未分组';
+      
+      message.success(`${selectedRowKeys.length}台服务器已批量移动到 ${groupName}`);
+      setGroupModalVisible(false);
+      setSelectedRowKeys([]);
+      loadServers();
+    } catch (error) {
+      message.error('批量分组切换失败');
+      console.error('批量分组切换失败:', error);
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   const handleSubmit = async (values: any) => {
     try {
       let createdOrUpdatedServer: Server;
@@ -178,6 +268,75 @@ const ServerList: React.FC = () => {
     }
   };
 
+  // 批量操作相关函数
+  const handleBatchPowerControl = async (action: PowerAction) => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请选择要操作的服务器');
+      return;
+    }
+
+    Modal.confirm({
+      title: `确认批量${action === 'on' ? '开机' : action === 'off' ? '关机' : action === 'restart' ? '重启' : '强制关机'}?`,
+      content: `将对选中的 ${selectedRowKeys.length} 台服务器执行${action === 'on' ? '开机' : action === 'off' ? '关机' : action === 'restart' ? '重启' : '强制关机'}操作`,
+      onOk: async () => {
+        try {
+          setBatchLoading(true);
+          const request: BatchPowerRequest = {
+            server_ids: selectedRowKeys,
+            action
+          };
+          
+          const response = await serverService.batchPowerControl(request);
+          
+          // 显示结果统计
+          message.success(
+            `批量操作完成: 成功${response.success_count}台，失败${response.failed_count}台`
+          );
+          
+          // 显示详细结果
+          if (response.failed_count > 0) {
+            const failedResults = response.results.filter(r => !r.success);
+            Modal.warning({
+              title: '部分操作失败',
+              content: (
+                <div>
+                  <p>以下服务器操作失败：</p>
+                  <ul>
+                    {failedResults.map(result => (
+                      <li key={result.server_id}>
+                        {result.server_name}: {result.error || result.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+              width: 600
+            });
+          }
+          
+          // 清除选中状态并重新加载数据
+          setSelectedRowKeys([]);
+          await loadServers();
+          
+        } catch (error) {
+          console.error('批量操作失败:', error);
+        } finally {
+          setBatchLoading(false);
+        }
+      }
+    });
+  };
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (keys: React.Key[]) => {
+      setSelectedRowKeys(keys as number[]);
+    },
+    getCheckboxProps: (record: Server) => ({
+      disabled: record.status === 'error', // 错误状态的服务器不能选中
+    }),
+  };
+
   const getStatusTag = (status: string) => {
     const statusMap = {
       online: { color: 'green', text: '在线' },
@@ -209,6 +368,19 @@ const ServerList: React.FC = () => {
       title: 'IPMI地址',
       dataIndex: 'ipmi_ip',
       key: 'ipmi_ip',
+    },
+    {
+      title: '所属分组',
+      dataIndex: 'group_id',
+      key: 'group_id',
+      render: (groupId: number) => {
+        const group = groups.find(g => g.id === groupId);
+        return group ? (
+          <Tag color="blue">{group.name}</Tag>
+        ) : (
+          <Tag color="default">未分组</Tag>
+        );
+      },
     },
     {
       title: '状态',
@@ -253,6 +425,13 @@ const ServerList: React.FC = () => {
             disabled={server.power_state === 'off'}
           >
             关机
+          </Button>
+          <Button
+            size="small"
+            icon={<SwapOutlined />}
+            onClick={() => handleChangeGroup(server)}
+          >
+            切换分组
           </Button>
           <Button
             size="small"
@@ -303,15 +482,63 @@ const ServerList: React.FC = () => {
           </Space>
         </div>
 
+        {/* 批量操作栏 */}
+        {selectedRowKeys.length > 0 && (
+          <div style={{ marginBottom: 16, padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+            <Space>
+              <span>已选中 {selectedRowKeys.length} 台服务器</span>
+              <Button
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('on')}
+              >
+                批量开机
+              </Button>
+              <Button
+                icon={<PoweroffOutlined />}
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('off')}
+              >
+                批量关机
+              </Button>
+              <Button
+                icon={<ReloadOutlined />}
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('restart')}
+              >
+                批量重启
+              </Button>
+              <Button
+                danger
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('force_off')}
+              >
+                强制关机
+              </Button>
+              <Button
+                icon={<SwapOutlined />}
+                onClick={handleBatchChangeGroup}
+              >
+                批量切换分组
+              </Button>
+              <Button onClick={() => setSelectedRowKeys([])}>
+                取消选择
+              </Button>
+            </Space>
+          </div>
+        )}
+
         <Table
           columns={columns}
           dataSource={servers}
           rowKey="id"
+          rowSelection={rowSelection}
           loading={loading}
           pagination={{
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
+            showTotal: (total, range) => `第 ${range?.[0]}-${range?.[1]} 条，共 ${total} 条记录`,
           }}
         />
       </Card>
@@ -462,6 +689,20 @@ const ServerList: React.FC = () => {
           </Form.Item>
 
           <Form.Item 
+            name="group_id" 
+            label="所属分组"
+          >
+            <Select 
+              placeholder="请选择分组（可选）"
+              allowClear
+            >
+              {groups.map(group => (
+                <Option key={group.id} value={group.id}>{group.name}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item 
             name="description" 
             label="描述"
             rules={[
@@ -485,6 +726,50 @@ const ServerList: React.FC = () => {
                 {editingServer ? '更新' : '创建'}
               </Button>
               <Button onClick={() => setModalVisible(false)}>
+                取消
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 分组切换模态框 */}
+      <Modal
+        title={`切换服务器分组 - ${changingGroupServer?.name}`}
+        open={groupModalVisible}
+        onCancel={() => setGroupModalVisible(false)}
+        footer={null}
+        width={400}
+      >
+        <Form
+          form={groupForm}
+          layout="vertical"
+          onFinish={changingGroupServer?.id === -1 ? handleBatchGroupSubmit : handleGroupSubmit}
+        >
+          <Form.Item 
+            name="group_id" 
+            label="新分组"
+          >
+            <Select 
+              placeholder="请选择目标分组（可选择空值设为未分组）"
+              allowClear
+            >
+              {groups.map(group => (
+                <Option key={group.id} value={group.id}>{group.name}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+          
+          <Form.Item>
+            <Space>
+              <Button 
+                type="primary" 
+                htmlType="submit"
+                loading={changingGroupServer?.id === -1 ? batchLoading : false}
+              >
+                {changingGroupServer?.id === -1 ? '批量切换' : '确认切换'}
+              </Button>
+              <Button onClick={() => setGroupModalVisible(false)}>
                 取消
               </Button>
             </Space>

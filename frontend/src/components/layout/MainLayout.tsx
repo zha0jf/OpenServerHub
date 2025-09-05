@@ -17,6 +17,7 @@ import {
   CloudServerOutlined,
   UserOutlined,
   MonitorOutlined,
+  ClusterOutlined,
   LogoutOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -43,6 +44,11 @@ const MainLayout: React.FC = () => {
       key: '/servers',
       icon: <CloudServerOutlined />,
       label: '服务器管理',
+    },
+    {
+      key: '/clusters',
+      icon: <ClusterOutlined />,
+      label: '集群管理',
     },
     {
       key: '/monitoring',

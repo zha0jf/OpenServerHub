@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import ServerList from './pages/servers/ServerList';
 import UserList from './pages/users/UserList';
 import MonitoringDashboard from './pages/monitoring/MonitoringDashboard';
+import ClusterManagement from './pages/clusters/ClusterManagement';
 import PrivateRoute from './components/auth/PrivateRoute';
 
 const App: React.FC = () => {
@@ -23,6 +24,7 @@ const App: React.FC = () => {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="servers" element={<ServerList />} />
+            <Route path="clusters" element={<ClusterManagement />} />
             <Route path="users" element={<UserList />} />
             <Route path="monitoring" element={<MonitoringDashboard />} />
           </Route>

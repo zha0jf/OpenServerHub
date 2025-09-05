@@ -135,3 +135,62 @@ export interface PowerControlResponse {
   result: string;
   message: string;
 }
+
+// 批量操作类型
+export interface BatchPowerRequest {
+  server_ids: number[];
+  action: PowerAction;
+}
+
+export interface BatchOperationResult {
+  server_id: number;
+  server_name: string;
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export interface BatchPowerResponse {
+  total_count: number;
+  success_count: number;
+  failed_count: number;
+  results: BatchOperationResult[];
+}
+
+// 集群统计类型
+export interface ClusterStats {
+  total_servers: number;
+  online_servers: number;
+  offline_servers: number;
+  unknown_servers: number;
+  power_on_servers: number;
+  power_off_servers: number;
+  group_stats: Record<string, {
+    total: number;
+    online: number;
+    offline: number;
+    unknown: number;
+    power_on: number;
+    power_off: number;
+  }>;
+  manufacturer_stats: Record<string, number>;
+}
+
+// 服务器分组类型
+export interface ServerGroup {
+  id: number;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateServerGroupRequest {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateServerGroupRequest {
+  name?: string;
+  description?: string;
+}
