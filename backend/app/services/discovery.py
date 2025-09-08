@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 import csv
 import io
 import struct
+import traceback
+
 from contextlib import closing
 
 from app.services.ipmi import IPMIService
@@ -167,8 +169,8 @@ class DiscoveryService:
 
             try:
                 await loop.sock_sendall(sock, rmcp_ping)
-                fut = loop.sock_recv(sock, 1024)  # 等待对端回包
-                await asyncio.wait_for(fut, timeout=timeout)
+                # fut = loop.sock_recv(sock, 1024)  # 等待对端回包
+                # await asyncio.wait_for(fut, timeout=timeout)
                 return True
             except (asyncio.TimeoutError, OSError):
                 return False
@@ -186,17 +188,53 @@ class DiscoveryService:
             return False
 
     async def _check_port_open(self, ip: str, port: int, timeout: int) -> bool:
-        """检查端口是否开放（优先 UDP，再 TCP）"""
+        """检查端口是否开放（先TCP，再IPMI）"""
         # IPMI 默认 UDP 623，用 RMCP ping 试探
-        if port == 623:
-            ok = await self._check_udp_port(ip, port, timeout)
-            if ok:
-                return True
-        # 退回 TCP 探测（有些厂商亦会在 TCP 提供服务）
-        return await self._check_tcp_port(ip, port, timeout)
+        ok = await self._check_tcp_port(ip, port, timeout)
+        if ok:
+            return True
 
-            
-    
+        """使用 ipmitool mc ping 检查 IPMI 服务是否可连接（防止卡死）"""
+
+        loop = asyncio.get_event_loop()
+
+        def _run_ipmitool():
+            try:
+                proc = subprocess.Popen(
+                    ["ipmitool", "-H", ip, "-I", "lanplus", "-U", "", "-P", "", "-p", str(port), "mc", "ping"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                try:
+                    stdout, stderr = proc.communicate(timeout=timeout)
+                    return True
+                except subprocess.TimeoutExpired:
+                    # 确保彻底杀掉进程
+                    proc.kill()
+                    try:
+                        proc.communicate(timeout=1)
+                    except Exception:
+                        pass
+                    return False
+            except FileNotFoundError:
+                logger.info("未找到 ipmitool，请确认已安装并在 PATH 中")
+                return False
+            except Exception as e:
+                tb = traceback.format_exc()
+                logger.info(f"IPMI mc ping 异常 {ip}:{port} -> {repr(e)}\n{tb}")
+                return False
+
+        try:
+            # 外层再套一层 asyncio 超时控制，双保险
+            return await asyncio.wait_for(loop.run_in_executor(None, _run_ipmitool), timeout=timeout+1)
+        except asyncio.TimeoutError:
+            logger.info(f"IPMI mc ping 超时(外层强杀) {ip}:{port}")
+            return False
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.info(f"IPMI mc ping 异常 {ip}:{port} -> {repr(e)}\n{tb}")
+            return False
+
     async def _probe_bmc_device(self, ip: str, port: int, timeout: int) -> Optional[Dict[str, Any]]:
         """探测BMC设备信息"""
         try:
@@ -204,30 +242,12 @@ class DiscoveryService:
             # 扩展凭据列表，支持更多厂商和OpenBMC
             common_credentials = [
                 # 超微(Supermicro)
+                ("root", "0penBmc"),
                 ("ADMIN", "ADMIN"),
                 ("ADMIN", "Test@123123"),
                 ("Administrator", "superuser"),
 
                 # OpenBMC / 通用
-                ("root", "openbmc"),
-                ("admin", "openbmc"),
-                ("root", "root"),
-                ("admin", "admin123"),
-                ("user", "user"),
-                ("admin", "admin"),
-
-                # Dell
-                ("root", "calvin"),
-                ("Administrator", "calvin"),
-
-                # HP/HPE
-                ("Administrator", ""),
-                ("Administrator", "password"),
-                ("admin", "password"),
-
-                # IBM
-                ("USERID", "PASSW0RD"),
-                ("root", "admin"),
 
                 # 浪潮(Inspur)
                 ("root", "superuser"),
@@ -238,11 +258,7 @@ class DiscoveryService:
 
                 # 通用默认
                 ("", ""),  # 无认证
-                ("guest", "guest"),
-                ("user", "password"),
-                ("admin", "123456"),
-                ("root", "password"),
-                ("admin", "1"),
+
 
             ]
             
