@@ -22,6 +22,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
+import Logo from '../logo/Logo';
 
 const { Header, Sider, Content } = Layout;
 const { Title } = Typography;
@@ -97,9 +98,7 @@ const MainLayout: React.FC = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider trigger={null} collapsible collapsed={collapsed}>
-        <div className="logo">
-          {collapsed ? 'OSH' : 'OpenServerHub'}
-        </div>
+        <Logo collapsed={collapsed} />
         <Menu
           theme="dark"
           mode="inline"

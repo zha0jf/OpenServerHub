@@ -301,3 +301,8 @@ temp/
 *.old
 *.orig
 *.save
+
+# Log files
+backend/logs/
+*.log
+*.log.*

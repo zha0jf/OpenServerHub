@@ -40,6 +40,7 @@
     ]
   },
   "devDependencies": {
+    "@svgr/webpack": "^8.1.0",
     "@types/jest": "^27.5.2"
   },
   "proxy": "http://localhost:8000"

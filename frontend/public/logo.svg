@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 16.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<!-- Final version by Gemini with all visual refinements and valid syntax -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 width="240px" height="75px" viewBox="0 0 1280 400" enable-background="new 0 0 1280 400" xml:space="preserve">
+
+<g id="Logo_Content_Wrapper">
+	<!-- Graphic element, scaled and positioned on the left -->
+	<g id="Logo_Graphic_Rescaled" transform="translate(30, 17.5) scale(0.9)">
+		<path fill="#F39E32" d="M229.08,212.561c0,0-0.636-157.062-0.653-161.871c-0.018-4.8-3.253-11.209-9.679-15.983
+			c-28.923-17.508-52.988-23.82-72.231-26.951c-27.255-4.703-36.854,0.149-44.852,3.38c-11.2,4.848-22.384,14.515-31.923,33.785
+			c-1.578,6.418,0.04,11.218,4.873,14.435C76.218,60.93,229.08,212.561,229.08,212.561"/>
+		<path fill="#E84817" d="M251.576,225.298c0,0,28.849-0.148,32.049-0.157c4.813-0.017,11.205-4.822,12.778-9.67
+			c6.344-16.07,9.509-28.889,11.052-41.71c3.146-16.04,6.276-33.684-0.211-51.284c-8.101-22.405-37.06-51.14-37.06-51.14
+			c-6.435-4.786-11.257-9.574-17.684-14.352c-3.226-3.192-11.222,0.048-11.195,4.861c0.018,6.4,0.622,150.636,0.622,150.636
+			C246.724,215.69,249.941,218.899,251.576,225.298"/>
+		<path fill="#6D4F9D" d="M251.607,233.294c-1.587,4.805-4.771,9.645-9.565,11.275l0.29,73.714c3.19-4.82,7.979-9.643,11.152-16.069
+			c11.15-16.097,20.707-33.736,30.238-54.611c1.577-3.218-3.254-12.81-8.066-12.791C269.221,233.242,251.607,233.294,251.607,233.294"
+			/>
+		<path fill="#5FC2D7" d="M163.952,355.466c9.638,4.771,19.264,7.936,25.671,6.295c11.204-1.64,25.592-11.31,39.934-29.002
+			l-0.337-84.938c-1.608,0-1.608,0-3.213-1.586L163.952,355.466z"/>
+		<path fill="#E0E337" d="M75.285,226l141.026-0.569c-0.009-1.597-0.009-1.597,1.601-3.201c0,0-138.392-137.277-143.219-142.068
+			c-6.437-6.387-14.446-4.748-14.407,3.266c-3.112,22.457-1.407,49.688,3.555,86.528C67.124,189.187,70.398,206.8,75.285,226"/>
+		<path fill="#53B66F" d="M219.572,239.843c-1.604-1.586-1.604-3.19-3.201-6.391l-137.825,0.553
+			c8.109,25.617,19.439,49.605,33.936,71.987c16.097,20.762,30.58,35.14,43.438,44.696"/>
+	</g>
+
+	<!-- Text elements with final refined spacing, size, and proportions -->
+	<g id="Logo_Text" text-anchor="middle">
+		<text x="775" y="68"
+			  font-family="'Source Han Sans SC', 'Noto Sans SC', sans-serif"
+			  font-size="165"
+			  font-weight="700"
+			  fill="#888888"
+			  textLength="820"
+			  lengthAdjust="spacingAndGlyphs"
+			  dominant-baseline="hanging">天固彩石</text>
+		<text x="775" y="312"
+			  font-family="'Montserrat', 'Noto Sans', sans-serif"
+			  font-size="85"
+			  font-weight="500"
+			  fill="#888888"
+			  textLength="820"
+			  lengthAdjust="spacingAndGlyphs"
+			  dominant-baseline="auto">Open Server Hub</text>
+	</g>
+</g>
+</svg>
