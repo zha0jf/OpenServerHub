@@ -188,12 +188,6 @@ class DiscoveryService:
             return False
 
     async def _check_port_open(self, ip: str, port: int, timeout: int) -> bool:
-        """检查端口是否开放（先TCP，再IPMI）"""
-        # IPMI 默认 UDP 623，用 RMCP ping 试探
-        ok = await self._check_tcp_port(ip, port, timeout)
-        if ok:
-            return True
-
         """使用 ipmitool mc ping 检查 IPMI 服务是否可连接（防止卡死）"""
 
         loop = asyncio.get_event_loop()
@@ -248,6 +242,13 @@ class DiscoveryService:
                 ("Administrator", "superuser"),
 
                 # OpenBMC / 通用
+
+
+
+
+
+
+
 
                 # 浪潮(Inspur)
                 ("root", "superuser"),

@@ -103,22 +103,54 @@ const DeviceDiscovery: React.FC = () => {
       setScanResults([]);
       setLastScanInfo(null);
 
-      // 模拟进度更新 - 优化进度显示逻辑
+      // 根据公式计算实际超时时间：超时时间=（待扫描IP数/并发数）*（超时时间+1）+50s
+      // 计算待扫描IP数
+       let ipCount = 0;
+       if (values.network.includes('/')) {
+         // CIDR格式
+         try {
+           const [ip, prefix] = values.network.split('/');
+           const subnet = Math.pow(2, 32 - parseInt(prefix));
+           ipCount = subnet - 2; // 排除网络地址和广播地址
+         } catch (e) {
+           ipCount = 254; // 默认C类网络
+         }
+       } else if (values.network.includes('-')) {
+         // IP范围格式
+         const ips = values.network.split('-');
+         if (ips.length === 2) {
+           // 简化计算，实际应该计算IP范围
+           ipCount = 100; // 默认值
+         } else {
+           ipCount = 1;
+         }
+       } else if (values.network.includes(',')) {
+         // 逗号分隔格式
+         ipCount = values.network.split(',').length;
+       } else {
+         // 单个IP
+         ipCount = 1;
+       }
+      const calculatedTimeout = Math.ceil((ipCount / (values.max_workers || 5)) * ((values.timeout || 3) + 2)) + 50;
+      
+      // 动态调整进度条更新逻辑
       let currentProgress = 0;
+      const progressIncrement = 100 / (calculatedTimeout * 2); // 每500ms更新一次进度
       progressInterval = setInterval(() => {
-        currentProgress = Math.min(currentProgress + Math.random() * 8 + 2, 95); // 最大到95%
+        currentProgress = Math.min(currentProgress + progressIncrement, 95); // 最大到95%
         setScanProgress(prev => ({
           ...prev,
           progress: currentProgress,
           status: `扫描中... ${Math.floor(currentProgress)}%`,
         }));
-      }, 800); // 降低更新频率
+      }, 500);
 
       const result: NetworkScanResponse = await discoveryService.scanNetwork({
         network: values.network,
         port: values.port || 623,
         timeout: values.timeout || 3,
-        max_workers: values.max_workers || 50,
+        max_workers: values.max_workers || 10,
+        calculated_timeout: calculatedTimeout, // 传递计算后的超时时间
       });
 
       if (progressInterval) {
@@ -176,9 +208,8 @@ const DeviceDiscovery: React.FC = () => {
 
   const handleBatchImport = async () => {
     // 只允许对未添加的设备进行批量导入
-    const newDevices = scanResults.filter(device => !device.already_exists);
-    const selectedNewDevices = selectedDevices.filter(index => 
-      typeof index === 'number' && index < scanResults.length && !scanResults[index].already_exists
+    const selectedNewDevices = scanResults.filter(device => 
+      selectedDevices.includes(device.ip) && !device.already_exists
     );
     
     if (selectedNewDevices.length === 0) {
@@ -191,10 +222,9 @@ const DeviceDiscovery: React.FC = () => {
 
   const handleImportSubmit = async (values: any) => {
     try {
-      // 只对未添加的设备进行导入
-      const newDevices = scanResults.filter(device => !device.already_exists);
-      const selectedDeviceData = newDevices.filter((_, index) => 
-        selectedDevices.includes(index)
+      // 过滤出选中的未添加设备
+      const selectedDeviceData = scanResults.filter(device => 
+        selectedDevices.includes(device.ip) && !device.already_exists
       );
 
       const result = await discoveryService.batchImportDevices({
@@ -444,7 +474,7 @@ const DeviceDiscovery: React.FC = () => {
               initialValues={{
                 port: 623,
                 timeout: 3,
-                max_workers: 50,
+                max_workers: 5,
               }}
             >
               <Row gutter={16}>
@@ -453,9 +483,9 @@ const DeviceDiscovery: React.FC = () => {
                     name="network"
                     label="网络范围"
                     rules={[{ required: true, message: '请输入网络范围' }]}
-                    extra="支持CIDR格式 (192.168.1.0/24) 或IP范围 (192.168.1.1-192.168.1.100)"
+                    extra="支持CIDR格式 (192.168.1.0/24)、IP范围 (192.168.1.1-192.168.1.100) 或逗号分隔的IP列表 (192.168.1.1,192.168.1.2)"
                   >
-                    <Input placeholder="例如: 192.168.1.0/24 或 192.168.1.1-192.168.1.100" />
+                    <Input placeholder="例如: 192.168.1.0/24 或 192.168.1.1-192.168.1.100 或 192.168.1.1,192.168.1.2" />
                   </Form.Item>
                 </Col>
                 <Col span={6}>
@@ -470,7 +500,12 @@ const DeviceDiscovery: React.FC = () => {
                 </Col>
                 <Col span={3}>
                   <Form.Item name="max_workers" label="并发数">
-                    <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                    <Select style={{ width: '100%' }}>
+                      <Select.Option value={1}>1</Select.Option>
+                      <Select.Option value={3}>3</Select.Option>
+                      <Select.Option value={5}>5</Select.Option>
+                      <Select.Option value={10}>10</Select.Option>
+                    </Select>
                   </Form.Item>
                 </Col>
               </Row>
@@ -564,23 +599,19 @@ const DeviceDiscovery: React.FC = () => {
                     type="primary" 
                     icon={<ImportOutlined />}
                     onClick={handleBatchImport}
-                    disabled={selectedDevices.filter(index => 
-                      typeof index === 'number' && index < scanResults.length && !scanResults[index].already_exists
-                    ).length === 0}
+                    disabled={selectedDevices.length === 0}
                     size="small"
                   >
-                    批量导入 ({selectedDevices.filter(index => 
-                      typeof index === 'number' && index < scanResults.length && !scanResults[index].already_exists
-                    ).length})
+                    批量导入 ({selectedDevices.length})
                   </Button>
                   <Button 
                     size="small"
                     onClick={() => {
                       // 只选择未添加的设备
-                      const newDeviceIndices = scanResults
-                        .map((_, index) => index)
-                        .filter(index => !scanResults[index].already_exists);
-                      setSelectedDevices(newDeviceIndices);
+                      const newDeviceIps = scanResults
+                        .filter(device => !device.already_exists)
+                        .map(device => device.ip);
+                      setSelectedDevices(newDeviceIps);
                     }}
                   >
                     全选未添加
@@ -634,28 +665,18 @@ const DeviceDiscovery: React.FC = () => {
                     未添加设备 ({scanResults.filter(d => !d.already_exists).length})
                   </Title>
                   <Table
-                    columns={columns}
-                    dataSource={scanResults.filter(d => !d.already_exists)}
-                    rowKey={(record, index) => `new-${index}`}
-                    rowSelection={{
-                      selectedRowKeys: selectedDevices.filter(index => 
-                        typeof index === 'number' && index < scanResults.length && !scanResults[index].already_exists
-                      ),
-                      onChange: (selectedRowKeys: React.Key[]) => {
-                        // 调整索引以匹配过滤后的数据
-                        const newSelectedDevices = selectedRowKeys.map(key => {
-                          const deviceIndex = scanResults.findIndex((d, idx) => 
-                            !d.already_exists && `new-${idx}` === key
-                          );
-                          return deviceIndex;
-                        }).filter(index => index !== -1);
-                        
-                        setSelectedDevices([...newSelectedDevices]);
-                      },
-                      getCheckboxProps: (record: DiscoveredDevice) => ({
-                        disabled: record.already_exists,
-                      }),
-                    }}
+                columns={columns}
+                dataSource={scanResults.filter(d => !d.already_exists)}
+                rowKey="ip"
+                rowSelection={{
+                  selectedRowKeys: selectedDevices,
+                  onChange: (selectedRowKeys: React.Key[]) => {
+                    setSelectedDevices(selectedRowKeys);
+                  },
+                  getCheckboxProps: (record: DiscoveredDevice) => ({
+                    disabled: record.already_exists,
+                  }),
+                }}
                     scroll={{ x: 1000 }}
                     size="small"
                     pagination={{
@@ -678,11 +699,20 @@ const DeviceDiscovery: React.FC = () => {
                     已添加设备 ({scanResults.filter(d => d.already_exists).length})
                   </Title>
                   <Table
-                    columns={columns}
-                    dataSource={scanResults.filter(d => d.already_exists)}
-                    rowKey={(record, index) => `existing-${index}`}
-                    scroll={{ x: 1000 }}
-                    size="small"
+                columns={columns}
+                dataSource={scanResults.filter(d => d.already_exists)}
+                rowKey="ip"
+                rowSelection={{
+                  selectedRowKeys: selectedDevices,
+                  onChange: (selectedRowKeys: React.Key[]) => {
+                    setSelectedDevices(selectedRowKeys);
+                  },
+                  getCheckboxProps: (record: DiscoveredDevice) => ({
+                    disabled: record.already_exists,
+                  }),
+                }}
+                scroll={{ x: 1000 }}
+                size="small"
                     pagination={{
                       showSizeChanger: true,
                       showQuickJumper: true,
@@ -851,7 +881,7 @@ const DeviceDiscovery: React.FC = () => {
             
             <Divider />
             
-            <Title level={4}>单个IP</Title>
+            <Title level={4}>逗号分隔示例</Title>
             <Paragraph>{networkExamples.description.single}</Paragraph>
             <ul>
               {networkExamples.single_ip_examples.map((example, index) => (

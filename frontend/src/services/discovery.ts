@@ -6,6 +6,7 @@ export interface NetworkScanRequest {
   port?: number;
   timeout?: number;
   max_workers?: number;
+  calculated_timeout?: number; // 新增计算后的超时时间参数
 }
 
 export interface DiscoveredDevice {
@@ -81,8 +82,10 @@ class DiscoveryService {
    * 扫描网络范围内的BMC设备
    */
   async scanNetwork(request: NetworkScanRequest): Promise<NetworkScanResponse> {
+    // 使用计算后的超时时间，如果没有则使用默认的2分钟超时
+    const apiTimeout = request.calculated_timeout ? request.calculated_timeout * 1000 : 120000;
     const response = await api.post('/discovery/network-scan', request, {
-      timeout: 120000 // 网络扫描任务设置2分钟超时
+      timeout: apiTimeout
     });
     return response.data;
   }
