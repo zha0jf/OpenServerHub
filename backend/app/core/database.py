@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.core.config import settings
 
@@ -11,7 +12,15 @@ engine = create_engine(
     echo=True  # 开发阶段显示SQL
 )
 
+# 异步引擎配置
+async_engine = create_async_engine(
+    settings.DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///"),
+    connect_args={"check_same_thread": False},
+    echo=True
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+AsyncSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=async_engine, class_=AsyncSession)
 
 Base = declarative_base()
 
@@ -22,3 +31,8 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# 异步数据库依赖
+async def get_async_db():
+    async with AsyncSessionLocal() as session:
+        yield session

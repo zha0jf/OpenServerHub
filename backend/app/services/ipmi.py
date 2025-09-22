@@ -59,8 +59,14 @@ class IPMIConnectionPool:
                 raise IPMIError(f"IPMI连接失败（类型错误）: {e}")
 
             except Exception as e:
-                logger.error(f"创建IPMI连接失败: {e}")
-                raise IPMIError(f"IPMI连接失败: {e}")
+                # 处理pyghmi库内部的特定错误
+                error_msg = str(e)
+                if "'Session' object has no attribute 'errormsg'" in error_msg:
+                    logger.error(f"创建IPMI连接失败: IPMI会话初始化失败，可能是网络连接问题或认证失败")
+                    raise IPMIError(f"IPMI连接失败: 无法建立IPMI会话，请检查网络连接和认证信息")
+                else:
+                    logger.error(f"创建IPMI连接失败: {e}")
+                    raise IPMIError(f"IPMI连接失败: {e}")
     async def get_connection(self, ip: str, username: str, password: str, port: int = 623, timeout: int = 5):
         """获取IPMI连接（安全版，带超时保护，避免在OpenBMC卡死）"""
         # 参数检查
@@ -141,8 +147,14 @@ class IPMIService:
             logger.error(f"获取电源状态失败 {ip}: {e}")
             raise IPMIError(f"获取电源状态失败: {str(e)}")
         except Exception as e:
-            logger.error(f"IPMI操作异常 {ip}: {e}")
-            raise IPMIError(f"IPMI操作失败: {str(e)}")
+            # 处理pyghmi库内部的特定错误
+            error_msg = str(e)
+            if "'Session' object has no attribute 'errormsg'" in error_msg:
+                logger.error(f"IPMI操作异常 {ip}: IPMI会话初始化失败，可能是网络连接问题或认证失败")
+                raise IPMIError(f"IPMI操作失败: 无法建立IPMI会话，请检查网络连接和认证信息")
+            else:
+                logger.error(f"IPMI操作异常 {ip}: {e}")
+                raise IPMIError(f"IPMI操作失败: {str(e)}")
     
     async def power_control(self, ip: str, username: str, password: str, action: str, port: int = 623) -> Dict[str, Any]:
         """电源控制"""
@@ -162,8 +174,14 @@ class IPMIService:
             logger.error(f"电源控制失败 {ip} {action}: {e}")
             raise IPMIError(f"电源控制失败: {str(e)}")
         except Exception as e:
-            logger.error(f"IPMI操作异常 {ip} {action}: {e}")
-            raise IPMIError(f"IPMI操作失败: {str(e)}")
+            # 处理pyghmi库内部的特定错误
+            error_msg = str(e)
+            if "'Session' object has no attribute 'errormsg'" in error_msg:
+                logger.error(f"IPMI操作异常 {ip} {action}: IPMI会话初始化失败，可能是网络连接问题或认证失败")
+                raise IPMIError(f"IPMI操作失败: 无法建立IPMI会话，请检查网络连接和认证信息")
+            else:
+                logger.error(f"IPMI操作异常 {ip} {action}: {e}")
+                raise IPMIError(f"IPMI操作失败: {str(e)}")
     
     def _sync_get_all_info(self, conn: "command.Command", initial_ip: str) -> Dict[str, Any]:
         """

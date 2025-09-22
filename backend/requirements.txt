@@ -19,6 +19,12 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
+# 异步SQLite支持
+aiosqlite==0.21.0
+
+# 定时任务
+apscheduler==3.10.4
+
 # 开发工具
 pytest==7.4.3
 pytest-asyncio==0.21.1
