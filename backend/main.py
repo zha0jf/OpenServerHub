@@ -10,6 +10,7 @@ from app.core.database import engine
 from app.core.logging import setup_logging
 from app.api.v1.api import api_router
 from app.models import Base
+from app.services import scheduler_service
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,23 @@ setup_logging()
 async def lifespan(app: FastAPI):
     # 启动时创建数据库表
     Base.metadata.create_all(bind=engine)
+    
+    # 启动定时任务服务（如果启用）
+    if settings.POWER_STATE_REFRESH_ENABLED:
+        try:
+            await scheduler_service.start()
+            logger.info("电源状态定时刷新服务已启动")
+        except Exception as e:
+            logger.error(f"启动定时任务服务失败: {e}")
+    
     yield
-    # 关闭时的清理工作（如果需要）
+    
+    # 关闭时停止定时任务服务
+    try:
+        await scheduler_service.stop()
+        logger.info("电源状态定时刷新服务已停止")
+    except Exception as e:
+        logger.error(f"停止定时任务服务失败: {e}")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -72,3 +88,35 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.get("/api/v1/scheduler/status")
+async def get_scheduler_status():
+    """获取定时任务状态"""
+    try:
+        status = scheduler_service.get_status()
+        return {
+            "success": True,
+            "data": status
+        }
+    except Exception as e:
+        logger.error(f"获取定时任务状态失败: {e}")
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
+@app.post("/api/v1/scheduler/refresh-power-state")
+async def manual_refresh_power_state():
+    """手动刷新所有服务器电源状态"""
+    try:
+        await scheduler_service.refresh_all_servers_power_state()
+        return {
+            "success": True,
+            "message": "电源状态刷新任务已提交"
+        }
+    except Exception as e:
+        logger.error(f"手动刷新电源状态失败: {e}")
+        return {
+            "success": False,
+            "message": str(e)
+        }

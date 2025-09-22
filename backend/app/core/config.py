@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     IPMI_CONNECTION_POOL_SIZE: int = 50
     IPMI_TIMEOUT: int = 30
     
+    # 定时任务配置
+    POWER_STATE_REFRESH_INTERVAL: int = 1  # 电源状态刷新间隔（分钟）
+    POWER_STATE_REFRESH_ENABLED: bool = True  # 是否启用自动刷新
+    
     class Config:
         env_file = ".env"
 
