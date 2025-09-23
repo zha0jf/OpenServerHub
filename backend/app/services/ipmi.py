@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import ipaddress
 import functools  # 导入 functools
@@ -186,6 +187,7 @@ class IPMIService:
     def _sync_get_all_info(self, conn: "command.Command", initial_ip: str) -> Dict[str, Any]:
         """
         [重写后] 同步辅助函数：获取系统清单和LAN配置，兼容当前版本 pyghmi。
+        支持多种FRU格式，包括您提供的格式。
         """
         results = {}
 
@@ -195,20 +197,78 @@ class IPMIService:
             inventory_generator = conn.get_inventory()
             system_name, system_info = next(inventory_generator)
 
-            if system_name == "System" and system_info:
-                # 根据实际返回的嵌套字典结构来提取信息
-                board_info = system_info.get('Board', {})
-                product_info = system_info.get('Product', {})
+            logger.info(f"get_inventory() 返回: system_name={system_name}")
+            logger.info(f"原始system_info类型: {type(system_info)}")
+            logger.info(f"原始system_info内容: {json.dumps(system_info, indent=2, ensure_ascii=False)}")
 
-                results['manufacturer'] = board_info.get('Manufacturer', 'Unknown')
-                results['product'] = product_info.get('Name', 'Unknown')
-                results['serial'] = product_info.get('Serial Number', 'Unknown')
-                results['bmc_version'] = system_info.get('Firmware Version', 'Unknown')
+            if system_name == "System" and system_info:
+                # 根据实际返回的扁平化数据结构来提取信息
+                # 实际的FRU数据是扁平化的，直接包含各个字段
+                
+                # 尝试多种可能的制造商字段名（扁平化结构）
+                manufacturer = (system_info.get('Manufacturer') or 
+                             system_info.get('Board manufacturer') or 
+                             system_info.get('Mfg') or 
+                             system_info.get('Vendor') or 
+                             'Unknown')
+                
+                # 尝试多种可能的产品名字段（扁平化结构）
+                product = (system_info.get('Product name') or 
+                          system_info.get('Board product name') or 
+                          system_info.get('Product') or 
+                          system_info.get('Model') or 
+                          'Unknown')
+                
+                # 尝试多种可能的序列号字段（扁平化结构）
+                serial = (system_info.get('Serial Number') or 
+                         system_info.get('Board serial number') or 
+                         system_info.get('Chassis serial number') or 
+                         system_info.get('Serial') or 
+                         'Unknown')
+                
+                # 尝试多种可能的固件版本字段（扁平化结构）
+                bmc_version = (system_info.get('firmware_version') or 
+                              system_info.get('Firmware Version') or 
+                              system_info.get('Version') or 
+                              system_info.get('Hardware Version') or 
+                              'Unknown')
+
+                results['manufacturer'] = manufacturer
+                results['product'] = product
+                results['serial'] = serial
+                results['bmc_version'] = bmc_version
+                
+                # 额外信息：如果有更详细的数据，也保存起来
+                if chassis_info:
+                    results['chassis_type'] = chassis_info.get('Type', 'Unknown')
+                    results['chassis_part_number'] = chassis_info.get('Part Number', 'Unknown')
+                if board_info:
+                    results['board_mfg_date'] = board_info.get('Mfg Date', 'Unknown')
+                    results['board_part_number'] = board_info.get('Part Number', 'Unknown')
+                if product_info:
+                    results['product_part_number'] = product_info.get('Part Number', 'Unknown')
+                    results['product_asset_tag'] = product_info.get('Asset Tag', 'Unknown')
+                
+                logger.info(f"成功解析系统清单: manufacturer={manufacturer}, product={product}, serial={serial}, bmc_version={bmc_version}")
+                logger.debug(f"完整的FRU数据: {system_info}")
+            else:
+                logger.warning(f"get_inventory() 返回非预期格式: system_name={system_name}, system_info类型={type(system_info)}")
 
         except StopIteration:
-            logger.info(f"获取系统清单失败: get_inventory() 未返回任何信息。")
+            logger.warning(f"获取系统清单失败: get_inventory() 未返回任何信息。这可能是BMC未实现FRU功能或权限不足。尝试使用备用方法获取基本信息...")
+            # 备用方法：尝试通过其他方式获取基本信息
+            try:
+                # 尝试获取BMC信息作为备用
+                bmc_info = conn.get_bmc_configuration()
+                if bmc_info:
+                    results['manufacturer'] = bmc_info.get('manufacturer', 'Unknown')
+                    results['product'] = bmc_info.get('product_name', 'Unknown')
+                    results['bmc_version'] = bmc_info.get('firmware_version', 'Unknown')
+                    logger.info(f"使用备用方法获取BMC信息: {results}")
+            except Exception as backup_e:
+                logger.warning(f"备用方法也失败: {backup_e}")
         except Exception as e:
-            logger.info(f"同步获取系统清单时发生错误: {e}")
+            logger.warning(f"同步获取系统清单时发生错误: {e}")
 
         # 2. 获取LAN网络配置
         try:
