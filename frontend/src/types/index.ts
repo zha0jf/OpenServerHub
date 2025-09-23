@@ -128,7 +128,7 @@ export interface PaginationParams {
 }
 
 // 电源控制类型
-export type PowerAction = 'on' | 'off' | 'restart' | 'force_off';
+export type PowerAction = 'on' | 'off' | 'restart' | 'force_off' | 'force_restart';
 
 export interface PowerControlResponse {
   action: PowerAction;

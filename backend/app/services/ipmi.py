@@ -163,7 +163,7 @@ class IPMIService:
         try:
             conn = await self.pool.get_connection(ip, username, password, port)
             
-            power_actions = {'on': 'on', 'off': 'off', 'restart': 'reset', 'force_off': 'off'}
+            power_actions = {'on': 'on', 'off': 'off', 'restart': 'reset', 'force_off': 'off', 'force_restart': 'cycle'}
             if action not in power_actions:
                 raise IPMIError(f"不支持的电源操作: {action}")
             

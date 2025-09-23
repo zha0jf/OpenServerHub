@@ -12,7 +12,10 @@ import {
   message,
   Popconfirm,
   Card,
+  Dropdown,
+  Menu,
 } from 'antd';
+import './ServerList.css';
 import {
   PlusOutlined,
   PoweroffOutlined,
@@ -21,6 +24,7 @@ import {
   DeleteOutlined,
   ThunderboltOutlined,
   SwapOutlined,
+  MoreOutlined,
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
 import { Server, ServerGroup, CreateServerRequest, PowerAction, BatchPowerRequest } from '../../types';
@@ -276,8 +280,8 @@ const ServerList: React.FC = () => {
     }
 
     Modal.confirm({
-      title: `确认批量${action === 'on' ? '开机' : action === 'off' ? '关机' : action === 'restart' ? '重启' : '强制关机'}?`,
-      content: `将对选中的 ${selectedRowKeys.length} 台服务器执行${action === 'on' ? '开机' : action === 'off' ? '关机' : action === 'restart' ? '重启' : '强制关机'}操作`,
+      title: `确认批量${action === 'on' ? '开机' : action === 'off' ? '关机' : action === 'restart' ? '重启' : action === 'force_restart' ? '强制重启' : '强制关机'}?`,
+      content: `将对选中的 ${selectedRowKeys.length} 台服务器执行${action === 'on' ? '开机' : action === 'off' ? '关机' : action === 'restart' ? '重启' : action === 'force_restart' ? '强制重启' : '强制关机'}操作`,
       onOk: async () => {
         try {
           setBatchLoading(true);
@@ -320,6 +324,82 @@ const ServerList: React.FC = () => {
           
         } catch (error) {
           console.error('批量操作失败:', error);
+        } finally {
+          setBatchLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请选择要删除的服务器');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认批量删除?',
+      content: `您确定要删除选中的 ${selectedRowKeys.length} 台服务器吗？此操作不可恢复。`,
+      okText: '确定',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          setBatchLoading(true);
+          let successCount = 0;
+          let failedCount = 0;
+          const failedResults: Array<{server_name: string, error: string}> = [];
+
+          // 逐个删除选中的服务器
+          for (const serverId of selectedRowKeys) {
+            try {
+              const server = servers.find(s => s.id === serverId);
+              if (server) {
+                await serverService.deleteServer(serverId);
+                successCount++;
+              }
+            } catch (error) {
+              failedCount++;
+              const server = servers.find(s => s.id === serverId);
+              failedResults.push({
+                server_name: server?.name || `ID: ${serverId}`,
+                error: error instanceof Error ? error.message : '删除失败'
+              });
+            }
+          }
+
+          // 显示结果统计
+          if (failedCount === 0) {
+            message.success(`批量删除完成: 成功删除 ${successCount} 台服务器`);
+          } else {
+            message.warning(`批量删除完成: 成功 ${successCount} 台，失败 ${failedCount} 台`);
+            
+            // 显示详细失败结果
+            Modal.warning({
+              title: '部分删除失败',
+              content: (
+                <div>
+                  <p>以下服务器删除失败：</p>
+                  <ul>
+                    {failedResults.map((result, index) => (
+                      <li key={index}>
+                        {result.server_name}: {result.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+              width: 600
+            });
+          }
+
+          // 清除选中状态并重新加载数据
+          setSelectedRowKeys([]);
+          await loadServers();
+
+        } catch (error) {
+          console.error('批量删除失败:', error);
+          message.error('批量删除操作失败');
         } finally {
           setBatchLoading(false);
         }
@@ -383,15 +463,17 @@ const ServerList: React.FC = () => {
       },
     },
     {
-      title: '状态',
+      title: 'BMC状态',
       dataIndex: 'status',
       key: 'status',
+      width: 100,
       render: (status: string) => getStatusTag(status),
     },
     {
       title: '电源状态',
       dataIndex: 'power_state',
       key: 'power_state',
+      width: 100,
       render: (powerState: string) => getPowerStateTag(powerState),
     },
     {
@@ -405,61 +487,138 @@ const ServerList: React.FC = () => {
       key: 'model',
     },
     {
-      title: '操作',
-      key: 'actions',
-      render: (_, server) => (
-        <Space size="middle">
-          <Button
-            type="primary"
-            size="small"
-            icon={<PoweroffOutlined />}
-            onClick={() => handlePowerControl(server, 'on')}
-            disabled={server.power_state === 'on'}
-          >
-            开机
-          </Button>
-          <Button
-            size="small"
-            icon={<PoweroffOutlined />}
-            onClick={() => handlePowerControl(server, 'off')}
-            disabled={server.power_state === 'off'}
-          >
-            关机
-          </Button>
-          <Button
-            size="small"
-            icon={<SwapOutlined />}
-            onClick={() => handleChangeGroup(server)}
-          >
-            切换分组
-          </Button>
-          <Button
-            size="small"
-            icon={<ReloadOutlined />}
-            loading={refreshingStatus === server.id}
-            onClick={() => handleUpdateStatus(server)}
-          >
-            {refreshingStatus === server.id ? '刷新中...' : '刷新状态'}
-          </Button>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEditServer(server)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定要删除这台服务器吗？"
-            onConfirm={() => handleDeleteServer(server)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button size="small" icon={<DeleteOutlined />} danger>
-              删除
+      title: '电源操作',
+      key: 'power_actions',
+      render: (_, server) => {
+        return (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <Space size="middle">
+              {/* 只在服务器在线且电源状态为关机时显示开机按钮 */}
+              {server.status === 'online' && server.power_state === 'off' && (
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<PoweroffOutlined />}
+                  onClick={() => handlePowerControl(server, 'on')}
+                >
+                  开机
+                </Button>
+              )}
+              
+              {/* 只在服务器在线且电源状态为开机时显示关机按钮 */}
+              {server.status === 'online' && server.power_state === 'on' && (
+                <Button
+                  size="small"
+                  icon={<PoweroffOutlined />}
+                  onClick={() => handlePowerControl(server, 'off')}
+                >
+                  关机
+                </Button>
+              )}
+              
+              {/* 只在服务器在线且电源状态为开机时显示重启按钮 */}
+              {server.status === 'online' && server.power_state === 'on' && (
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={() => handlePowerControl(server, 'restart')}
+                >
+                  重启
+                </Button>
+              )}
+              
+              {/* 更多电源操作下拉菜单 */}
+              <Dropdown
+                menu={{ 
+                  items: [
+                    // 刷新状态按钮对所有状态的服务器都显示
+                    {
+                      key: 'refresh_status',
+                      label: refreshingStatus === server.id ? '刷新中...' : '刷新状态',
+                      icon: <ReloadOutlined />,
+                      onClick: () => handleUpdateStatus(server),
+                      disabled: refreshingStatus === server.id,
+                    },
+                    // 只在服务器在线时显示强制关机按钮
+                    ...(server.status === 'online' ? [{
+                      key: 'force_off',
+                      label: '强制关机',
+                      icon: <PoweroffOutlined />,
+                      danger: true,
+                      onClick: () => handlePowerControl(server, 'force_off'),
+                    }] : []),
+                    // 只在服务器在线且电源状态为开机时显示强制重启按钮
+                    ...(server.status === 'online' && server.power_state === 'on' ? [{
+                      key: 'force_restart',
+                      label: '强制重启',
+                      icon: <ThunderboltOutlined />,
+                      danger: true,
+                      onClick: () => handlePowerControl(server, 'force_restart'),
+                    }] : []),
+                  ].filter(Boolean)
+                }}
+                trigger={['click']}
+              >
+                <Button size="small" icon={<MoreOutlined />} />
+              </Dropdown>
+            </Space>
+          </div>
+        );
+      },
+    },
+    {
+      title: '管理操作',
+      key: 'management_actions',
+      render: (_, server) => {
+        return (
+          <Space size="middle">
+            {/* 编辑按钮对所有状态的服务器都显示 */}
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleEditServer(server)}
+            >
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            
+            {/* 删除按钮已从主界面移除，只保留在下拉菜单中 */}
+            
+            {/* 更多管理操作下拉菜单 */}
+            <Dropdown
+              menu={{ 
+                items: [
+                  // 切换分组按钮对所有状态的服务器都显示
+                  {
+                    key: 'change_group',
+                    label: '切换分组',
+                    icon: <SwapOutlined />,
+                    onClick: () => handleChangeGroup(server),
+                  },
+                  // 删除按钮添加到下拉菜单中
+                  {
+                    key: 'delete',
+                    label: '删除',
+                    icon: <DeleteOutlined />,
+                    danger: true,
+                    onClick: () => {
+                      Modal.confirm({
+                        title: '确定要删除这台服务器吗？',
+                        content: `您确定要删除服务器 "${server.name}" 吗？此操作不可恢复。`,
+                        okText: '确定',
+                        cancelText: '取消',
+                        onOk: () => handleDeleteServer(server),
+                      });
+                    },
+                  },
+                ]
+              }}
+              trigger={['click']}
+            >
+              <Button size="small" icon={<MoreOutlined />} />
+            </Dropdown>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -512,6 +671,13 @@ const ServerList: React.FC = () => {
               <Button
                 danger
                 loading={batchLoading}
+                onClick={() => handleBatchPowerControl('force_restart')}
+              >
+                强制重启
+              </Button>
+              <Button
+                danger
+                loading={batchLoading}
                 onClick={() => handleBatchPowerControl('force_off')}
               >
                 强制关机
@@ -521,6 +687,13 @@ const ServerList: React.FC = () => {
                 onClick={handleBatchChangeGroup}
               >
                 批量切换分组
+              </Button>
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                onClick={handleBatchDelete}
+              >
+                批量删除
               </Button>
               <Button onClick={() => setSelectedRowKeys([])}>
                 取消选择
@@ -539,6 +712,13 @@ const ServerList: React.FC = () => {
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total, range) => `第 ${range?.[0]}-${range?.[1]} 条，共 ${total} 条记录`,
+          }}
+          style={{
+            borderSpacing: '0 4px',
+            borderCollapse: 'separate',
+          }}
+          rowClassName={(record, index) => {
+            return index % 2 === 0 ? 'table-row-even' : 'table-row-odd';
           }}
         />
       </Card>

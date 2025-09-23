@@ -1,0 +1,88 @@
+/* 表格行样式 */
+.table-row-even {
+  background-color: #fafafa !important;
+}
+
+.table-row-odd {
+  background-color: #ffffff !important;
+}
+
+/* 表格行悬停效果 */
+.table-row-even:hover,
+.table-row-odd:hover {
+  background-color: #f5f5f5 !important;
+}
+
+/* 表格列间距优化 */
+.ant-table-thead > tr > th,
+.ant-table-tbody > tr > td {
+  padding: 16px 16px !important;
+  border-right: 1px solid #f8f8f8 !important;
+}
+
+/* 移除最后一列的右边框 */
+.ant-table-thead > tr > th:last-child,
+.ant-table-tbody > tr > td:last-child {
+  border-right: none !important;
+}
+
+/* 表格边框间距 */
+.ant-table {
+  border-collapse: separate !important;
+  border-spacing: 0 4px !important;
+}
+
+/* 表格行阴影效果 */
+.ant-table-tbody > tr {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  border-radius: 4px !important;
+}
+
+/* 表格单元格边框 */
+.ant-table-tbody > tr > td {
+  border: none !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.ant-table-tbody > tr > td:first-child {
+  border-top-left-radius: 4px !important;
+  border-bottom-left-radius: 4px !important;
+}
+
+.ant-table-tbody > tr > td:last-child {
+  border-top-right-radius: 4px !important;
+  border-bottom-right-radius: 4px !important;
+}
+
+/* 表头样式优化 */
+.ant-table-thead > tr > th {
+  background-color: #f8f9fa !important;
+  font-weight: 600 !important;
+  color: #495057 !important;
+  border-bottom: 2px solid #dee2e6 !important;
+  border-right: 1px solid #e8e8e8 !important;
+}
+
+/* 表头最后一列无边框 */
+.ant-table-thead > tr > th:last-child {
+  border-right: none !important;
+}
+
+/* 表格列分隔线 - 更细微的效果 */
+.ant-table-thead > tr > th:not(:last-child)::after,
+.ant-table-tbody > tr > td:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 20%;
+  height: 60%;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, #e8e8e8, transparent);
+  opacity: 0.6;
+}
+
+/* 调整表格单元格位置 */
+.ant-table-thead > tr > th,
+.ant-table-tbody > tr > td {
+  position: relative !important;
+}
