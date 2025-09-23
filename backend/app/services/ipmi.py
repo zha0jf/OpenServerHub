@@ -193,15 +193,32 @@ class IPMIService:
 
         # 1. 获取系统清单 (FRU, 固件版本等)
         try:
-            # get_inventory() 是一个生成器，我们主要需要第一个 "System" 组件的信息
+            # get_inventory() 是一个生成器，我们需要查找包含FRU信息的组件
             inventory_generator = conn.get_inventory()
-            system_name, system_info = next(inventory_generator)
+            
+            # 查找包含制造商信息的组件（可能是System、system、主板等）
+            system_info = None
+            system_name = None
+            
+            for name, info in inventory_generator:
+                logger.info(f"get_inventory() 组件: {name}, 类型: {type(info)}")
+                if isinstance(info, dict):
+                    # 检查是否有制造商信息
+                    if (info.get('Manufacturer') or info.get('Board manufacturer') or 
+                        info.get('Product name') or info.get('Board product name')):
+                        system_name = name
+                        system_info = info
+                        logger.info(f"找到包含FRU信息的组件: {name}")
+                        logger.info(f"FRU数据内容: {json.dumps(info, indent=2, ensure_ascii=False)}")
+                        break
+            
+            # 如果没有找到有信息的组件，尝试第一个组件
+            if not system_info:
+                inventory_generator = conn.get_inventory()  # 重新获取生成器
+                system_name, system_info = next(inventory_generator)
+                logger.info(f"使用第一个组件: system_name={system_name}")
 
-            logger.info(f"get_inventory() 返回: system_name={system_name}")
-            logger.info(f"原始system_info类型: {type(system_info)}")
-            logger.info(f"原始system_info内容: {json.dumps(system_info, indent=2, ensure_ascii=False)}")
-
-            if system_name == "System" and system_info:
+            if system_info and isinstance(system_info, dict):
                 # 根据实际返回的扁平化数据结构来提取信息
                 # 实际的FRU数据是扁平化的，直接包含各个字段
                 
@@ -212,12 +229,99 @@ class IPMIService:
                              system_info.get('Vendor') or 
                              'Unknown')
                 
+                # 处理None值：如果制造商为None，则使用Unknown
+                if manufacturer is None:
+                    manufacturer = 'Unknown'
+                
+                # 智能推断：如果制造商仍然是Unknown，尝试从其他字段推断
+                if manufacturer == 'Unknown':
+                    # 尝试从产品型号或序列号推断
+                    product_name = (system_info.get('Product name') or 
+                                 system_info.get('Board product name') or 
+                                 system_info.get('Product') or 
+                                 system_info.get('Model') or 
+                                 '')
+                    
+                    # 从序列号或产品特征推断
+                    serial_num = (system_info.get('Serial Number') or 
+                                 system_info.get('Board serial number') or 
+                                 system_info.get('Chassis serial number') or 
+                                 '')
+                    
+                    # 根据常见的产品特征进行推断
+                    if product_name:
+                        product_lower = product_name.lower()
+                        if 'dell' in product_lower or 'poweredge' in product_lower:
+                            manufacturer = 'Dell'
+                        elif 'hp' in product_lower or 'proliant' in product_lower:
+                            manufacturer = 'HPE'
+                        elif 'lenovo' in product_lower:
+                            manufacturer = 'Lenovo'
+                        elif 'huawei' in product_lower:
+                            manufacturer = 'Huawei'
+                        elif 'inspur' in product_lower:
+                            manufacturer = 'Inspur'
+                        elif 'h3c' in product_lower:
+                            manufacturer = 'H3C'
+                        elif 'sugon' in product_lower or 'dawning' in product_lower:
+                            manufacturer = 'Sugon'
+                        elif '4u' in product_lower or '2u' in product_lower or '1u' in product_lower:
+                            # 如果是机架式服务器但没有明确品牌，标记为通用服务器
+                            manufacturer = 'Generic Server'
+                    
+                    # 如果还是Unknown，使用产品名称作为线索
+                    if manufacturer == 'Unknown' and product_name:
+                        manufacturer = f'Unknown ({product_name})'
+                    elif manufacturer == 'Unknown' and serial_num:
+                        manufacturer = f'Unknown (SN: {serial_num[:8]}...)'
+                
                 # 尝试多种可能的产品名字段（扁平化结构）
                 product = (system_info.get('Product name') or 
                           system_info.get('Board product name') or 
                           system_info.get('Product') or 
                           system_info.get('Model') or 
                           'Unknown')
+                
+                # 处理中文编码问题：检测并修复乱码
+                def fix_encoding(text):
+                    """修复可能的编码问题"""
+                    if not text or text == 'Unknown' or text is None:
+                        return text
+                    
+                    # 检测是否为乱码（包含典型的UTF-8解码错误模式）
+                    try:
+                        # 尝试检测是否为UTF-8编码的乱码
+                        if 'å' in text or '¤' in text or 'æ' in text:
+                            # 可能是UTF-8被错误解码为Latin-1的乱码
+                            # 尝试重新编码为Latin-1，然后解码为UTF-8
+                            try:
+                                fixed = text.encode('latin-1').decode('utf-8')
+                                return fixed
+                            except (UnicodeEncodeError, UnicodeDecodeError):
+                                pass
+                        
+                        # 尝试其他常见的编码修复
+                        try:
+                            # 尝试GBK编码
+                            fixed = text.encode('latin-1').decode('gbk')
+                            return fixed
+                        except (UnicodeEncodeError, UnicodeDecodeError):
+                            pass
+                            
+                        try:
+                            # 尝试GB2312编码
+                            fixed = text.encode('latin-1').decode('gb2312')
+                            return fixed
+                        except (UnicodeEncodeError, UnicodeDecodeError):
+                            pass
+                    except Exception:
+                        pass
+                    
+                    return text
+                
+                # 修复制造商和产品名称的编码
+                manufacturer = fix_encoding(manufacturer)
+                product = fix_encoding(product)
                 
                 # 尝试多种可能的序列号字段（扁平化结构）
                 serial = (system_info.get('Serial Number') or 
@@ -237,17 +341,6 @@ class IPMIService:
                 results['product'] = product
                 results['serial'] = serial
                 results['bmc_version'] = bmc_version
-                
-                # 额外信息：如果有更详细的数据，也保存起来
-                if chassis_info:
-                    results['chassis_type'] = chassis_info.get('Type', 'Unknown')
-                    results['chassis_part_number'] = chassis_info.get('Part Number', 'Unknown')
-                if board_info:
-                    results['board_mfg_date'] = board_info.get('Mfg Date', 'Unknown')
-                    results['board_part_number'] = board_info.get('Part Number', 'Unknown')
-                if product_info:
-                    results['product_part_number'] = product_info.get('Part Number', 'Unknown')
-                    results['product_asset_tag'] = product_info.get('Asset Tag', 'Unknown')
                 
                 logger.info(f"成功解析系统清单: manufacturer={manufacturer}, product={product}, serial={serial}, bmc_version={bmc_version}")
                 logger.debug(f"完整的FRU数据: {system_info}")
