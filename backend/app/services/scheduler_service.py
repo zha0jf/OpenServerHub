@@ -123,18 +123,27 @@ class PowerStateSchedulerService:
                 except ValueError:
                     power_state_enum = PowerState.UNKNOWN
                 
-                # 更新数据库中的电源状态
+                # 根据电源状态确定BMC状态
+                # 如果电源状态检测成功，说明BMC是在线的
+                bmc_status = ServerStatus.ONLINE
+                
+                # 更新数据库中的电源状态和BMC状态
                 async with AsyncSessionLocal() as session:
                     from sqlalchemy import update
                     await session.execute(
                         update(Server)
                         .where(Server.id == server.id)
-                        .values(power_state=power_state_enum)
+                        .values(
+                            power_state=power_state_enum,
+                            status=bmc_status,
+                            last_seen=datetime.now()
+                        )
                     )
                     await session.commit()
                     
                 logger.debug(
-                    f"服务器 {server.name} ({server.ipmi_ip}) 电源状态已更新: {power_state_enum.value}"
+                    f"服务器 {server.name} ({server.ipmi_ip}) 电源状态已更新: {power_state_enum.value}, "
+                    f"BMC状态已更新: {bmc_status.value}"
                 )
                 return True
             else:
