@@ -25,6 +25,12 @@ aiosqlite==0.21.0
 # 定时任务
 apscheduler==3.10.4
 
+# HTTP客户端（用于与Prometheus等监控组件通信）
+httpx==0.25.0
+
+# 异步文件操作
+aiofiles==23.2.1
+
 # 开发工具
 pytest==7.4.3
 pytest-asyncio==0.21.1

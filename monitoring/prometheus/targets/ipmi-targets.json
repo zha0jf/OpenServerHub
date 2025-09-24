@@ -1,0 +1,20 @@
+[
+  {
+    "targets": ["192.168.1.100:9290"],
+    "labels": {
+      "server_id": "1",
+      "server_name": "server-01",
+      "ipmi_ip": "192.168.1.100",
+      "manufacturer": "Dell"
+    }
+  },
+  {
+    "targets": ["192.168.1.101:9290"],
+    "labels": {
+      "server_id": "2",
+      "server_name": "server-02",
+      "ipmi_ip": "192.168.1.101",
+      "manufacturer": "HP"
+    }
+  }
+]

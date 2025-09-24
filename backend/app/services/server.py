@@ -8,6 +8,8 @@ from collections import defaultdict
 from app.models.server import Server, ServerGroup, ServerStatus, PowerState
 from app.schemas.server import ServerCreate, ServerUpdate, ServerGroupCreate, BatchOperationResult
 from app.services.ipmi import IPMIService
+from app.services.monitoring import MonitoringService
+from app.services.server_monitoring import ServerMonitoringService
 from app.core.exceptions import ValidationError, IPMIError
 import logging
 
@@ -17,6 +19,7 @@ class ServerService:
     def __init__(self, db: Session):
         self.db = db
         self.ipmi_service = IPMIService()
+        self.monitoring_service = ServerMonitoringService(db)
 
     def create_server(self, server_data: ServerCreate) -> Server:
         """创建服务器"""
@@ -46,6 +49,10 @@ class ServerService:
         self.db.add(db_server)
         self.db.commit()
         self.db.refresh(db_server)
+        
+        # 异步处理监控配置
+        # 注意：在实际应用中，这里可能需要使用后台任务处理
+        # asyncio.create_task(self.monitoring_service.on_server_added(db_server))
         
         # 标记需要状态刷新（前端会调用状态刷新接口）
         logger.info(f"服务器 {db_server.id} 创建成功，建议立即刷新状态")
@@ -91,8 +98,11 @@ class ServerService:
             if self.get_server_by_ipmi_ip(update_data["ipmi_ip"]):
                 raise ValidationError("IPMI IP地址已存在")
         
-        # 记录IPMI相关信息是否发生变化
-        ipmi_changed = any(key in update_data for key in ['ipmi_ip', 'ipmi_username', 'ipmi_password', 'ipmi_port'])
+        # 记录原始值用于比较
+        original_ipmi_ip = db_server.ipmi_ip
+        original_ipmi_username = db_server.ipmi_username
+        original_ipmi_password = db_server.ipmi_password
+        original_ipmi_port = db_server.ipmi_port
         
         # 更新服务器信息
         for field, value in update_data.items():
@@ -101,9 +111,20 @@ class ServerService:
         self.db.commit()
         self.db.refresh(db_server)
         
+        # 检查IPMI相关信息是否发生变化
+        ipmi_changed = (
+            original_ipmi_ip != db_server.ipmi_ip or
+            original_ipmi_username != db_server.ipmi_username or
+            original_ipmi_password != db_server.ipmi_password or
+            original_ipmi_port != db_server.ipmi_port
+        )
+        
         # 如果IPMI相关信息发生变化，记录日志建议刷新状态
         if ipmi_changed:
             logger.info(f"服务器 {db_server.id} IPMI信息已更新，建议立即刷新状态")
+        
+        # 异步处理监控配置更新
+        # asyncio.create_task(self.monitoring_service.on_server_updated(db_server))
         
         return db_server
 
@@ -115,6 +136,10 @@ class ServerService:
         
         self.db.delete(db_server)
         self.db.commit()
+        
+        # 异步处理监控配置清理
+        # asyncio.create_task(self.monitoring_service.on_server_deleted(server_id))
+        
         return True
 
     async def power_control(self, server_id: int, action: str) -> Dict[str, Any]:

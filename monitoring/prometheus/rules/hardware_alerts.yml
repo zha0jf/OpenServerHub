@@ -1,0 +1,47 @@
+groups:
+  - name: server_hardware
+    interval: 30s
+    rules:
+      # CPU温度告警
+      - alert: HighCPUTemperature
+        expr: ipmi_temperature_celsius{name=~".*CPU.*"} > 80
+        for: 2m
+        labels:
+          severity: warning
+          component: cpu
+        annotations:
+          summary: "CPU温度过高"
+          description: "服务器 {{ $labels.server_name }} CPU温度达到 {{ $value }}°C"
+
+      # 风扇故障告警
+      - alert: FanFailure
+        expr: ipmi_fan_speed_rpm == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: fan
+        annotations:
+          summary: "风扇故障"
+          description: "服务器 {{ $labels.server_name }} 风扇停止转动"
+
+      # 服务器离线告警
+      - alert: ServerDown
+        expr: up{job="ipmi-servers"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: connectivity
+        annotations:
+          summary: "服务器离线"
+          description: "服务器 {{ $labels.server_name }} 无法连接"
+          
+      # 电压异常告警
+      - alert: VoltageAnomaly
+        expr: abs(ipmi_voltage_volts - 3.3) > 0.3
+        for: 1m
+        labels:
+          severity: warning
+          component: voltage
+        annotations:
+          summary: "电压异常"
+          description: "服务器 {{ $labels.server_name }} 电压 {{ $labels.name }} 达到 {{ $value }}V"

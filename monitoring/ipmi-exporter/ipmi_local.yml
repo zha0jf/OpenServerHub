@@ -1,0 +1,21 @@
+modules:
+  default:
+    collectors:
+    - ipmi
+    - dcmi
+    exclude_sensor_ids:
+    - 2    # 排除特定传感器
+    ipmi:
+      driver: "LAN_2_0"
+      privilege: "user"
+      timeout: 10000
+      
+  dell_servers:
+    collectors:
+    - ipmi
+    - dcmi
+    - sel  # 系统事件日志
+    ipmi:
+      driver: "LAN_2_0" 
+      privilege: "user"
+      timeout: 15000

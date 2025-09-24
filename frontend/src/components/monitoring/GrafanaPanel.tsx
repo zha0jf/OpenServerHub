@@ -1,0 +1,67 @@
+import React, { useState, useEffect } from 'react';
+import { Card, Skeleton } from 'antd';
+
+interface GrafanaPanelProps {
+  dashboardUid: string;
+  panelId?: string;
+  title: string;
+  height?: number;
+}
+
+const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
+  dashboardUid,
+  panelId,
+  title,
+  height = 400
+}) => {
+  const [embedUrl, setEmbedUrl] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(true);
+  
+  // 从环境变量获取Grafana URL，如果没有则使用默认值
+  const grafanaUrl = process.env.REACT_APP_GRAFANA_URL || 'http://localhost:3001';
+
+  useEffect(() => {
+    // 构建嵌入URL参数
+    const params = new URLSearchParams({
+      orgId: '1',
+      refresh: '30s',
+      kiosk: 'tv'
+    });
+    
+    // 根据是否有panelId构建不同的URL
+    if (panelId) {
+      setEmbedUrl(`${grafanaUrl}/d-solo/${dashboardUid}?panelId=${panelId}&${params}`);
+    } else {
+      setEmbedUrl(`${grafanaUrl}/d/${dashboardUid}?${params}`);
+    }
+    
+    // 简单模拟加载完成
+    setTimeout(() => {
+      setLoading(false);
+    }, 1000);
+  }, [dashboardUid, panelId, grafanaUrl]);
+
+  if (loading) {
+    return (
+      <Card title={title} style={{ height: '100%' }}>
+        <Skeleton active />
+      </Card>
+    );
+  }
+
+  return (
+    <Card title={title} style={{ height: '100%' }}>
+      <iframe
+        src={embedUrl}
+        width="100%"
+        height="100%"
+        frameBorder="0"
+        style={{ minHeight: `${height}px` }}
+        title={`${title} - Grafana Panel`}
+        onLoad={() => setLoading(false)}
+      />
+    </Card>
+  );
+};
+
+export default GrafanaPanel;

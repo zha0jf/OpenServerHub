@@ -8,20 +8,22 @@ import {
   Table,
   Alert,
   message,
-  Row,
-  Col,
+  Tabs,
 } from 'antd';
 import {
   ReloadOutlined,
   LineChartOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
 import { monitoringService } from '../../services/monitoring';
 import { Server, MonitoringRecord } from '../../types';
 import { ColumnsType } from 'antd/es/table';
+import GrafanaPanel from '../../components/monitoring/GrafanaPanel';
 
 const { Title } = Typography;
 const { Option } = Select;
+const { TabPane } = Tabs;
 
 const MonitoringDashboard: React.FC = () => {
   const [servers, setServers] = useState<Server[]>([]);
@@ -29,6 +31,7 @@ const MonitoringDashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<MonitoringRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [serversLoading, setServersLoading] = useState(true);
+  const [dashboardUid, setDashboardUid] = useState<string>('');
 
   useEffect(() => {
     loadServers();
@@ -37,6 +40,9 @@ const MonitoringDashboard: React.FC = () => {
   useEffect(() => {
     if (selectedServerId) {
       loadMetrics();
+      // 在实际应用中，这里应该从后端获取对应服务器的Grafana仪表板UID
+      // 为了演示，我们使用一个固定的UID
+      setDashboardUid(`server-dashboard-${selectedServerId}`);
     }
   }, [selectedServerId]);
 
@@ -196,39 +202,75 @@ const MonitoringDashboard: React.FC = () => {
           />
         )}
 
-        {Object.keys(groupedMetrics).length === 0 && !loading && (
-          <Alert
-            message="暂无监控数据"
-            description="请选择服务器并点击采集数据按钮开始采集监控数据"
-            type="warning"
-            style={{ marginBottom: 16 }}
-          />
-        )}
-
-        {Object.entries(groupedMetrics).map(([type, typeMetrics]) => (
-          <Card
-            key={type}
-            title={getMetricTypeDisplay(type)}
-            style={{ marginBottom: 16 }}
-            size="small"
+        <Tabs defaultActiveKey="1">
+          <TabPane
+            tab={
+              <span>
+                <BarChartOutlined />
+                数据表格
+              </span>
+            }
+            key="1"
           >
-            <Table
-              columns={columns}
-              dataSource={typeMetrics}
-              rowKey="id"
-              pagination={false}
-              size="small"
-            />
-          </Card>
-        ))}
+            {Object.keys(groupedMetrics).length === 0 && !loading && (
+              <Alert
+                message="暂无监控数据"
+                description="请选择服务器并点击采集数据按钮开始采集监控数据"
+                type="warning"
+                style={{ marginBottom: 16 }}
+              />
+            )}
 
-        {Object.keys(groupedMetrics).length > 0 && (
-          <Alert
-            message="监控数据说明"
-            description="以上数据为最近24小时的监控记录。在生产环境中，建议集成Grafana进行更专业的监控可视化。"
-            type="info"
-          />
-        )}
+            {Object.entries(groupedMetrics).map(([type, typeMetrics]) => (
+              <Card
+                key={type}
+                title={getMetricTypeDisplay(type)}
+                style={{ marginBottom: 16 }}
+                size="small"
+              >
+                <Table
+                  columns={columns}
+                  dataSource={typeMetrics}
+                  rowKey="id"
+                  pagination={false}
+                  size="small"
+                />
+              </Card>
+            ))}
+
+            {Object.keys(groupedMetrics).length > 0 && (
+              <Alert
+                message="监控数据说明"
+                description="以上数据为最近24小时的监控记录。"
+                type="info"
+              />
+            )}
+          </TabPane>
+          
+          <TabPane
+            tab={
+              <span>
+                <LineChartOutlined />
+                图表视图
+              </span>
+            }
+            key="2"
+          >
+            {dashboardUid ? (
+              <GrafanaPanel 
+                dashboardUid={dashboardUid}
+                title="服务器监控图表"
+                height={600}
+              />
+            ) : (
+              <Alert
+                message="暂无图表数据"
+                description="请选择服务器以查看监控图表"
+                type="info"
+              />
+            )}
+          </TabPane>
+        </Tabs>
       </Card>
     </div>
   );

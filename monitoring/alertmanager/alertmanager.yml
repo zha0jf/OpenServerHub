@@ -1,0 +1,40 @@
+global:
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@openshub.com'
+  smtp_auth_username: 'alerts@openshub.com'
+  smtp_auth_password: 'your-app-password'
+
+route:
+  group_by: ['alertname', 'cluster', 'server_name']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+  routes:
+    # 严重告警立即通知
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      repeat_interval: 5m
+
+receivers:
+  - name: 'default'
+    email_configs:
+      - to: 'admin@openshub.com'
+        subject: '[OpenServerHub] {{ .Status | toUpper }} - {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          告警名称: {{ .Annotations.summary }}
+          告警详情: {{ .Annotations.description }}
+          触发时间: {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          服务器: {{ .Labels.server_name }}
+          {{ end }}
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: 'critical@openshub.com'
+        subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
+    webhook_configs:
+      - url: 'http://backend:8080/api/v1/alerts/webhook'
+        send_resolved: true
