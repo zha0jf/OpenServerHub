@@ -7,9 +7,9 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./monitoring/prometheus/rules:/etc/prometheus/rules
-      - ./monitoring/prometheus/targets:/etc/prometheus/targets
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/rules:/etc/prometheus/rules
+      - ../monitoring/prometheus/targets:/etc/prometheus/targets
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -28,7 +28,7 @@ services:
     ports:
       - "9093:9093"
     volumes:
-      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ../monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
       - alertmanager_data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
@@ -44,7 +44,7 @@ services:
       - "3001:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
@@ -61,7 +61,7 @@ services:
     ports:
       - "9290:9290"
     volumes:
-      - ./monitoring/ipmi-exporter/ipmi_local.yml:/config/ipmi_local.yml
+      - ../monitoring/ipmi-exporter/ipmi_local.yml:/config/ipmi_local.yml
     command:
       - '--config.file=/config/ipmi_local.yml'
     restart: unless-stopped

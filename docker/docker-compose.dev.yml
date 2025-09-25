@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # 后端API服务（开发模式）
+  backend:
+    build:
+      context: ../
+      dockerfile: docker/backend.dockerfile
+    container_name: openserverhub-backend-dev
+    environment:
+      - DATABASE_URL=sqlite:///./openshub.db
+      - SECRET_KEY=dev-secret-key
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - CORS_ORIGINS=*
+    volumes:
+      - ../backend:/app
+      - /app/__pycache__
+      - /app/*.pyc
+      - ../backend/data:/app/data
+      - ../backend/logs:/app/logs
+    ports:
+      - "8000:8000"
+    networks:
+      - openserverhub-network
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # 前端服务（开发模式）
+  frontend:
+    image: node:18-alpine
+    container_name: openserverhub-frontend-dev
+    working_dir: /app
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    networks:
+      - openserverhub-network
+    command: ["sh", "-c", "npm install && npm start"]
+
+volumes:
+  # 移除了postgres_data卷
+
+networks:
+  openserverhub-network:
+    driver: bridge
