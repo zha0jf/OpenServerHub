@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.monitoring import MonitoringRecord
 from app.models.server import Server
@@ -23,15 +24,23 @@ class MonitoringService:
         since: Optional[datetime] = None
     ) -> List[MonitoringRecord]:
         """获取服务器监控指标"""
-        query = self.db.query(MonitoringRecord).filter(MonitoringRecord.server_id == server_id)
-        
-        if metric_type:
-            query = query.filter(MonitoringRecord.metric_type == metric_type)
-        
-        if since:
-            query = query.filter(MonitoringRecord.timestamp >= since)
-        
-        return query.order_by(MonitoringRecord.timestamp.desc()).all()
+        try:
+            query = self.db.query(MonitoringRecord).filter(MonitoringRecord.server_id == server_id)
+            
+            if metric_type:
+                query = query.filter(MonitoringRecord.metric_type == metric_type)
+            
+            if since:
+                query = query.filter(MonitoringRecord.timestamp >= since)
+            
+            return query.order_by(MonitoringRecord.timestamp.desc()).all()
+            
+        except SQLAlchemyError as e:
+            logger.error(f"数据库查询监控指标失败 (server_id={server_id}): {e}")
+            raise ValidationError("查询监控数据失败")
+        except Exception as e:
+            logger.error(f"获取服务器监控指标时发生未知错误 (server_id={server_id}): {e}")
+            raise ValidationError("获取监控数据失败")
 
     async def collect_server_metrics(self, server_id: int) -> Dict[str, Any]:
         """采集服务器指标数据"""
@@ -110,7 +119,17 @@ class MonitoringService:
                     errors.append(error_msg)
             
             # 提交数据库事务
-            self.db.commit()
+            try:
+                self.db.commit()
+                logger.info(f"成功保存服务器 {server_id} 的 {len(collected_metrics)} 条监控记录到数据库")
+            except SQLAlchemyError as e:
+                self.db.rollback()
+                logger.error(f"保存监控数据到数据库失败 (server_id={server_id}): {e}")
+                return {
+                    "status": "error",
+                    "message": "保存监控数据到数据库失败",
+                    "timestamp": datetime.now().isoformat()
+                }
             
             result = {
                 "status": "success",
@@ -130,6 +149,12 @@ class MonitoringService:
             return result
             
         except Exception as e:
+            # 回滚数据库事务
+            try:
+                self.db.rollback()
+            except Exception as rollback_error:
+                logger.error(f"回滚数据库事务失败: {rollback_error}")
+            
             logger.error(f"采集服务器 {server_id} 指标失败: {e}")
             return {
                 "status": "error",
