@@ -104,8 +104,32 @@ start_dev() {
     # 创建数据目录
     mkdir -p "$PROJECT_ROOT/backend/data"
     
+    # 创建临时环境变量文件，确保所有必需的变量都有值
+    TEMP_ENV_FILE="$SCRIPT_DIR/.env.temp"
+    cat > "$TEMP_ENV_FILE" << EOF
+# 临时环境变量文件 - 由start-dev-single.sh自动生成
+SERVER_IP=$SERVER_IP
+REMOTE_ACCESS=$REMOTE_ACCESS
+LISTEN_IP=${LISTEN_IP:-127.0.0.1}
+REACT_APP_API_URL=http://$SERVER_IP:8000
+REACT_APP_WS_URL=ws://$SERVER_IP:8000
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://$SERVER_IP:3000
+DATABASE_URL=sqlite:///./openserverhub.db
+SECRET_KEY=your-secret-key-here-change-this-in-development
+ENVIRONMENT=development
+DEBUG=true
+LOG_LEVEL=DEBUG
+IPMI_TIMEOUT=30
+IPMI_RETRY_COUNT=3
+SCHEDULER_ENABLED=true
+POWER_STATE_REFRESH_INTERVAL=1
+EOF
+    
     # 启动单容器服务
-    $DOCKER_COMPOSE_CMD -f docker-compose.dev.single.yml up -d
+    $DOCKER_COMPOSE_CMD -f docker-compose.dev.single.yml --env-file "$TEMP_ENV_FILE" up -d
+    
+    # 清理临时环境文件
+    rm -f "$TEMP_ENV_FILE"
     
     echo -e "${GREEN}✓ 单容器开发环境启动成功！${NC}"
     echo ""
