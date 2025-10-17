@@ -21,6 +21,42 @@ echo "- 前端: http://localhost:3000"
 echo "- 后端: http://localhost:8000"
 echo ""
 
+# 检查环境配置文件
+check_env_file() {
+    ENV_FILE="$SCRIPT_DIR/.env.dev"
+    ENV_EXAMPLE="$SCRIPT_DIR/.env.dev.network"
+    
+    if [ ! -f "$ENV_FILE" ]; then
+        echo -e "${YELLOW}警告: 环境配置文件 $ENV_FILE 不存在${NC}"
+        echo -e "${BLUE}正在从示例文件创建配置文件...${NC}"
+        
+        if [ -f "$ENV_EXAMPLE" ]; then
+            cp "$ENV_EXAMPLE" "$ENV_FILE"
+            echo -e "${GREEN}✓ 已创建环境配置文件: $ENV_FILE${NC}"
+            echo -e "${YELLOW}请编辑此文件，设置您的服务器IP地址${NC}"
+            echo -e "${BLUE}特别是修改 SERVER_IP 和 CORS_ORIGINS 配置${NC}"
+            echo ""
+            read -p "按回车键继续..." 
+        else
+            echo -e "${RED}错误: 示例配置文件 $ENV_EXAMPLE 不存在${NC}"
+            exit 1
+        fi
+    fi
+    
+    # 读取服务器IP地址
+    if [ -f "$ENV_FILE" ]; then
+        source "$ENV_FILE"
+        if [ -n "$SERVER_IP" ] && [ "$SERVER_IP" != "0.0.0.0" ]; then
+            export SERVER_IP
+            export REMOTE_ACCESS=true
+            echo -e "${GREEN}✓ 检测到远程访问配置，服务器IP: $SERVER_IP${NC}"
+        else
+            export REMOTE_ACCESS=false
+            echo -e "${BLUE}ℹ  使用本地访问配置${NC}"
+        fi
+    fi
+}
+
 # 检查Docker环境
 check_docker() {
     if ! command -v docker &> /dev/null; then
@@ -61,9 +97,25 @@ start_dev() {
     echo -e "${GREEN}✓ 单容器开发环境启动成功！${NC}"
     echo ""
     echo "服务地址:"
-    echo "- 前端开发服务器: http://localhost:3000"
-    echo "- 后端API: http://localhost:8000"
-    echo "- API文档: http://localhost:8000/docs"
+    
+    if [ "$REMOTE_ACCESS" = "true" ]; then
+        echo "- 前端开发服务器: http://$SERVER_IP:3000"
+        echo "- 后端API: http://$SERVER_IP:8000"
+        echo "- API文档: http://$SERVER_IP:8000/docs"
+        echo ""
+        echo -e "${YELLOW}远程访问模式:${NC}"
+        echo "- 您可以从网络中的其他计算机访问这些服务"
+        echo "- 请确保防火墙已开放端口 3000 和 8000"
+    else
+        echo "- 前端开发服务器: http://localhost:3000"
+        echo "- 后端API: http://localhost:8000"
+        echo "- API文档: http://localhost:8000/docs"
+        echo ""
+        echo -e "${BLUE}本地访问模式:${NC}"
+        echo "- 仅可在本机访问这些服务"
+        echo "- 如需远程访问，请编辑 .env.dev 文件设置 SERVER_IP"
+    fi
+    
     echo "- 数据库: SQLite (本地文件)"
     echo ""
     echo "使用说明:"
@@ -116,6 +168,7 @@ show_menu() {
 # 主程序
 main() {
     check_docker
+    check_env_file
     
     while true; do
         show_menu

@@ -1,6 +1,10 @@
 # 开发环境Docker Compose配置 - 单容器版本
 version: '3.8'
 
+# 加载环境变量配置
+env_file:
+  - .env.dev.network
+
 services:
 
   # 全栈开发服务（后端+前端）
@@ -19,7 +23,7 @@ services:
       DEBUG: "true"
       
       # CORS配置
-      CORS_ORIGINS: http://localhost:3000,http://localhost:3001
+      CORS_ORIGINS: ${CORS_ORIGINS}
       
       # IPMI配置
       IPMI_TIMEOUT: "30"
@@ -35,8 +39,8 @@ services:
       
       # 前端配置
       NODE_ENV: development
-      REACT_APP_API_URL: http://localhost:8000
-      REACT_APP_WS_URL: ws://localhost:8000
+      REACT_APP_API_URL: ${REACT_APP_API_URL}
+      REACT_APP_WS_URL: ${REACT_APP_WS_URL}
     ports:
       - "8000:8000"  # 后端API
       - "3000:3000"  # 前端开发服务器
@@ -71,7 +75,7 @@ services:
         sleep 5 &&
         echo '启动前端开发服务器...' &&
         cd ../frontend &&
-        npm start &
+        npm start -- --host 0.0.0.0 &
         FRONTEND_PID=$! &&
         echo '=== 开发环境启动完成 ===' &&
         echo '后端API: http://localhost:8000' &&

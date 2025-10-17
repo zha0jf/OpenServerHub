@@ -20,6 +20,41 @@ echo "- 前端: http://localhost:3000"
 echo "- 后端: http://localhost:8000"
 echo ""
 
+# 检查环境配置文件
+check_env_file() {
+    ENV_FILE="$SCRIPT_DIR/.env.dev"
+    ENV_EXAMPLE_FILE="$SCRIPT_DIR/.env.dev.network"
+    
+    # 如果环境配置文件不存在，尝试从示例文件创建
+    if [ ! -f "$ENV_FILE" ]; then
+        if [ -f "$ENV_EXAMPLE_FILE" ]; then
+            echo -e "${YELLOW}环境配置文件不存在，从示例文件创建...${NC}"
+            cp "$ENV_EXAMPLE_FILE" "$ENV_FILE"
+            echo -e "${GREEN}✓ 已创建环境配置文件: $ENV_FILE${NC}"
+            echo -e "${BLUE}ℹ  您可以编辑此文件修改服务器IP地址和其他配置${NC}"
+        else
+            echo -e "${RED}错误: 环境配置文件和示例文件都不存在${NC}"
+            exit 1
+        fi
+    fi
+    
+    # 加载环境变量
+    source "$ENV_FILE"
+    
+    # 检查是否设置了服务器IP
+    if [ -z "$SERVER_IP" ] || [ "$SERVER_IP" = "0.0.0.0" ]; then
+        echo -e "${YELLOW}未设置服务器IP地址，使用本地访问模式${NC}"
+        REMOTE_ACCESS="false"
+    else
+        echo -e "${GREEN}✓ 服务器IP地址: $SERVER_IP${NC}"
+        REMOTE_ACCESS="true"
+    fi
+    
+    # 设置全局变量供其他函数使用
+    export SERVER_IP
+    export REMOTE_ACCESS
+}
+
 # 检查Docker环境
 check_docker() {
     if ! command -v docker &> /dev/null; then
@@ -60,9 +95,25 @@ start_dev() {
     echo -e "${GREEN}✓ 开发环境启动成功！${NC}"
     echo ""
     echo "服务地址:"
-    echo "- 前端开发服务器: http://localhost:3000"
-    echo "- 后端API: http://localhost:8000"
-    echo "- API文档: http://localhost:8000/docs"
+    
+    if [ "$REMOTE_ACCESS" = "true" ]; then
+        echo "- 前端开发服务器: http://$SERVER_IP:3000"
+        echo "- 后端API: http://$SERVER_IP:8000"
+        echo "- API文档: http://$SERVER_IP:8000/docs"
+        echo ""
+        echo -e "${YELLOW}远程访问模式:${NC}"
+        echo "- 您可以从网络中的其他计算机访问这些服务"
+        echo "- 请确保防火墙已开放端口 3000 和 8000"
+    else
+        echo "- 前端开发服务器: http://localhost:3000"
+        echo "- 后端API: http://localhost:8000"
+        echo "- API文档: http://localhost:8000/docs"
+        echo ""
+        echo -e "${BLUE}本地访问模式:${NC}"
+        echo "- 仅可在本机访问这些服务"
+        echo "- 如需远程访问，请编辑 .env.dev 文件设置 SERVER_IP"
+    fi
+    
     echo "- 数据库: SQLite (本地文件)"
     echo ""
     echo "使用说明:"
@@ -114,6 +165,7 @@ show_menu() {
 # 主程序
 main() {
     check_docker
+    check_env_file
     
     while true; do
         show_menu
