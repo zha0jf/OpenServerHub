@@ -26,14 +26,28 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+REM 检查Docker Compose（支持docker-compose和docker compose两种命令）
+set DOCKER_COMPOSE_CMD=
 docker-compose --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo 错误: Docker Compose未安装
-    pause
-    exit /b 1
+if %errorlevel% equ 0 (
+    set DOCKER_COMPOSE_CMD=docker-compose
+    goto docker_compose_found
 )
+
+docker compose version >nul 2>&1
+if %errorlevel% equ 0 (
+    set DOCKER_COMPOSE_CMD=docker compose
+    goto docker_compose_found
+)
+
+echo 错误: Docker Compose未安装（需要docker-compose或docker compose命令）
+pause
+exit /b 1
+
+:docker_compose_found
 echo √ Docker环境检查通过
 echo ℹ 开发环境配置：SQLite + 热重载
+echo ℹ 使用命令: %DOCKER_COMPOSE_CMD%
 echo.
 
 :start_dev
@@ -44,7 +58,7 @@ rem 创建数据目录
 if not exist "%PROJECT_ROOT%\backend\data" mkdir "%PROJECT_ROOT%\backend\data"
 
 rem 启动服务
-docker-compose -f docker-compose.dev.sqlite.yml up -d
+%DOCKER_COMPOSE_CMD% -f docker-compose.dev.sqlite.yml up -d
 
 if %errorlevel% equ 0 (
     echo √ 开发环境启动成功！
@@ -68,14 +82,14 @@ exit /b 0
 :stop_dev
 echo 正在停止开发环境...
 cd /d "%SCRIPT_DIR%"
-docker-compose -f docker-compose.dev.sqlite.yml down
+%DOCKER_COMPOSE_CMD% -f docker-compose.dev.sqlite.yml down
 echo √ 开发环境已停止
 pause
 exit /b 0
 
 :logs_all
 cd /d "%SCRIPT_DIR%"
-docker-compose -f docker-compose.dev.sqlite.yml logs -f
+%DOCKER_COMPOSE_CMD% -f docker-compose.dev.sqlite.yml logs -f
 exit /b 0
 
 :logs_backend
@@ -89,7 +103,7 @@ exit /b 0
 :cleanup
 echo 正在清理开发环境...
 cd /d "%SCRIPT_DIR%"
-docker-compose -f docker-compose.dev.sqlite.yml down -v --remove-orphans
+%DOCKER_COMPOSE_CMD% -f docker-compose.dev.sqlite.yml down -v --remove-orphans
 echo √ 开发环境已清理
 pause
 exit /b 0

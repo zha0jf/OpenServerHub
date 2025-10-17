@@ -27,13 +27,23 @@ check_docker() {
         exit 1
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
-        echo -e "${RED}错误: Docker Compose未安装${NC}"
+    # 检查Docker Compose（支持docker-compose和docker compose两种命令）
+    DOCKER_COMPOSE_CMD=""
+    if command -v docker-compose &> /dev/null; then
+        DOCKER_COMPOSE_CMD="docker-compose"
+    elif docker compose version &> /dev/null; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    else
+        echo -e "${RED}错误: Docker Compose未安装（需要docker-compose或docker compose命令）${NC}"
         exit 1
     fi
     
+    # 设置全局变量供其他函数使用
+    export DOCKER_COMPOSE_CMD
+    
     echo -e "${GREEN}✓ Docker环境检查通过${NC}"
     echo -e "${BLUE}ℹ  开发环境配置：SQLite + 热重载${NC}"
+    echo -e "${BLUE}ℹ  使用命令: ${DOCKER_COMPOSE_CMD}${NC}"
 }
 
 # 启动开发环境
@@ -45,7 +55,7 @@ start_dev() {
     mkdir -p "$PROJECT_ROOT/backend/data"
     
     # 启动服务
-    docker-compose -f docker-compose.dev.sqlite.yml up -d
+    $DOCKER_COMPOSE_CMD -f docker-compose.dev.sqlite.yml up -d
     
     echo -e "${GREEN}✓ 开发环境启动成功！${NC}"
     echo ""
@@ -65,7 +75,7 @@ start_dev() {
 stop_dev() {
     echo -e "${YELLOW}正在停止开发环境...${NC}"
     cd "$SCRIPT_DIR"
-    docker-compose -f docker-compose.dev.sqlite.yml down --remove-orphans
+    $DOCKER_COMPOSE_CMD -f docker-compose.dev.sqlite.yml down --remove-orphans
     echo -e "${GREEN}✓ 开发环境已停止${NC}"
 }
 
@@ -77,7 +87,7 @@ logs() {
     elif [ "$1" == "frontend" ]; then
         docker logs -f openserverhub-frontend-dev
     else
-        docker-compose -f docker-compose.dev.sqlite.yml logs -f
+        $DOCKER_COMPOSE_CMD -f docker-compose.dev.sqlite.yml logs -f
     fi
 }
 
@@ -85,7 +95,7 @@ logs() {
 cleanup() {
     echo -e "${YELLOW}正在清理开发环境...${NC}"
     cd "$SCRIPT_DIR"
-    docker-compose -f docker-compose.dev.sqlite.yml down -v --remove-orphans
+    $DOCKER_COMPOSE_CMD -f docker-compose.dev.sqlite.yml down -v --remove-orphans
     echo -e "${GREEN}✓ 开发环境已清理${NC}"
 }
 

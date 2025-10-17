@@ -58,13 +58,27 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+REM 检查Docker Compose（支持docker-compose和docker compose两种命令）
+set DOCKER_COMPOSE_CMD=
 docker-compose --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo 错误: Docker Compose未安装
-    exit /b 1
+if %errorlevel% equ 0 (
+    set DOCKER_COMPOSE_CMD=docker-compose
+    goto docker_compose_found
 )
+
+docker compose version >nul 2>&1
+if %errorlevel% equ 0 (
+    set DOCKER_COMPOSE_CMD=docker compose
+    goto docker_compose_found
+)
+
+echo 错误: Docker Compose未安装（需要docker-compose或docker compose命令）
+exit /b 1
+
+:docker_compose_found
 echo √ Docker环境检查通过
 echo ℹ 单容器开发环境配置：SQLite + 热重载
+echo ℹ 使用命令: %DOCKER_COMPOSE_CMD%
 exit /b 0
 
 REM 启动开发环境
@@ -75,7 +89,7 @@ REM 创建数据目录
 if not exist "%PROJECT_ROOT%\backend\data" mkdir "%PROJECT_ROOT%\backend\data"
 
 REM 启动单容器服务
-docker-compose -f docker-compose.dev.single.yml up -d
+%DOCKER_COMPOSE_CMD% -f docker-compose.dev.single.yml up -d
 if %errorlevel% neq 0 (
     echo 错误: 启动失败
     pause
@@ -101,7 +115,7 @@ goto menu
 REM 停止开发环境
 :stop_dev
 echo 正在停止单容器开发环境...
-docker-compose -f docker-compose.dev.single.yml down --remove-orphans
+%DOCKER_COMPOSE_CMD% -f docker-compose.dev.single.yml down --remove-orphans
 echo √ 单容器开发环境已停止
 echo.
 pause
@@ -120,7 +134,7 @@ goto menu
 REM 清理环境
 :cleanup
 echo 正在清理单容器开发环境...
-docker-compose -f docker-compose.dev.single.yml down -v --remove-orphans
+%DOCKER_COMPOSE_CMD% -f docker-compose.dev.single.yml down -v --remove-orphans
 echo √ 单容器开发环境已清理
 echo.
 pause
