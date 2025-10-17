@@ -17,8 +17,9 @@ echo "========================================"
 echo "开发环境配置："
 echo "- 数据库: SQLite (本地文件)"
 echo "- 架构: 单容器（后端+前端）"
-echo "- 前端: http://localhost:3000"
-echo "- 后端: http://localhost:8000"
+echo "- 前端: 端口 3000"
+echo "- 后端: 端口 8000"
+echo "- 访问地址: 根据环境配置自动确定（本地或远程）"
 echo ""
 
 # 检查环境配置文件
@@ -26,6 +27,7 @@ check_env_file() {
     ENV_FILE="$SCRIPT_DIR/.env.dev"
     ENV_EXAMPLE="$SCRIPT_DIR/.env.dev.network"
     
+    # 读取服务器IP地址
     if [ ! -f "$ENV_FILE" ]; then
         echo -e "${YELLOW}警告: 环境配置文件 $ENV_FILE 不存在${NC}"
         echo -e "${BLUE}正在从示例文件创建配置文件...${NC}"
@@ -36,24 +38,35 @@ check_env_file() {
             echo -e "${YELLOW}请编辑此文件，设置您的服务器IP地址${NC}"
             echo -e "${BLUE}特别是修改 SERVER_IP 和 CORS_ORIGINS 配置${NC}"
             echo ""
-            read -p "按回车键继续..." 
+            read -p "按回车键继续..."
+            
+            # 加载新创建的环境文件
+            source "$ENV_FILE"
         else
             echo -e "${RED}错误: 示例配置文件 $ENV_EXAMPLE 不存在${NC}"
             exit 1
         fi
+    else
+        # 加载已存在的环境文件
+        source "$ENV_FILE"
     fi
     
-    # 读取服务器IP地址
-    if [ -f "$ENV_FILE" ]; then
-        source "$ENV_FILE"
-        if [ -n "$SERVER_IP" ] && [ "$SERVER_IP" != "0.0.0.0" ]; then
-            export SERVER_IP
-            export REMOTE_ACCESS=true
-            echo -e "${GREEN}✓ 检测到远程访问配置，服务器IP: $SERVER_IP${NC}"
-        else
-            export REMOTE_ACCESS=false
-            echo -e "${BLUE}ℹ  使用本地访问配置${NC}"
-        fi
+    # 检查服务器IP配置
+    if [ -z "$SERVER_IP" ]; then
+        # 如果SERVER_IP未设置，使用本地访问模式
+        export SERVER_IP="127.0.0.1"
+        export REMOTE_ACCESS=false
+        echo -e "${BLUE}ℹ  未设置服务器IP地址，使用本地访问模式${NC}"
+    elif [ "$SERVER_IP" = "127.0.0.1" ] || [ "$SERVER_IP" = "localhost" ]; then
+        # 如果SERVER_IP是本地地址，使用本地访问模式
+        export REMOTE_ACCESS=false
+        echo -e "${BLUE}ℹ  检测到本地访问配置，服务器IP: $SERVER_IP${NC}"
+    else
+        # 其他情况都是远程访问模式，使用0.0.0.0监听所有接口
+        export LISTEN_IP="0.0.0.0"
+        export REMOTE_ACCESS=true
+        echo -e "${GREEN}✓ 检测到远程访问配置，将在所有IP上监听${NC}"
+        echo -e "${GREEN}✓ 配置的服务器IP: $SERVER_IP (用于显示和访问)${NC}"
     fi
 }
 
@@ -104,6 +117,7 @@ start_dev() {
         echo "- API文档: http://$SERVER_IP:8000/docs"
         echo ""
         echo -e "${YELLOW}远程访问模式:${NC}"
+        echo "- 服务将在所有网络接口上监听 (0.0.0.0)"
         echo "- 您可以从网络中的其他计算机访问这些服务"
         echo "- 请确保防火墙已开放端口 3000 和 8000"
     else

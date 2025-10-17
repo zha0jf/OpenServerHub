@@ -16,8 +16,9 @@ echo -e "${BLUE}OpenServerHub 开发环境启动脚本${NC}"
 echo "=================================="
 echo "开发环境配置："
 echo "- 数据库: SQLite (本地文件)"
-echo "- 前端: http://localhost:3000"
-echo "- 后端: http://localhost:8000"
+echo "- 前端: 端口 3000"
+echo "- 后端: 端口 8000"
+echo "- 访问地址: 根据环境配置自动确定（本地或远程）"
 echo ""
 
 # 检查环境配置文件
@@ -41,18 +42,28 @@ check_env_file() {
     # 加载环境变量
     source "$ENV_FILE"
     
-    # 检查是否设置了服务器IP
-    if [ -z "$SERVER_IP" ] || [ "$SERVER_IP" = "0.0.0.0" ]; then
-        echo -e "${YELLOW}未设置服务器IP地址，使用本地访问模式${NC}"
-        REMOTE_ACCESS="false"
+    # 检查服务器IP配置
+    if [ -z "$SERVER_IP" ]; then
+        # 如果SERVER_IP未设置，使用本地访问模式
+        export SERVER_IP="127.0.0.1"
+        export REMOTE_ACCESS=false
+        echo -e "${BLUE}ℹ  未设置服务器IP地址，使用本地访问模式${NC}"
+    elif [ "$SERVER_IP" = "127.0.0.1" ] || [ "$SERVER_IP" = "localhost" ]; then
+        # 如果SERVER_IP是本地地址，使用本地访问模式
+        export REMOTE_ACCESS=false
+        echo -e "${BLUE}ℹ  检测到本地访问配置，服务器IP: $SERVER_IP${NC}"
     else
-        echo -e "${GREEN}✓ 服务器IP地址: $SERVER_IP${NC}"
-        REMOTE_ACCESS="true"
+        # 其他情况都是远程访问模式，使用0.0.0.0监听所有接口
+        export LISTEN_IP="0.0.0.0"
+        export REMOTE_ACCESS=true
+        echo -e "${GREEN}✓ 检测到远程访问配置，将在所有IP上监听${NC}"
+        echo -e "${GREEN}✓ 配置的服务器IP: $SERVER_IP (用于显示和访问)${NC}"
     fi
     
     # 设置全局变量供其他函数使用
     export SERVER_IP
     export REMOTE_ACCESS
+    export LISTEN_IP
 }
 
 # 检查Docker环境
@@ -102,6 +113,7 @@ start_dev() {
         echo "- API文档: http://$SERVER_IP:8000/docs"
         echo ""
         echo -e "${YELLOW}远程访问模式:${NC}"
+        echo "- 服务将在所有网络接口上监听 (0.0.0.0)"
         echo "- 您可以从网络中的其他计算机访问这些服务"
         echo "- 请确保防火墙已开放端口 3000 和 8000"
     else

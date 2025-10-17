@@ -13,8 +13,9 @@ echo ======================================
 echo.
 echo 开发环境配置：
 echo - 数据库: SQLite (本地文件)
-echo - 前端: http://localhost:3000
-echo - 后端: http://localhost:8000
+echo - 前端: 端口 3000
+echo - 后端: 端口 8000
+echo - 访问地址: 根据环境配置自动确定（本地或远程）
 echo.
 
 :check_docker
@@ -81,17 +82,26 @@ REM 读取环境变量
 call :read_env_file "%ENV_FILE%" SERVER_IP
 call :read_env_file "%ENV_FILE%" REMOTE_ACCESS
 
-REM 检查是否设置了服务器IP
+REM 检查服务器IP配置
 if "%SERVER_IP%"=="" (
-    set SERVER_IP=0.0.0.0
+    REM 如果SERVER_IP未设置，使用本地访问模式
+    set SERVER_IP=127.0.0.1
     set REMOTE_ACCESS=false
     echo 未设置服务器IP地址，使用本地访问模式
-) else if "%SERVER_IP%"=="0.0.0.0" (
+) else if "%SERVER_IP%"=="127.0.0.1" (
+    REM 如果SERVER_IP是本地地址，使用本地访问模式
     set REMOTE_ACCESS=false
-    echo 未设置服务器IP地址，使用本地访问模式
+    echo 检测到本地访问配置，服务器IP: %SERVER_IP%
+) else if "%SERVER_IP%"=="localhost" (
+    REM 如果SERVER_IP是本地地址，使用本地访问模式
+    set REMOTE_ACCESS=false
+    echo 检测到本地访问配置，服务器IP: %SERVER_IP%
 ) else (
+    REM 其他情况都是远程访问模式，使用0.0.0.0监听所有接口
+    set LISTEN_IP=0.0.0.0
     set REMOTE_ACCESS=true
-    echo √ 服务器IP地址: %SERVER_IP%
+    echo √ 检测到远程访问配置，将在所有IP上监听
+    echo √ 配置的服务器IP: %SERVER_IP% (用于显示和访问)
 )
 
 exit /b 0
@@ -122,22 +132,23 @@ if %errorlevel% equ 0 (
     echo 服务地址:
     
     if "%REMOTE_ACCESS%"=="true" (
-        echo - 前端开发服务器: http://%SERVER_IP%:3000
-        echo - 后端API: http://%SERVER_IP%:8000
-        echo - API文档: http://%SERVER_IP%:8000/docs
-        echo.
-        echo 远程访问模式:
-        echo - 您可以从网络中的其他计算机访问这些服务
-        echo - 请确保防火墙已开放端口 3000 和 8000
-    ) else (
-        echo - 前端开发服务器: http://localhost:3000
-        echo - 后端API: http://localhost:8000
-        echo - API文档: http://localhost:8000/docs
-        echo.
-        echo 本地访问模式:
-        echo - 仅可在本机访问这些服务
-        echo - 如需远程访问，请编辑 .env.dev 文件设置 SERVER_IP
-    )
+    echo - 前端开发服务器: http://%SERVER_IP%:3000
+    echo - 后端API: http://%SERVER_IP%:8000
+    echo - API文档: http://%SERVER_IP%:8000/docs
+    echo.
+    echo 远程访问模式:
+    echo - 服务将在所有网络接口上监听 (0.0.0.0)
+    echo - 您可以从网络中的其他计算机访问这些服务
+    echo - 请确保防火墙已开放端口 3000 和 8000
+) else (
+    echo - 前端开发服务器: http://localhost:3000
+    echo - 后端API: http://localhost:8000
+    echo - API文档: http://localhost:8000/docs
+    echo.
+    echo 本地访问模式:
+    echo - 仅可在本机访问这些服务
+    echo - 如需远程访问，请编辑 .env.dev 文件设置 SERVER_IP
+)
     
     echo - 数据库: SQLite (本地文件)
     echo.
