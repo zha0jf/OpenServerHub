@@ -33,8 +33,9 @@ COPY backend/requirements.txt ./
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制后端代码
-COPY backend/ ./
+# 复制后端代码到子目录
+RUN mkdir -p /app/backend
+COPY backend/ /app/backend/
 
 # 创建SQLite数据库目录
 RUN mkdir -p /app/data
@@ -43,4 +44,4 @@ RUN mkdir -p /app/data
 EXPOSE 8000
 
 # 启动命令 - 开发模式带热重载
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/backend"]
