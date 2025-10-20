@@ -160,6 +160,7 @@ EOF
     echo "- 代码修改后自动热重载"
     echo "- 容器日志: docker logs -f openserverhub-dev"
     echo "- 进入容器: docker exec -it openserverhub-dev sh"
+    echo "- 注意: 首次启动时会预安装前端依赖，可能需要稍长时间"
 }
 
 # 停止开发环境

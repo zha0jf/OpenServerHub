@@ -33,9 +33,17 @@ COPY backend/requirements.txt ./
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 复制前端package.json和package-lock.json文件
+COPY frontend/package.json frontend/package-lock.json* /app/frontend/
+
+# 在构建阶段安装前端依赖
+RUN cd /app/frontend && npm ci
+
 # 复制后端代码到子目录
-RUN mkdir -p /app/backend
 COPY backend/ /app/backend/
+
+# 复制前端代码到子目录
+COPY frontend/ /app/frontend/
 
 # 创建SQLite数据库目录
 RUN mkdir -p /app/data
