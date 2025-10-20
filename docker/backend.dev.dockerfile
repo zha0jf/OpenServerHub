@@ -6,13 +6,17 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV NODE_VERSION=22.x
 
-# 安装系统依赖
+# 安装系统依赖，包括ipmitool和其他常用工具
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     build-essential \
     sqlite3 \
     libsqlite3-dev \
+    ipmitool \
+    iputils-ping \
+    net-tools \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # 配置Node.js国内源并安装Node.js
