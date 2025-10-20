@@ -47,8 +47,8 @@ services:
       - ../frontend:/app/frontend
       # SQLite数据持久化
       - dev_data:/app/data
-      # 防止容器内安装node_modules
-      - /app/frontend/node_modules
+      # 前端node_modules持久化存储
+      - frontend_node_modules:/app/frontend/node_modules
     networks:
       - openserverhub-dev-network
     working_dir: /app
@@ -61,8 +61,13 @@ services:
         echo '配置npm国内源...' &&
         cd /app/frontend &&
         npm config set registry https://registry.npmmirror.com &&
-        echo '安装前端依赖...' &&
-        npm install &&
+        echo '检查前端依赖...' &&
+        if [ ! -d node_modules ] || [ ! -f node_modules/.bin/react-scripts ]; then
+          echo '安装前端依赖...' &&
+          npm install
+        else
+          echo '前端依赖已存在，跳过安装'
+        fi &&
         echo '启动后端服务...' &&
         cd /app/backend &&
         uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend &
@@ -87,3 +92,6 @@ networks:
 
 volumes:
   dev_data:
+    driver: local
+  frontend_node_modules:
+    driver: local
