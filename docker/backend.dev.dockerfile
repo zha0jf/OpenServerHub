@@ -30,8 +30,8 @@ WORKDIR /app
 # 复制后端依赖文件
 COPY backend/requirements.txt ./
 
-# 安装Python依赖
-RUN pip install --no-cache-dir -r requirements.txt
+# 安装Python依赖 - 强制重新安装以避免缓存问题
+RUN pip install --no-cache-dir --force-reinstall -r requirements.txt
 
 # 复制前端package.json和package-lock.json文件
 COPY frontend/package.json frontend/package-lock.json* /app/frontend/

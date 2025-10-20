@@ -15,6 +15,10 @@ class UserService:
 
     def get_password_hash(self, password: str) -> str:
         """生成密码哈希"""
+        # bcrypt对密码长度有限制，不能超过72字节
+        password_bytes = password.encode('utf-8')
+        if len(password_bytes) > 72:
+            raise ValidationError("密码不能超过72个字节，请缩短密码长度")
         return pwd_context.hash(password)
 
     def create_user(self, user_data: UserCreate) -> User:
@@ -28,7 +32,11 @@ class UserService:
             raise ValidationError("邮箱已存在")
         
         # 创建用户
-        password_hash = self.get_password_hash(user_data.password)
+        try:
+            password_hash = self.get_password_hash(user_data.password)
+        except Exception as e:
+            raise ValidationError(f"密码哈希处理失败: {str(e)}")
+        
         db_user = User(
             username=user_data.username,
             email=user_data.email,
@@ -68,7 +76,10 @@ class UserService:
         
         # 处理密码更新
         if "password" in update_data:
-            update_data["password_hash"] = self.get_password_hash(update_data.pop("password"))
+            try:
+                update_data["password_hash"] = self.get_password_hash(update_data.pop("password"))
+            except Exception as e:
+                raise ValidationError(f"密码哈希处理失败: {str(e)}")
         
         # 检查用户名和邮箱唯一性
         if "username" in update_data and update_data["username"] != db_user.username:

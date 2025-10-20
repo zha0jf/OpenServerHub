@@ -39,7 +39,7 @@ def init_database():
             admin_data = UserCreate(
                 username="admin",
                 email="admin@openshub.com",
-                password="admin123",  # 生产环境请更改密码
+                password="admin123",  # 生产环境请更改密码 (密码长度已控制在72字节以内)
                 role=UserRole.ADMIN,
                 is_active=True
             )
