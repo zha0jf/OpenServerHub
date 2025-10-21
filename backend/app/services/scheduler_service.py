@@ -7,11 +7,19 @@ from apscheduler.jobstores.base import JobLookupError
 
 from ..core.config import settings
 from .ipmi import IPMIService
-from ..core.database import AsyncSessionLocal
+from ..core.database import async_engine
 from ..models.server import Server, PowerState, ServerStatus
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
+# 创建异步会话工厂
+AsyncSessionLocal = async_sessionmaker(
+    autocommit=False, 
+    autoflush=False, 
+    bind=async_engine, 
+    expire_on_commit=False
+)
 
 class PowerStateSchedulerService:
     """电源状态定时刷新服务"""
@@ -21,6 +29,7 @@ class PowerStateSchedulerService:
         self.ipmi_service = IPMIService()
         self.is_running = False
         self._job_id = "power_state_refresh"
+        self._is_refreshing = False  # 添加标志位，防止任务重叠执行
         
     async def start(self):
         """启动定时任务"""
@@ -33,7 +42,7 @@ class PowerStateSchedulerService:
             self.scheduler.add_job(
                 self.refresh_all_servers_power_state,
                 "interval",
-                minutes=1,
+                minutes=settings.POWER_STATE_REFRESH_INTERVAL,  # 使用配置的间隔
                 id=self._job_id,
                 replace_existing=True,
                 max_instances=1,
@@ -42,7 +51,7 @@ class PowerStateSchedulerService:
             
             self.scheduler.start()
             self.is_running = True
-            logger.info("电源状态定时刷新服务已启动，刷新间隔：1分钟")
+            logger.info(f"电源状态定时刷新服务已启动，刷新间隔：{settings.POWER_STATE_REFRESH_INTERVAL}分钟")
             
             # 立即执行一次
             asyncio.create_task(self.refresh_all_servers_power_state())
@@ -65,14 +74,22 @@ class PowerStateSchedulerService:
     
     async def refresh_all_servers_power_state(self):
         """刷新所有服务器的电源状态"""
+        # 检查是否已经有任务在运行，防止重叠执行
+        if self._is_refreshing:
+            logger.warning("电源状态刷新任务已在运行中，跳过本次执行")
+            return
+            
         try:
+            self._is_refreshing = True  # 设置标志位
             logger.info("开始刷新所有服务器电源状态")
             start_time = datetime.now()
             
+            # 使用异步上下文管理器正确处理会话
             async with AsyncSessionLocal() as session:
                 # 获取所有服务器
                 from sqlalchemy import select
-                result = await session.execute(select(Server))
+                stmt = select(Server)
+                result = await session.execute(stmt)
                 servers = result.scalars().all()
                 
                 if not servers:
@@ -81,16 +98,28 @@ class PowerStateSchedulerService:
                 
                 logger.info(f"找到 {len(servers)} 台服务器需要刷新电源状态")
                 
+                # 并发刷新电源状态，但限制并发数量以避免资源耗尽
+                semaphore = asyncio.Semaphore(20)  # 限制并发数为20
+                
+                async def refresh_with_semaphore(server):
+                    async with semaphore:
+                        return await self._refresh_single_server_power_state(server)
+                
                 # 并发刷新电源状态
                 tasks = []
                 for server in servers:
-                    task = asyncio.create_task(
-                        self._refresh_single_server_power_state(server)
-                    )
+                    task = asyncio.create_task(refresh_with_semaphore(server))
                     tasks.append(task)
                 
-                # 等待所有任务完成
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+                # 等待所有任务完成，设置超时以防止任务无限期挂起
+                try:
+                    results = await asyncio.wait_for(
+                        asyncio.gather(*tasks, return_exceptions=True),
+                        timeout=len(servers) * 10  # 设置超时时间为服务器数量*10秒
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("电源状态刷新任务超时")
+                    return
                 
                 # 统计结果
                 success_count = sum(1 for r in results if r is True)
@@ -105,15 +134,32 @@ class PowerStateSchedulerService:
                 
         except Exception as e:
             logger.error(f"刷新所有服务器电源状态失败: {e}")
+        finally:
+            self._is_refreshing = False  # 重置标志位
     
     async def _refresh_single_server_power_state(self, server: Server) -> bool:
         """刷新单个服务器的电源状态"""
         try:
-            # 获取电源状态
+            # 获取电源状态（确保传递正确的类型）
+            # 从数据库模型中提取值并转换为正确的类型
+            ip = str(server.ipmi_ip) if server.ipmi_ip is not None else ""
+            username = str(server.ipmi_username) if server.ipmi_username is not None else ""
+            password = str(server.ipmi_password) if server.ipmi_password is not None else ""
+            
+            # 处理端口，确保是整数类型
+            port = 623  # 默认端口
+            if server.ipmi_port is not None:
+                try:
+                    # 尝试转换为整数，如果失败则使用默认值
+                    port = int(str(server.ipmi_port))
+                except (ValueError, TypeError):
+                    port = 623
+            
             power_state = await self.ipmi_service.get_power_state(
-                ip=server.ipmi_ip,
-                username=server.ipmi_username,
-                password=server.ipmi_password
+                ip=ip,
+                username=username,
+                password=password,
+                port=port
             )
             
             if power_state is not None:
@@ -130,15 +176,12 @@ class PowerStateSchedulerService:
                 # 更新数据库中的电源状态和BMC状态
                 async with AsyncSessionLocal() as session:
                     from sqlalchemy import update
-                    await session.execute(
-                        update(Server)
-                        .where(Server.id == server.id)
-                        .values(
-                            power_state=power_state_enum,
-                            status=bmc_status,
-                            last_seen=datetime.now()
-                        )
+                    stmt = update(Server).where(Server.id == server.id).values(
+                        power_state=power_state_enum,
+                        status=bmc_status,
+                        last_seen=datetime.now()
                     )
+                    await session.execute(stmt)
                     await session.commit()
                     
                 logger.debug(
@@ -160,14 +203,11 @@ class PowerStateSchedulerService:
             # 连接失败时更新服务器状态为离线，电源状态为未知
             async with AsyncSessionLocal() as session:
                 from sqlalchemy import update
-                await session.execute(
-                    update(Server)
-                    .where(Server.id == server.id)
-                    .values(
-                        status=ServerStatus.OFFLINE,
-                        power_state=PowerState.UNKNOWN
-                    )
+                stmt = update(Server).where(Server.id == server.id).values(
+                    status=ServerStatus.OFFLINE,
+                    power_state=PowerState.UNKNOWN
                 )
+                await session.execute(stmt)
                 await session.commit()
             
             return False
@@ -181,21 +221,21 @@ class PowerStateSchedulerService:
                     "running": self.is_running,
                     "job_id": self._job_id,
                     "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
-                    "interval_minutes": 1
+                    "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL
                 }
             else:
                 return {
                     "running": self.is_running,
                     "job_id": self._job_id,
                     "next_run_time": None,
-                    "interval_minutes": 1
+                    "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL
                 }
         except JobLookupError:
             return {
                 "running": self.is_running,
                 "job_id": self._job_id,
                 "next_run_time": None,
-                "interval_minutes": 1
+                "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL
             }
 
 
