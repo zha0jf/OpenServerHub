@@ -793,9 +793,9 @@ const ServerList: React.FC = () => {
 
           <Form.Item
             name="ipmi_password"
-            label="IPMI密码"
+            label={editingServer ? "IPMI密码（留空表示不修改）" : "IPMI密码"}
             rules={[
-              { required: true, message: '请输入IPMI密码' },
+              ...(editingServer ? [] : [{ required: true, message: '请输入IPMI密码' }]),
               { 
                 min: VALIDATION_RULES.ipmiPassword.minLength,
                 max: VALIDATION_RULES.ipmiPassword.maxLength,
@@ -805,7 +805,7 @@ const ServerList: React.FC = () => {
             hasFeedback
           >
             <Input.Password 
-              placeholder="请输入IPMI密码"
+              placeholder={editingServer ? "留空表示不修改密码" : "请输入IPMI密码"}
               showCount
               maxLength={VALIDATION_RULES.ipmiPassword.maxLength}
             />

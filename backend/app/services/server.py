@@ -88,6 +88,10 @@ class ServerService:
         
         update_data = server_data.model_dump(exclude_unset=True)
         
+        # 如果密码字段存在但为空，则从更新数据中移除
+        if "ipmi_password" in update_data and not update_data["ipmi_password"]:
+            del update_data["ipmi_password"]
+        
         # 检查名称唯一性
         if "name" in update_data and update_data["name"] != db_server.name:
             if self.get_server_by_name(update_data["name"]):
