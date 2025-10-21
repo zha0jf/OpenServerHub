@@ -28,6 +28,13 @@ docker-compose up -d
 docker-compose -f docker-compose.dev.yml up -d
 ```
 
+#### 开发监控环境（集成在单容器版本中）
+```bash
+docker-compose -f docker-compose.dev.single.yml up -d
+```
+
+开发监控环境已集成到单容器开发环境配置中，包含了后端服务、前端服务以及完整的监控组件（Prometheus、Grafana、AlertManager和IPMI Exporter）。这个环境特别适合在开发过程中进行监控功能的测试和调试。
+
 #### 监控环境
 ```bash
 docker-compose -f docker-compose.monitoring.yml up -d
@@ -56,6 +63,14 @@ docker-compose -f docker-compose.monitoring.yml up -d
 - **Backend**: FastAPI后端服务（使用SQLite数据库）
 - **Frontend**: React前端应用
 
+#### 开发环境（集成监控组件）
+- **Backend**: FastAPI后端服务（使用SQLite数据库）
+- **Frontend**: React前端应用
+- **Prometheus**: 监控数据收集和存储
+- **Grafana**: 监控数据可视化
+- **AlertManager**: 告警管理
+- **IPMI Exporter**: 硬件监控数据采集
+
 #### 监控环境
 - **Prometheus**: 监控数据收集和存储
 - **Grafana**: 监控数据可视化
@@ -72,6 +87,8 @@ docker-compose -f docker-compose.monitoring.yml up -d
 - 3001: Grafana
 - 9093: AlertManager
 - 9290: IPMI Exporter
+
+在开发监控环境中，所有服务都在同一个Docker网络中运行，因此它们可以相互访问。例如，Prometheus可以直接通过服务名访问后端API和IPMI Exporter。
 
 ## 常用命令
 

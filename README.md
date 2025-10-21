@@ -114,6 +114,22 @@ docker-compose -f docker-compose.monitoring.yml up -d
 docker-compose -f docker-compose.monitoring.yml ps
 ```
 
+### 开发监控环境启动
+
+```bash
+# 进入docker目录
+cd docker
+
+# 启动开发监控环境（集成后端、前端和监控组件）
+docker-compose -f docker-compose.dev.single.yml up -d
+
+# 或使用启动脚本（Windows）
+start-dev-single.bat
+
+# 或使用启动脚本（Linux/macOS）
+./start-dev-single.sh
+```
+
 ### 访问应用
 
 - 前端地址: http://localhost:3000
@@ -122,6 +138,18 @@ docker-compose -f docker-compose.monitoring.yml ps
 - Prometheus: http://localhost:9090
 - AlertManager: http://localhost:9093
 - Grafana: http://localhost:3001
+
+### 开发监控环境访问
+
+开发监控环境已集成到单容器开发环境中，可通过以下地址访问：
+
+- 前端开发服务器: http://localhost:3000
+- 后端API: http://localhost:8000
+- API文档: http://localhost:8000/docs
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3001
+- AlertManager: http://localhost:9093
+- IPMI Exporter: http://localhost:9290
 
 ### 默认账号和测试数据
 

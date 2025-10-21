@@ -1,7 +1,8 @@
 import json
 import logging
-from typing import List
+from typing import List, Optional
 import httpx
+import os
 
 from sqlalchemy.orm import Session
 from app.models.server import Server
@@ -13,8 +14,9 @@ logger = logging.getLogger(__name__)
 class PrometheusConfigManager:
     """Prometheus配置管理器"""
     
-    def __init__(self, config_path: str = "/etc/prometheus/targets/ipmi-targets.json"):
-        self.config_path = config_path
+    def __init__(self, config_path: Optional[str] = None):
+        # 通过环境变量或配置文件获取配置路径，如果没有则使用默认值
+        self.config_path = config_path or os.getenv("PROMETHEUS_TARGETS_PATH", "/etc/prometheus/targets/ipmi-targets.json")
         self.reload_url = f"{settings.PROMETHEUS_URL}/-/reload"
     
     async def sync_ipmi_targets(self, servers: List[Server]) -> bool:
@@ -35,9 +37,20 @@ class PrometheusConfigManager:
                 }
                 targets.append(target)
             
-            # 写入配置文件（在实际实现中，这里需要写入到文件系统）
-            config_data = targets
-            logger.info(f"Syncing Prometheus targets: {config_data}")
+            # 写入配置文件到文件系统
+            try:
+                # 确保目录存在
+                os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+                
+                # 写入JSON配置文件
+                with open(self.config_path, 'w', encoding='utf-8') as f:
+                    json.dump(targets, f, indent=2, ensure_ascii=False)
+                
+                logger.info(f"成功写入Prometheus目标配置文件: {self.config_path}")
+                logger.debug(f"配置内容: {targets}")
+            except Exception as e:
+                logger.error(f"写入Prometheus配置文件失败: {e}")
+                return False
             
             # 通知Prometheus重新加载配置
             await self.reload_prometheus()
@@ -66,7 +79,7 @@ class PrometheusConfigManager:
 class GrafanaService:
     """Grafana服务"""
     
-    def __init__(self, grafana_url: str = None, api_key: str = None):
+    def __init__(self, grafana_url: Optional[str] = None, api_key: Optional[str] = None):
         self.grafana_url = grafana_url or settings.GRAFANA_URL
         self.headers = {
             "Authorization": f"Bearer {api_key or settings.GRAFANA_API_KEY}",
@@ -75,14 +88,17 @@ class GrafanaService:
     
     async def create_server_dashboard(self, server: Server) -> dict:
         """为服务器创建专用监控仪表板"""
+        # 获取服务器ID的整数值
+        server_id = int(str(server.id))
+        
         dashboard_json = {
             "dashboard": {
                 "title": f"服务器监控 - {server.name}",
-                "tags": ["server", "hardware", "ipmi", f"server-{server.id}"],
+                "tags": ["server", "hardware", "ipmi", f"server-{server_id}"],
                 "panels": [
-                    self._create_cpu_temperature_panel(server.id),
-                    self._create_fan_speed_panel(server.id),
-                    self._create_voltage_panel(server.id),
+                    self._create_cpu_temperature_panel(server_id),
+                    self._create_fan_speed_panel(server_id),
+                    self._create_voltage_panel(server_id),
                 ]
             },
             "overwrite": True
@@ -98,7 +114,7 @@ class GrafanaService:
                 
                 if response.status_code == 200:
                     result = response.json()
-                    logger.info(f"Dashboard created for server {server.id}")
+                    logger.info(f"Dashboard created for server {server_id}")
                     return {
                         "success": True,
                         "dashboard_uid": result['uid'],
@@ -178,56 +194,3 @@ class GrafanaService:
                 }
             }
         }
-
-
-class ServerMonitoringService:
-    """服务器监控服务，处理服务器变更时的监控配置同步"""
-    
-    def __init__(self, db: Session):
-        self.db = db
-        self.prometheus_manager = PrometheusConfigManager()
-        self.grafana_service = GrafanaService()
-    
-    async def on_server_added(self, server: Server) -> bool:
-        """服务器添加时的监控配置处理"""
-        try:
-            # 1. 同步Prometheus目标配置
-            servers = self.db.query(Server).all()
-            await self.prometheus_manager.sync_ipmi_targets(servers)
-            
-            # 2. 为新服务器创建Grafana仪表板
-            await self.grafana_service.create_server_dashboard(server)
-            
-            logger.info(f"服务器 {server.id} 监控配置已更新")
-            return True
-        except Exception as e:
-            logger.error(f"服务器 {server.id} 监控配置更新失败: {e}")
-            return False
-    
-    async def on_server_deleted(self, server_id: int) -> bool:
-        """服务器删除时的监控配置处理"""
-        try:
-            # 1. 同步Prometheus目标配置
-            servers = self.db.query(Server).all()
-            await self.prometheus_manager.sync_ipmi_targets(servers)
-            
-            # 2. 可以选择删除对应的Grafana仪表板
-            
-            logger.info(f"服务器 {server_id} 监控配置已清理")
-            return True
-        except Exception as e:
-            logger.error(f"服务器 {server_id} 监控配置清理失败: {e}")
-            return False
-    
-    async def on_server_updated(self, server: Server) -> bool:
-        """服务器更新时的监控配置处理"""
-        try:
-            # 同步Prometheus目标配置
-            servers = self.db.query(Server).all()
-            await self.prometheus_manager.sync_ipmi_targets(servers)
-            
-            logger.info(f"服务器 {server.id} 监控配置已同步")
-            return True
-        except Exception as e:
-            logger.error(f"服务器 {server.id} 监控配置同步失败: {e}")
-            return False

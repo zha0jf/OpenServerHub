@@ -31,13 +31,13 @@ class Settings(BaseSettings):
     IPMI_TIMEOUT: int = 30
     
     # 定时任务配置
-    POWER_STATE_REFRESH_INTERVAL: int = 1  # 电源状态刷新间隔（分钟）
+    POWER_STATE_REFRESH_INTERVAL: int = 3  # 电源状态刷新间隔（分钟）
     POWER_STATE_REFRESH_ENABLED: bool = True  # 是否启用自动刷新
     
     # 监控系统配置
     PROMETHEUS_URL: str = "http://prometheus:9090"
     GRAFANA_URL: str = "http://grafana:3000"
-    GRAFANA_API_KEY: str = "your-grafana-api-key-here"
+    GRAFANA_API_KEY: str = os.getenv("GRAFANA_API_KEY", "your-grafana-api-key-here")
     
     class Config:
         env_file = ".env"

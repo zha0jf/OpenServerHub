@@ -1,4 +1,4 @@
-# 开发环境Docker Compose配置 - 单容器版本
+# 开发环境Docker Compose配置 - 单容器版本（集成监控组件）
 version: '3.8'
 
 services:
@@ -50,6 +50,7 @@ services:
       - dev_data:/app/data
     networks:
       - openserverhub-dev-network
+      - monitoring
     working_dir: /app
     command: >
       sh -c "
@@ -75,10 +76,85 @@ services:
         wait \$BACKEND_PID \$FRONTEND_PID
       "
 
+  # Prometheus监控服务
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus-dev
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/rules:/etc/prometheus/rules
+      - ../monitoring/prometheus/targets:/etc/prometheus/targets
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # Grafana可视化服务
+  grafana:
+    image: grafana/grafana-enterprise:10.1.0
+    container_name: grafana-dev
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  # AlertManager告警服务
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: alertmanager-dev
+    ports:
+      - "9093:9093"
+    volumes:
+      - ../monitoring/alertmanager/alertmanager.dev.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # IPMI Exporter服务
+  ipmi-exporter:
+    image: prometheuscommunity/ipmi-exporter:v1.4.0
+    container_name: ipmi-exporter-dev
+    ports:
+      - "9290:9290"
+    volumes:
+      - ../monitoring/ipmi-exporter/ipmi_local.yml:/config/ipmi_local.yml
+    command:
+      - '--config.file=/config/ipmi_local.yml'
+    restart: unless-stopped
+    networks:
+      - monitoring
+
 networks:
   openserverhub-dev-network:
+    driver: bridge
+  monitoring:
     driver: bridge
 
 volumes:
   dev_data:
     driver: local
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:

@@ -14,9 +14,13 @@ echo OpenServerHub 单容器开发环境启动脚本
 echo ========================================
 echo 开发环境配置：
 echo - 数据库: SQLite (本地文件)
-echo - 架构: 单容器（后端+前端）
+echo - 架构: 单容器（后端+前端+监控组件）
 echo - 前端: 端口 3000
 echo - 后端: 端口 8000
+echo - Prometheus: 端口 9090
+echo - Grafana: 端口 3001
+echo - AlertManager: 端口 9093
+echo - IPMI Exporter: 端口 9290
 echo - 访问地址: 根据环境配置自动确定（本地或远程）
 echo.
 
@@ -85,7 +89,7 @@ exit /b 1
 
 :docker_compose_found
 echo √ Docker环境检查通过
-echo ℹ 单容器开发环境配置：SQLite + 热重载
+echo ℹ 单容器开发环境配置：SQLite + 热重载 + 监控组件
 echo ℹ 使用命令: %DOCKER_COMPOSE_CMD%
 exit /b 0
 
@@ -170,15 +174,23 @@ if "%REMOTE_ACCESS%"=="true" (
     echo - 前端开发服务器: http://%SERVER_IP%:3000
     echo - 后端API: http://%SERVER_IP%:8000
     echo - API文档: http://%SERVER_IP%:8000/docs
+    echo - Prometheus: http://%SERVER_IP%:9090
+    echo - Grafana: http://%SERVER_IP%:3001
+    echo - AlertManager: http://%SERVER_IP%:9093
+    echo - IPMI Exporter: http://%SERVER_IP%:9290
     echo.
     echo 远程访问模式:
     echo - 服务将在所有网络接口上监听 (0.0.0.0)
     echo - 您可以从网络中的其他计算机访问这些服务
-    echo - 请确保防火墙已开放端口 3000 和 8000
+    echo - 请确保防火墙已开放端口 3000, 8000, 9090, 3001, 9093, 9290
 ) else (
     echo - 前端开发服务器: http://localhost:3000
     echo - 后端API: http://localhost:8000
     echo - API文档: http://localhost:8000/docs
+    echo - Prometheus: http://localhost:9090
+    echo - Grafana: http://localhost:3001
+    echo - AlertManager: http://localhost:9093
+    echo - IPMI Exporter: http://localhost:9290
     echo.
     echo 本地访问模式:
     echo - 仅可在本机访问这些服务
@@ -189,7 +201,11 @@ echo - 数据库: SQLite (本地文件)
 echo.
 echo 使用说明:
 echo - 代码修改后自动热重载
-echo - 容器日志: docker logs -f openserverhub-dev
+echo - 后端日志: docker logs -f openserverhub-dev
+echo - Prometheus日志: docker logs -f prometheus-dev
+echo - Grafana日志: docker logs -f grafana-dev
+echo - AlertManager日志: docker logs -f alertmanager-dev
+echo - IPMI Exporter日志: docker logs -f ipmi-exporter-dev
 echo - 进入容器: docker exec -it openserverhub-dev sh
 echo.
 pause
