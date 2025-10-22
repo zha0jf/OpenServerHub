@@ -27,6 +27,7 @@ services:
       # 监控配置
       MONITORING_ENABLED: "true"
       MONITORING_INTERVAL: "60"
+      PROMETHEUS_TARGETS_PATH: "/etc/prometheus/targets/ipmi-targets.json"
       
       # 定时任务配置
       SCHEDULER_ENABLED: "true"
@@ -47,6 +48,8 @@ services:
       - /app/frontend/node_modules
       # SQLite数据持久化
       - dev_data:/app/data
+      # 共享Prometheus目标配置目录
+      - ../monitoring/prometheus/targets:/etc/prometheus/targets
     networks:
       - openserverhub-dev-network
       - monitoring

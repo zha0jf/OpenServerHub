@@ -157,17 +157,34 @@ class ServerService:
 
     async def _sync_monitoring_config(self):
         """同步监控配置"""
+        logger.info("开始同步监控配置")
+        
         try:
+            # 检查监控是否启用
+            if not settings.MONITORING_ENABLED:
+                logger.debug("监控功能未启用，跳过配置同步")
+                return
+                
+            logger.debug(f"监控功能已启用，开始同步配置")
+            
             # 获取所有服务器
             servers = self.get_servers()
+            logger.debug(f"获取到服务器列表，数量: {len(servers)}")
             
             # 同步Prometheus配置
             prometheus_manager = PrometheusConfigManager()
-            await prometheus_manager.sync_ipmi_targets(servers)
+            logger.debug("创建PrometheusConfigManager实例")
             
-            logger.info("监控配置同步完成")
+            result = await prometheus_manager.sync_ipmi_targets(servers)
+            
+            if result:
+                logger.info("监控配置同步完成")
+            else:
+                logger.error("监控配置同步失败")
+                
         except Exception as e:
             logger.error(f"同步监控配置失败: {e}")
+            logger.exception(e)  # 记录完整的异常堆栈
 
     async def power_control(self, server_id: int, action: str) -> Dict[str, Any]:
         """服务器电源控制"""

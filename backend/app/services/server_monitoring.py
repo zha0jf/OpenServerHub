@@ -16,31 +16,59 @@ class PrometheusConfigManager:
     
     def __init__(self, config_path: Optional[str] = None):
         # 通过环境变量或配置文件获取配置路径，如果没有则使用默认值
-        self.config_path = config_path or os.getenv("PROMETHEUS_TARGETS_PATH", "/etc/prometheus/targets/ipmi-targets.json")
+        default_path = "/etc/prometheus/targets/ipmi-targets.json"
+        self.config_path = config_path or os.getenv("PROMETHEUS_TARGETS_PATH", default_path)
         self.reload_url = f"{settings.PROMETHEUS_URL}/-/reload"
+        
+        # 记录初始化信息
+        logger.debug(f"PrometheusConfigManager初始化完成")
+        logger.debug(f"配置文件路径: {self.config_path}")
+        logger.debug(f"Prometheus重载URL: {self.reload_url}")
     
     async def sync_ipmi_targets(self, servers: List[Server]) -> bool:
         """根据服务器列表同步IPMI监控目标"""
+        logger.info(f"开始同步Prometheus IPMI目标配置，服务器数量: {len(servers)}")
+        logger.debug(f"服务器列表详情: {[{'id': s.id, 'name': s.name, 'ipmi_ip': s.ipmi_ip} for s in servers]}")
+        
         try:
-            # 生成目标配置
+            # 生成目标配置 - 为IPMI Exporter生成正确的配置格式
             targets = []
             for server in servers:
-                # 假设所有服务器都需要监控，实际可以根据server.monitoring_enabled字段判断
+                # 处理可能为None的字段，确保转换为字符串
+                ipmi_ip = str(server.ipmi_ip) if server.ipmi_ip is not None else ""
+                ipmi_username = str(server.ipmi_username) if server.ipmi_username is not None else ""
+                ipmi_password = str(server.ipmi_password) if server.ipmi_password is not None else ""
+                ipmi_port = str(server.ipmi_port) if server.ipmi_port is not None else "623"
+                manufacturer = str(server.manufacturer) if server.manufacturer is not None else "unknown"
+                
+                # 为每个服务器生成IPMI Exporter配置
                 target = {
-                    "targets": [f"{server.ipmi_ip}:9290"],
+                    "targets": [f"{ipmi_ip}:9290"],
                     "labels": {
                         "server_id": str(server.id),
-                        "server_name": server.name,
-                        "ipmi_ip": server.ipmi_ip,
-                        "manufacturer": server.manufacturer or "unknown"
+                        "server_name": str(server.name),
+                        "ipmi_ip": ipmi_ip,
+                        "manufacturer": manufacturer,
+                        "__param_target": ipmi_ip,
+                        "__param_username": ipmi_username,
+                        "__param_password": ipmi_password,
+                        "__param_port": ipmi_port,
+                        "__param_privilege": "ADMINISTRATOR"
                     }
                 }
+                
+                # 记录每个服务器的配置详情（调试模式）
+                logger.debug(f"服务器 {server.name} (ID: {server.id}) 的监控配置: {target}")
                 targets.append(target)
+            
+            logger.info(f"生成监控目标配置完成，共 {len(targets)} 个目标")
             
             # 写入配置文件到文件系统
             try:
                 # 确保目录存在
-                os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+                config_dir = os.path.dirname(self.config_path)
+                os.makedirs(config_dir, exist_ok=True)
+                logger.debug(f"确保配置目录存在: {config_dir}")
                 
                 # 写入JSON配置文件
                 with open(self.config_path, 'w', encoding='utf-8') as f:
@@ -48,31 +76,53 @@ class PrometheusConfigManager:
                 
                 logger.info(f"成功写入Prometheus目标配置文件: {self.config_path}")
                 logger.debug(f"配置内容: {targets}")
+                
+                # 验证文件是否成功写入
+                if os.path.exists(self.config_path):
+                    file_size = os.path.getsize(self.config_path)
+                    logger.debug(f"配置文件大小: {file_size} 字节")
+                else:
+                    logger.error(f"配置文件写入失败，文件不存在: {self.config_path}")
+                    return False
+                    
             except Exception as e:
                 logger.error(f"写入Prometheus配置文件失败: {e}")
+                logger.exception(e)  # 记录完整的异常堆栈
                 return False
             
             # 通知Prometheus重新加载配置
-            await self.reload_prometheus()
+            reload_result = await self.reload_prometheus()
+            if reload_result:
+                logger.info("Prometheus配置同步和重载完成")
+            else:
+                logger.warning("Prometheus配置同步完成，但重载失败")
+                
             return True
             
         except Exception as e:
-            logger.error(f"Failed to sync Prometheus config: {e}")
+            logger.error(f"同步Prometheus配置失败: {e}")
+            logger.exception(e)  # 记录完整的异常堆栈
             return False
     
     async def reload_prometheus(self) -> bool:
         """通知Prometheus重新加载配置"""
+        logger.debug(f"开始通知Prometheus重新加载配置: {self.reload_url}")
+        
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(self.reload_url)
+                logger.debug(f"Prometheus重载响应状态码: {response.status_code}")
+                
                 if response.status_code == 200:
-                    logger.info("Prometheus config reloaded successfully")
+                    logger.info("Prometheus配置重载成功")
                     return True
                 else:
-                    logger.error(f"Failed to reload Prometheus config: {response.status_code}")
+                    logger.error(f"Prometheus配置重载失败，状态码: {response.status_code}")
+                    logger.debug(f"响应内容: {response.text}")
                     return False
         except Exception as e:
-            logger.error(f"Failed to reload Prometheus: {e}")
+            logger.error(f"Prometheus重载请求失败: {e}")
+            logger.exception(e)  # 记录完整的异常堆栈
             return False
 
 
@@ -85,9 +135,13 @@ class GrafanaService:
             "Authorization": f"Bearer {api_key or settings.GRAFANA_API_KEY}",
             "Content-Type": "application/json"
         }
+        logger.debug(f"GrafanaService初始化完成")
+        logger.debug(f"Grafana URL: {self.grafana_url}")
     
     async def create_server_dashboard(self, server: Server) -> dict:
         """为服务器创建专用监控仪表板"""
+        logger.info(f"开始为服务器 {server.name} (ID: {server.id}) 创建Grafana仪表板")
+        
         # 获取服务器ID的整数值
         server_id = int(str(server.id))
         
@@ -104,6 +158,9 @@ class GrafanaService:
             "overwrite": True
         }
         
+        logger.debug(f"准备创建仪表板，服务器ID: {server_id}")
+        logger.debug(f"仪表板配置: {dashboard_json}")
+        
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -112,22 +169,27 @@ class GrafanaService:
                     json=dashboard_json
                 )
                 
+                logger.debug(f"Grafana API响应状态码: {response.status_code}")
+                
                 if response.status_code == 200:
                     result = response.json()
-                    logger.info(f"Dashboard created for server {server_id}")
+                    logger.info(f"服务器 {server_id} 的Grafana仪表板创建成功")
+                    logger.debug(f"仪表板详情: {result}")
                     return {
                         "success": True,
                         "dashboard_uid": result['uid'],
                         "dashboard_url": f"{self.grafana_url}/d/{result['uid']}"
                     }
                 else:
-                    logger.error(f"Grafana API error: {response.status_code}")
+                    logger.error(f"Grafana API错误，状态码: {response.status_code}")
+                    logger.debug(f"响应内容: {response.text}")
                     return {
                         "success": False,
                         "error": f"Grafana API error: {response.status_code}"
                     }
         except Exception as e:
-            logger.error(f"Failed to create Grafana dashboard: {e}")
+            logger.error(f"创建Grafana仪表板失败: {e}")
+            logger.exception(e)  # 记录完整的异常堆栈
             return {
                 "success": False,
                 "error": str(e)
@@ -135,6 +197,7 @@ class GrafanaService:
     
     def _create_cpu_temperature_panel(self, server_id: int):
         """创建CPU温度面板"""
+        logger.debug(f"创建CPU温度面板，服务器ID: {server_id}")
         return {
             "title": "CPU温度",
             "type": "timeseries",
@@ -157,6 +220,7 @@ class GrafanaService:
     
     def _create_fan_speed_panel(self, server_id: int):
         """创建风扇转速面板"""
+        logger.debug(f"创建风扇转速面板，服务器ID: {server_id}")
         return {
             "title": "风扇转速",
             "type": "timeseries",
@@ -177,6 +241,7 @@ class GrafanaService:
     
     def _create_voltage_panel(self, server_id: int):
         """创建电压面板"""
+        logger.debug(f"创建电压面板，服务器ID: {server_id}")
         return {
             "title": "电压",
             "type": "timeseries",
