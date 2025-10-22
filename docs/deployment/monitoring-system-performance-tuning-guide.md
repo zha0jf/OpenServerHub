@@ -202,14 +202,17 @@ services:
 ### 6.1 配置优化
 
 #### 6.1.1 超时设置
-```yaml
+```
 # monitoring/ipmi-exporter/ipmi_local.yml
 modules:
   default:
     collectors:
+    - bmc
     - ipmi
-    ipmi:
-      timeout: 30000  # 30秒超时
+    - dcmi
+    - chassis
+    exclude_sensor_ids:
+    - 2    # 排除特定传感器
 ```
 
 #### 6.1.2 传感器过滤
@@ -218,7 +221,10 @@ modules:
 modules:
   default:
     collectors:
+    - bmc
     - ipmi
+    - dcmi
+    - chassis
     exclude_sensor_ids:
     - 2  # 排除不必要的传感器
     - 5

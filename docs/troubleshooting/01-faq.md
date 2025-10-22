@@ -168,6 +168,11 @@ ipmitool -I lanplus -H <BMC_IP> -U <username> -P <password> mc info
 # ipmi_local.yml
 modules:
   default:
+    collectors:
+    - bmc
+    - ipmi
+    - dcmi
+    - chassis
     exclude_sensor_ids:
     - 2    # 排除有问题的传感器ID
     - 15
@@ -179,8 +184,11 @@ modules:
 modules:
   dell:
     collectors:
+    - bmc
     - ipmi
     - dcmi
+    - chassis
+    - sel
     ipmi:
       driver: "LAN_2_0"
       privilege: "user"

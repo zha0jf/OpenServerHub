@@ -1,21 +1,18 @@
+# Configuration file for ipmi_exporter
+
 modules:
   default:
     collectors:
+    - bmc
     - ipmi
     - dcmi
+    - chassis
     exclude_sensor_ids:
     - 2    # 排除特定传感器
-    ipmi:
-      driver: "LAN_2_0"
-      privilege: "user"
-      timeout: 10000
-      
   dell_servers:
     collectors:
+    - bmc
     - ipmi
     - dcmi
+    - chassis
     - sel  # 系统事件日志
-    ipmi:
-      driver: "LAN_2_0" 
-      privilege: "user"
-      timeout: 15000

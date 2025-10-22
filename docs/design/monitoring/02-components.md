@@ -14,8 +14,10 @@ IPMI Exporter 采用独立容器化部署，每个服务器对应一个独立的
 modules:
   default:
     collectors:
+    - bmc
     - ipmi
     - dcmi
+    - chassis
     exclude_sensor_ids:
     - 2    # 排除特定传感器
     ipmi:
@@ -255,7 +257,7 @@ class GrafanaService:
 ```
 
 ### 4.2 前端Grafana集成
-```tsx
+``tsx
 // src/components/monitoring/GrafanaPanel.tsx
 const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
   dashboardUid,
@@ -417,4 +419,3 @@ services:
 volumes:
   prometheus_data:
   grafana_data:
-```

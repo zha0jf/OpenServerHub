@@ -99,11 +99,12 @@ docker-compose -f docker-compose.ipmi.yml exec ipmi-exporter-1 \
 modules:
   default:
     collectors:
+    - bmc
     - ipmi
-    ipmi:
-      driver: "LAN_2_0"
-      privilege: "user"
-      timeout: 30000  # 增加超时时间
+    - dcmi
+    - chassis
+    exclude_sensor_ids:
+    - 2    # 排除特定传感器
 ```
 
 ### 3.3 监控数据缺失

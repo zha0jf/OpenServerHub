@@ -126,9 +126,13 @@
    # monitoring/ipmi-exporter/ipmi_local.yml
    modules:
      default:
-       ipmi:
-         timeout: 30000  # 增加超时时间
-         privilege: "user"
+       collectors:
+       - bmc
+       - ipmi
+       - dcmi
+       - chassis
+       exclude_sensor_ids:
+       - 2    # 排除特定传感器
    ```
 
 2. **检查防火墙设置**
@@ -743,4 +747,4 @@
 
 ## 10. 总结
 
-通过遵循本指南中的故障排除步骤和解决方案，可以快速诊断和解决 OpenServerHub 监控系统中的常见问题。关键是要建立完善的监控和告警机制，定期进行系统维护，并持续优化系统配置和性能。
+通过遵循本指南中的故障排除步骤和解决方案，可以快速诊断和解决 OpenServerHub 监控系统中的常见问题。关键是要建立完善的监控和告警机制，定期进行系统维护，并持续优化系统配置和性能.

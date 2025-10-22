@@ -314,16 +314,17 @@ environment:
 ### 6.1 采集优化
 
 #### 6.1.1 超时设置
-```yaml
+```
 # IPMI Exporter 配置优化
 modules:
   default:
     collectors:
+    - bmc
     - ipmi
-    ipmi:
-      driver: "LAN_2_0"
-      privilege: "user"
-      timeout: 15000  # 设置合理的超时时间
+    - dcmi
+    - chassis
+    exclude_sensor_ids:
+    - 2    # 排除特定传感器
 ```
 
 #### 6.1.2 并发控制
@@ -570,7 +571,7 @@ process_resident_memory_bytes
 ### 10.2 性能基准
 
 #### 10.2.1 基准测试结果
-```markdown
+```
 # 性能基准测试结果
 
 ## 测试环境
@@ -590,7 +591,7 @@ process_resident_memory_bytes
 ```
 
 #### 10.2.2 性能调优建议
-```markdown
+```
 # 性能调优建议
 
 ## 小规模部署 (< 100台服务器)
@@ -612,4 +613,4 @@ process_resident_memory_bytes
 
 ## 11. 总结
 
-通过遵循本指南中的性能调优方法和最佳实践，可以显著提高 OpenServerHub 监控系统的性能和稳定性。关键是要根据实际部署规模和业务需求，选择合适的优化策略，并持续监控和调优系统性能。
+通过遵循本指南中的性能调优方法和最佳实践，可以显著提高 OpenServerHub 监控系统的性能和稳定性。关键是要根据实际部署规模和业务需求，选择合适的优化策略，并持续监控和调优系统性能.
