@@ -42,14 +42,15 @@ class PrometheusConfigManager:
                 manufacturer = str(server.manufacturer) if server.manufacturer is not None else "unknown"
                 
                 # 为每个服务器生成IPMI Exporter配置
+                # 正确的配置应该是让Prometheus连接IPMI Exporter容器，而不是直接连接目标服务器
                 target = {
-                    "targets": [f"{ipmi_ip}:9290"],
+                    "targets": ["ipmi-exporter:9290"],  # IPMI Exporter服务地址
                     "labels": {
                         "server_id": str(server.id),
                         "server_name": str(server.name),
                         "ipmi_ip": ipmi_ip,
                         "manufacturer": manufacturer,
-                        "__param_target": ipmi_ip,
+                        "__param_target": ipmi_ip,  # 目标服务器IPMI地址作为参数传递
                         "__param_username": ipmi_username,
                         "__param_password": ipmi_password,
                         "__param_port": ipmi_port,
