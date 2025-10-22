@@ -4,13 +4,15 @@ from datetime import datetime
 import asyncio
 from concurrent.futures import as_completed
 from collections import defaultdict
+from sqlalchemy import update
 
 from app.models.server import Server, ServerGroup, ServerStatus, PowerState
 from app.schemas.server import ServerCreate, ServerUpdate, ServerGroupCreate, BatchOperationResult
 from app.services.ipmi import IPMIService
 from app.services.monitoring import MonitoringService
-from app.services.server_monitoring import ServerMonitoringService
+from app.services.server_monitoring import PrometheusConfigManager
 from app.core.exceptions import ValidationError, IPMIError
+from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,7 +21,7 @@ class ServerService:
     def __init__(self, db: Session):
         self.db = db
         self.ipmi_service = IPMIService()
-        self.monitoring_service = ServerMonitoringService(db)
+        self.monitoring_service = MonitoringService(db)
 
     def create_server(self, server_data: ServerCreate) -> Server:
         """创建服务器"""
@@ -50,9 +52,9 @@ class ServerService:
         self.db.commit()
         self.db.refresh(db_server)
         
-        # 异步处理监控配置
-        # 注意：在实际应用中，这里可能需要使用后台任务处理
-        # asyncio.create_task(self.monitoring_service.on_server_added(db_server))
+        # 异步处理监控配置（仅在启用监控时）
+        if settings.MONITORING_ENABLED:
+            asyncio.create_task(self._sync_monitoring_config())
         
         # 标记需要状态刷新（前端会调用状态刷新接口）
         logger.info(f"服务器 {db_server.id} 创建成功，建议立即刷新状态")
@@ -103,10 +105,10 @@ class ServerService:
                 raise ValidationError("IPMI IP地址已存在")
         
         # 记录原始值用于比较
-        original_ipmi_ip = db_server.ipmi_ip
-        original_ipmi_username = db_server.ipmi_username
-        original_ipmi_password = db_server.ipmi_password
-        original_ipmi_port = db_server.ipmi_port
+        original_ipmi_ip = str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else ""
+        original_ipmi_username = str(db_server.ipmi_username) if db_server.ipmi_username is not None else ""
+        original_ipmi_password = str(db_server.ipmi_password) if db_server.ipmi_password is not None else ""
+        original_ipmi_port = int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
         
         # 更新服务器信息
         for field, value in update_data.items():
@@ -116,19 +118,25 @@ class ServerService:
         self.db.refresh(db_server)
         
         # 检查IPMI相关信息是否发生变化
+        new_ipmi_ip = str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else ""
+        new_ipmi_username = str(db_server.ipmi_username) if db_server.ipmi_username is not None else ""
+        new_ipmi_password = str(db_server.ipmi_password) if db_server.ipmi_password is not None else ""
+        new_ipmi_port = int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
+        
         ipmi_changed = (
-            original_ipmi_ip != db_server.ipmi_ip or
-            original_ipmi_username != db_server.ipmi_username or
-            original_ipmi_password != db_server.ipmi_password or
-            original_ipmi_port != db_server.ipmi_port
+            original_ipmi_ip != new_ipmi_ip or
+            original_ipmi_username != new_ipmi_username or
+            original_ipmi_password != new_ipmi_password or
+            original_ipmi_port != new_ipmi_port
         )
         
         # 如果IPMI相关信息发生变化，记录日志建议刷新状态
         if ipmi_changed:
             logger.info(f"服务器 {db_server.id} IPMI信息已更新，建议立即刷新状态")
         
-        # 异步处理监控配置更新
-        # asyncio.create_task(self.monitoring_service.on_server_updated(db_server))
+        # 异步处理监控配置更新（仅在启用监控时）
+        if settings.MONITORING_ENABLED:
+            asyncio.create_task(self._sync_monitoring_config())
         
         return db_server
 
@@ -141,10 +149,25 @@ class ServerService:
         self.db.delete(db_server)
         self.db.commit()
         
-        # 异步处理监控配置清理
-        # asyncio.create_task(self.monitoring_service.on_server_deleted(server_id))
+        # 异步处理监控配置清理（仅在启用监控时）
+        if settings.MONITORING_ENABLED:
+            asyncio.create_task(self._sync_monitoring_config())
         
         return True
+
+    async def _sync_monitoring_config(self):
+        """同步监控配置"""
+        try:
+            # 获取所有服务器
+            servers = self.get_servers()
+            
+            # 同步Prometheus配置
+            prometheus_manager = PrometheusConfigManager()
+            await prometheus_manager.sync_ipmi_targets(servers)
+            
+            logger.info("监控配置同步完成")
+        except Exception as e:
+            logger.error(f"同步监控配置失败: {e}")
 
     async def power_control(self, server_id: int, action: str) -> Dict[str, Any]:
         """服务器电源控制"""
@@ -154,22 +177,28 @@ class ServerService:
         
         try:
             result = await self.ipmi_service.power_control(
-                ip=db_server.ipmi_ip,
-                username=db_server.ipmi_username,
-                password=db_server.ipmi_password,
+                ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
+                username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
+                password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
                 action=action,
-                port=db_server.ipmi_port
+                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
             )
             
             # 更新服务器最后操作时间
-            db_server.last_seen = datetime.now()
+            stmt = update(Server).where(Server.id == server_id).values(
+                last_seen=datetime.now()
+            )
+            self.db.execute(stmt)
             self.db.commit()
             
             return result
             
         except IPMIError as e:
             # 更新服务器状态为错误
-            db_server.status = ServerStatus.ERROR
+            stmt = update(Server).where(Server.id == server_id).values(
+                status=ServerStatus.ERROR
+            )
+            self.db.execute(stmt)
             self.db.commit()
             raise e
 
@@ -182,31 +211,28 @@ class ServerService:
         try:
             # 获取电源状态
             power_state = await self.ipmi_service.get_power_state(
-                ip=db_server.ipmi_ip,
-                username=db_server.ipmi_username,
-                password=db_server.ipmi_password,
-                port=db_server.ipmi_port
+                ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
+                username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
+                password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
+                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
             )
             
             # 获取系统信息
             system_info = await self.ipmi_service.get_system_info(
-                ip=db_server.ipmi_ip,
-                username=db_server.ipmi_username,
-                password=db_server.ipmi_password,
-                port=db_server.ipmi_port
+                ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
+                username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
+                password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
+                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
             )
             
             # 更新服务器状态
-            db_server.status = ServerStatus.ONLINE
-            db_server.power_state = PowerState.ON if power_state == 'on' else PowerState.OFF
-            db_server.last_seen = datetime.now()
-            
-            # 更新系统信息
-            if system_info.get('manufacturer'):
-                db_server.manufacturer = system_info['manufacturer']
-            if system_info.get('product'):
-                db_server.model = system_info['product']
-            
+            power_state_enum = PowerState.ON if power_state == 'on' else PowerState.OFF
+            stmt = update(Server).where(Server.id == server_id).values(
+                status=ServerStatus.ONLINE,
+                power_state=power_state_enum,
+                last_seen=datetime.now()
+            )
+            self.db.execute(stmt)
             self.db.commit()
             
             return {
@@ -217,8 +243,11 @@ class ServerService:
             
         except IPMIError as e:
             # 更新服务器状态为离线或错误
-            db_server.status = ServerStatus.OFFLINE
-            db_server.power_state = PowerState.UNKNOWN
+            stmt = update(Server).where(Server.id == server_id).values(
+                status=ServerStatus.OFFLINE,
+                power_state=PowerState.UNKNOWN
+            )
+            self.db.execute(stmt)
             self.db.commit()
             
             return {
@@ -281,10 +310,14 @@ class ServerService:
                 raise ValidationError("分组名称已存在")
         
         # 更新分组信息
-        db_group.name = group_data.name
-        db_group.description = group_data.description
-        
+        stmt = update(ServerGroup).where(ServerGroup.id == group_id).values(
+            name=group_data.name,
+            description=group_data.description
+        )
+        self.db.execute(stmt)
         self.db.commit()
+        
+        # 刷新对象
         self.db.refresh(db_group)
         return db_group
 
@@ -297,7 +330,7 @@ class ServerService:
         servers = self.db.query(Server).filter(Server.id.in_(server_ids)).all()
         
         # 检查是否有不存在的服务器ID
-        found_ids = {server.id for server in servers}
+        found_ids = {int(str(server.id)) for server in servers}
         missing_ids = set(server_ids) - found_ids
         
         # 为不存在的服务器添加错误结果
@@ -334,8 +367,8 @@ class ServerService:
             if i < len(task_results):
                 if isinstance(task_results[i], Exception):
                     results.append(BatchOperationResult(
-                        server_id=server.id,
-                        server_name=server.name,
+                        server_id=int(str(server.id)),
+                        server_name=str(server.name),
                         success=False,
                         message="失败",
                         error=str(task_results[i])
@@ -349,32 +382,38 @@ class ServerService:
         """单个服务器电源控制"""
         try:
             await self.ipmi_service.power_control(
-                ip=server.ipmi_ip,
-                username=server.ipmi_username,
-                password=server.ipmi_password,
+                ip=str(server.ipmi_ip) if server.ipmi_ip is not None else "",
+                username=str(server.ipmi_username) if server.ipmi_username is not None else "",
+                password=str(server.ipmi_password) if server.ipmi_password is not None else "",
                 action=action,
-                port=server.ipmi_port
+                port=int(str(server.ipmi_port)) if server.ipmi_port is not None else 623
             )
             
             # 更新服务器最后操作时间
-            server.last_seen = datetime.now()
+            stmt = update(Server).where(Server.id == server.id).values(
+                last_seen=datetime.now()
+            )
+            self.db.execute(stmt)
             self.db.commit()
             
             return BatchOperationResult(
-                server_id=server.id,
-                server_name=server.name,
+                server_id=int(str(server.id)),
+                server_name=str(server.name),
                 success=True,
                 message=f"电源{action}操作成功"
             )
             
         except IPMIError as e:
             # 更新服务器状态为错误
-            server.status = ServerStatus.ERROR
+            stmt = update(Server).where(Server.id == server.id).values(
+                status=ServerStatus.ERROR
+            )
+            self.db.execute(stmt)
             self.db.commit()
             
             return BatchOperationResult(
-                server_id=server.id,
-                server_name=server.name,
+                server_id=int(str(server.id)),
+                server_name=str(server.name),
                 success=False,
                 message="失败",
                 error=f"IPMI操作失败: {str(e)}"
@@ -382,8 +421,8 @@ class ServerService:
         except Exception as e:
             logger.error(f"服务器 {server.id} 电源控制异常: {str(e)}")
             return BatchOperationResult(
-                server_id=server.id,
-                server_name=server.name,
+                server_id=int(str(server.id)),
+                server_name=str(server.name),
                 success=False,
                 message="失败",
                 error=f"内部错误: {str(e)}"
@@ -400,13 +439,13 @@ class ServerService:
         
         # 基础统计
         total_servers = len(servers)
-        online_servers = sum(1 for s in servers if s.status == ServerStatus.ONLINE)
-        offline_servers = sum(1 for s in servers if s.status == ServerStatus.OFFLINE)
-        unknown_servers = sum(1 for s in servers if s.status == ServerStatus.UNKNOWN)
+        online_servers = sum(1 for s in servers if str(s.status) == ServerStatus.ONLINE)
+        offline_servers = sum(1 for s in servers if str(s.status) == ServerStatus.OFFLINE)
+        unknown_servers = sum(1 for s in servers if str(s.status) == ServerStatus.UNKNOWN)
         
         # 电源状态统计
-        power_on_servers = sum(1 for s in servers if s.power_state == PowerState.ON)
-        power_off_servers = sum(1 for s in servers if s.power_state == PowerState.OFF)
+        power_on_servers = sum(1 for s in servers if str(s.power_state) == PowerState.ON)
+        power_off_servers = sum(1 for s in servers if str(s.power_state) == PowerState.OFF)
         
         # 分组统计
         group_stats = defaultdict(lambda: {
@@ -420,28 +459,28 @@ class ServerService:
         
         for server in servers:
             group_name = "未分组"
-            if server.group_id:
-                group = self.get_server_group(server.group_id)
+            if server.group_id is not None and int(str(server.group_id)) > 0:
+                group = self.get_server_group(int(str(server.group_id)))
                 if group:
                     group_name = group.name
             
             group_stats[group_name]['total'] += 1
-            if server.status == ServerStatus.ONLINE:
+            if str(server.status) == ServerStatus.ONLINE:
                 group_stats[group_name]['online'] += 1
-            elif server.status == ServerStatus.OFFLINE:
+            elif str(server.status) == ServerStatus.OFFLINE:
                 group_stats[group_name]['offline'] += 1
             else:
                 group_stats[group_name]['unknown'] += 1
             
-            if server.power_state == PowerState.ON:
+            if str(server.power_state) == PowerState.ON:
                 group_stats[group_name]['power_on'] += 1
-            elif server.power_state == PowerState.OFF:
+            elif str(server.power_state) == PowerState.OFF:
                 group_stats[group_name]['power_off'] += 1
         
         # 厂商统计
         manufacturer_stats = defaultdict(int)
         for server in servers:
-            manufacturer = server.manufacturer or "未知"
+            manufacturer = str(server.manufacturer) if server.manufacturer is not None else "未知"
             manufacturer_stats[manufacturer] += 1
         
         return {

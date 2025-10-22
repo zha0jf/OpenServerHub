@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     POWER_STATE_REFRESH_ENABLED: bool = True  # 是否启用自动刷新
     
     # 监控系统配置
+    MONITORING_ENABLED: bool = os.getenv("MONITORING_ENABLED", "false").lower() == "true"  # 是否启用监控
     PROMETHEUS_URL: str = "http://prometheus:9090"
     GRAFANA_URL: str = "http://grafana:3000"
     GRAFANA_API_KEY: str = os.getenv("GRAFANA_API_KEY", "your-grafana-api-key-here")

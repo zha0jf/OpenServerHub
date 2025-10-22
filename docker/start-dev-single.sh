@@ -127,6 +127,9 @@ IPMI_TIMEOUT=30
 IPMI_RETRY_COUNT=3
 SCHEDULER_ENABLED=true
 POWER_STATE_REFRESH_INTERVAL=1
+MONITORING_ENABLED=true
+GRAFANA_API_KEY=your-grafana-api-key-here
+PROMETHEUS_TARGETS_PATH=/etc/prometheus/targets/ipmi-targets.json
 EOF
     
     # 启动单容器服务

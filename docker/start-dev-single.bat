@@ -158,13 +158,41 @@ echo 正在启动单容器开发环境...
 REM 创建数据目录
 if not exist "%PROJECT_ROOT%\backend\data" mkdir "%PROJECT_ROOT%\backend\data"
 
+REM 创建临时环境变量文件
+set TEMP_ENV_FILE=%SCRIPT_DIR%\.env.temp
+(
+    echo # 临时环境变量文件 - 由start-dev-single.bat自动生成
+    echo SERVER_IP=%SERVER_IP%
+    echo REMOTE_ACCESS=%REMOTE_ACCESS%
+    echo LISTEN_IP=%LISTEN_IP%
+    echo REACT_APP_API_URL=http://%SERVER_IP%:8000
+    echo REACT_APP_WS_URL=ws://%SERVER_IP%:8000
+    echo CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://%SERVER_IP%:3000
+    echo DATABASE_URL=sqlite:///./openserverhub.db
+    echo SECRET_KEY=your-secret-key-here-change-this-in-development
+    echo ENVIRONMENT=development
+    echo DEBUG=true
+    echo LOG_LEVEL=DEBUG
+    echo IPMI_TIMEOUT=30
+    echo IPMI_RETRY_COUNT=3
+    echo SCHEDULER_ENABLED=true
+    echo POWER_STATE_REFRESH_INTERVAL=1
+    echo MONITORING_ENABLED=true
+    echo GRAFANA_API_KEY=your-grafana-api-key-here
+    echo PROMETHEUS_TARGETS_PATH=/etc/prometheus/targets/ipmi-targets.json
+) > "%TEMP_ENV_FILE%"
+
 REM 启动单容器服务
-%DOCKER_COMPOSE_CMD% -f docker-compose.dev.single.yml up -d
+%DOCKER_COMPOSE_CMD% -f docker-compose.dev.single.yml --env-file "%TEMP_ENV_FILE%" up -d
 if %errorlevel% neq 0 (
     echo 错误: 启动失败
+    del "%TEMP_ENV_FILE%" >nul 2>&1
     pause
     goto menu
 )
+
+REM 清理临时环境文件
+del "%TEMP_ENV_FILE%" >nul 2>&1
 
 echo √ 单容器开发环境启动成功！
 echo.
