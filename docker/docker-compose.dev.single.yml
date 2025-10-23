@@ -83,6 +83,8 @@ services:
   prometheus:
     image: prom/prometheus:v3.7.1
     container_name: prometheus-dev
+    environment:
+      - TZ=Asia/Shanghai
     ports:
       - "9090:9090"
     volumes:
@@ -124,6 +126,8 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.28.1
     container_name: alertmanager-dev
+    environment:
+      - TZ=Asia/Shanghai
     ports:
       - "9093:9093"
     volumes:
@@ -140,6 +144,8 @@ services:
   ipmi-exporter:
     image: prometheuscommunity/ipmi-exporter:v1.10.1
     container_name: ipmi-exporter-dev
+    environment:
+      - TZ=Asia/Shanghai
     ports:
       - "9290:9290"
     volumes:

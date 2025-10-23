@@ -42,8 +42,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=your-secret-key-here
       - ENVIRONMENT=production
-      - DEBUG=false
-      - LOG_LEVEL=INFO
+      - DEBUG=True
+      - LOG_LEVEL=DEBUG
       - CORS_ORIGINS=http://localhost:3000,http://frontend:80
       - TZ=Asia/Shanghai
     volumes:
@@ -64,6 +64,8 @@ services:
       context: ../
       dockerfile: docker/frontend.dockerfile
     container_name: openserverhub-frontend
+    environment:
+      - TZ=Asia/Shanghai
     ports:
       - "3000:80"
     networks:
