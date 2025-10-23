@@ -152,6 +152,7 @@ services:
       - ../monitoring/ipmi-exporter/ipmi_local.yml:/config/ipmi_local.yml
     command:
       - '--config.file=/config/ipmi_local.yml'
+      - '--log.level=debug'
     restart: unless-stopped
     networks:
       - monitoring

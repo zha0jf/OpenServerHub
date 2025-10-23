@@ -1,20 +1,16 @@
 [
   {
-    "targets": ["192.168.1.100:9290"],
+    "targets": ["ipmi-exporter:9290"],
     "labels": {
       "server_id": "1",
       "server_name": "server-01",
-      "ipmi_ip": "192.168.1.100",
-      "manufacturer": "Dell"
-    }
-  },
-  {
-    "targets": ["192.168.1.101:9290"],
-    "labels": {
-      "server_id": "2",
-      "server_name": "server-02",
-      "ipmi_ip": "192.168.1.101",
-      "manufacturer": "HP"
+      "__param_target": "10.10.0.228",
+      "__param_username": "root",
+      "__param_password": "0penBmc",
+      "__param_port": "623",
+      "__param_privilege": "ADMINISTRATOR",
+      "ipmi_ip": "10.10.0.228",
+      "manufacturer": "OpenBMC"
     }
   }
 ]
