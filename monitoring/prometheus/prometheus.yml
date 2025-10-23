@@ -29,15 +29,13 @@ scrape_configs:
   # IPMI服务器监控
   - job_name: 'ipmi-servers'
     scrape_interval: 1m
-    metrics_path: /metrics
+    metrics_path: /ipmi
     file_sd_configs:
     - files:
       - /etc/prometheus/targets/ipmi-targets.json
     relabel_configs:
     - source_labels: [module]
       target_label: __param_module
-    - source_labels: [__address__]
-      target_label: __param_target
     - source_labels: [__param_target]
       target_label: instance
     - target_label: __address__
