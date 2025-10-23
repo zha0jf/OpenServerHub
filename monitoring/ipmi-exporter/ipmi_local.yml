@@ -6,7 +6,10 @@
 
 modules:
   default:
-    # 默认配置，适用于大多数服务器
+    # 默认配置，用于本地采集，不运行任何收集器
+    collectors: []
+  remote:
+    # 远程服务器配置
     # 用户名和密码由Prometheus在抓取时动态提供
     driver: "LAN_2_0"
     privilege: "ADMINISTRATOR"

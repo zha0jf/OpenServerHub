@@ -4,6 +4,7 @@
     "labels": {
       "server_id": "1",
       "server_name": "server-01",
+      "module": "remote",
       "__param_target": "10.10.0.228",
       "__param_username": "root",
       "__param_password": "0penBmc",
