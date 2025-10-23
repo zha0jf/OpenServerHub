@@ -2,16 +2,101 @@
   {
     "targets": ["ipmi-exporter:9290"],
     "labels": {
-      "server_id": "1",
-      "server_name": "server-01",
+      "server_id": "2",
+      "server_name": "Supermicro-Unknown-10-10-0-141",
       "module": "remote",
+      "ipmi_ip": "10.10.0.141",
+      "manufacturer": "Supermicro",
+      "__param_target": "10.10.0.141",
+      "__param_username": "ADMIN",
+      "__param_password": "Test@123123",
+      "__param_port": "623",
+      "__param_privilege": "ADMINISTRATOR"
+    }
+  },
+  {
+    "targets": [
+      "ipmi-exporter:9290"
+    ],
+    "labels": {
+      "server_id": "3",
+      "server_name": "skysolidis-2U-10-10-0-94",
+      "module": "remote",
+      "ipmi_ip": "10.10.0.94",
+      "manufacturer": "skysolidiss",
+      "__param_target": "10.10.0.94",
+      "__param_username": "root",
+      "__param_password": "0penBmc",
+      "__param_port": "623",
+      "__param_privilege": "ADMINISTRATOR"
+    }
+  },
+  {
+    "targets": [
+      "ipmi-exporter:9290"
+    ],
+    "labels": {
+      "server_id": "4",
+      "server_name": "TGXN-TR2021F-10-10-0-143",
+      "module": "remote",
+      "ipmi_ip": "10.10.0.143",
+      "manufacturer": "TGXN",
+      "__param_target": "10.10.0.143",
+      "__param_username": "root",
+      "__param_password": "0penBmc",
+      "__param_port": "623",
+      "__param_privilege": "ADMINISTRATOR"
+    }
+  },
+  {
+    "targets": [
+      "ipmi-exporter:9290"
+    ],
+    "labels": {
+      "server_id": "5",
+      "server_name": "TONGFANG-ChaoqiangJ-10-10-0-147",
+      "module": "remote",
+      "ipmi_ip": "10.10.0.147",
+      "manufacturer": "TONGFANG",
+      "__param_target": "10.10.0.147",
+      "__param_username": "root",
+      "__param_password": "0penBmc",
+      "__param_port": "623",
+      "__param_privilege": "ADMINISTRATOR"
+    }
+  },
+  {
+    "targets": [
+      "ipmi-exporter:9290"
+    ],
+    "labels": {
+      "server_id": "6",
+      "server_name": "Supermicro-X86Server-10-10-0-248",
+      "module": "remote",
+      "ipmi_ip": "10.10.0.248",
+      "manufacturer": "Supermicro",
+      "__param_target": "10.10.0.248",
+      "__param_username": "ADMIN",
+      "__param_password": "ADMIN",
+      "__param_port": "623",
+      "__param_privilege": "ADMINISTRATOR"
+    }
+  },
+  {
+    "targets": [
+      "ipmi-exporter:9290"
+    ],
+    "labels": {
+      "server_id": "7",
+      "server_name": "tongfang-ft5000c",
+      "module": "remote",
+      "ipmi_ip": "10.10.0.228",
+      "manufacturer": "TongFang",
       "__param_target": "10.10.0.228",
       "__param_username": "root",
       "__param_password": "0penBmc",
       "__param_port": "623",
-      "__param_privilege": "ADMINISTRATOR",
-      "ipmi_ip": "10.10.0.228",
-      "manufacturer": "OpenBMC"
+      "__param_privilege": "ADMINISTRATOR"
     }
   }
 ]
