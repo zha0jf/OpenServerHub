@@ -1,18 +1,17 @@
 # Configuration file for ipmi_exporter
 
+# OpenServerHub IPMI Exporter配置文件
+# 此配置文件用于通过IPMI协议从服务器BMC采集硬件传感器数据
+# 用户名和密码将通过Prometheus动态传递，无需在此配置
+
 modules:
   default:
+    # 默认配置，适用于大多数服务器
+    # 用户名和密码由Prometheus在抓取时动态提供
+    driver: "LAN_2_0"
+    privilege: "ADMINISTRATOR"
+    timeout: 30000
     collectors:
-    - bmc
-    - ipmi
-    - dcmi
-    - chassis
-    exclude_sensor_ids:
-    - 2    # 排除特定传感器
-  dell_servers:
-    collectors:
-    - bmc
-    - ipmi
-    - dcmi
-    - chassis
-    - sel  # 系统事件日志
+    - ipmi     # 核心硬件传感器数据
+    - bmc      # BMC设备信息
+    - sel      # 系统事件日志
