@@ -14,6 +14,7 @@ services:
       - DEBUG=true
       - LOG_LEVEL=DEBUG
       - CORS_ORIGINS=*
+      - TZ=Asia/Shanghai
     volumes:
       - ../backend:/app
       - /app/__pycache__
@@ -31,6 +32,8 @@ services:
     image: node:18-alpine
     container_name: openserverhub-frontend-dev
     working_dir: /app
+    environment:
+      - TZ=Asia/Shanghai
     volumes:
       - ../frontend:/app
       - /app/node_modules

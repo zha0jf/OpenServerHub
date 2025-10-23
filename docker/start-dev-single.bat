@@ -1,4 +1,4 @@
-@echo off
+ @echo off
 REM 单容器开发环境快速启动脚本（Windows）
 
 setlocal enabledelayedexpansion
