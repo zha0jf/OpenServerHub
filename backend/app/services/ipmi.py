@@ -530,10 +530,10 @@ class IPMIService:
             # 创建用户
             await self._run_sync_ipmi(
                 conn.create_user,
-                userid=new_userid,
+                uid=new_userid,
                 name=new_username,
                 password=new_password,
-                priv_level=priv_level
+                privilege_level=priv_level
             )
             
             logger.info(f"成功为服务器 {ip} 创建用户 {new_username} (ID: {new_userid})")
@@ -555,8 +555,8 @@ class IPMIService:
             # 设置用户权限
             await self._run_sync_ipmi(
                 conn.set_user_priv,
-                userid=userid,
-                priv_level=priv_level
+                uid=userid,
+                privilege_level=priv_level
             )
             
             logger.info(f"成功为服务器 {ip} 用户ID {userid} 设置权限为 {priv_level}")
@@ -593,7 +593,9 @@ class IPMIService:
                 for user in users:
                     if isinstance(user, dict) and user.get('id') is not None:
                         try:
-                            used_ids.append(int(user.get('id')))
+                            user_id = user.get('id')
+                            if user_id is not None:
+                                used_ids.append(int(user_id))
                         except (ValueError, TypeError):
                             pass
                 
@@ -618,16 +620,19 @@ class IPMIService:
             else:
                 # 4. 如果用户存在，验证权限
                 if isinstance(openshub_user, dict) and openshub_user.get('priv_level', '').lower() != 'user':
-                    # 更新权限
-                    await self.set_user_priv(
-                        ip=ip,
-                        admin_username=admin_username,
-                        admin_password=admin_password,
-                        userid=int(openshub_user.get('id')),
-                        priv_level='user',
-                        port=port
-                    )
-                    logger.info(f"更新了服务器 {ip} 上 openshub 用户的权限")
+                    # 获取用户ID并确保不是None
+                    user_id = openshub_user.get('id')
+                    if user_id is not None:
+                        # 更新权限
+                        await self.set_user_priv(
+                            ip=ip,
+                            admin_username=admin_username,
+                            admin_password=admin_password,
+                            userid=int(user_id),
+                            priv_level='user',
+                            port=port
+                        )
+                        logger.info(f"更新了服务器 {ip} 上 openshub 用户的权限")
             
             return True
         except Exception as e:
