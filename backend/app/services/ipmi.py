@@ -579,7 +579,8 @@ class IPMIService:
             
             openshub_user = None
             for user in users:
-                if user.get('name', '').lower() == 'openshub':
+                # 确保user是字典类型再访问
+                if isinstance(user, dict) and user.get('name', '').lower() == 'openshub':
                     openshub_user = user
                     break
             
@@ -587,7 +588,15 @@ class IPMIService:
             if not openshub_user:
                 # 查找可用的用户ID（通常ID 10是安全的选择）
                 new_userid = 10
-                used_ids = [user.get('id') for user in users if user.get('id') is not None]
+                # 确保used_ids中的元素都是整数
+                used_ids = []
+                for user in users:
+                    if isinstance(user, dict) and user.get('id') is not None:
+                        try:
+                            used_ids.append(int(user.get('id')))
+                        except (ValueError, TypeError):
+                            pass
+                
                 while new_userid in used_ids and new_userid < 15:
                     new_userid += 1
                 
@@ -608,13 +617,13 @@ class IPMIService:
                 logger.info(f"为服务器 {ip} 创建了 openshub 用户")
             else:
                 # 4. 如果用户存在，验证权限
-                if openshub_user.get('priv_level', '').lower() != 'user':
+                if isinstance(openshub_user, dict) and openshub_user.get('priv_level', '').lower() != 'user':
                     # 更新权限
                     await self.set_user_priv(
                         ip=ip,
                         admin_username=admin_username,
                         admin_password=admin_password,
-                        userid=openshub_user.get('id'),
+                        userid=int(openshub_user.get('id')),
                         priv_level='user',
                         port=port
                     )
@@ -623,4 +632,5 @@ class IPMIService:
             return True
         except Exception as e:
             logger.error(f"确保openshub用户失败 {ip}: {e}")
+            logger.exception(e)
             return False

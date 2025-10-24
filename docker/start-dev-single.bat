@@ -167,7 +167,8 @@ set TEMP_ENV_FILE=%SCRIPT_DIR%\.env.temp
     echo LISTEN_IP=%LISTEN_IP%
     echo REACT_APP_API_URL=http://%SERVER_IP%:8000
     echo REACT_APP_WS_URL=ws://%SERVER_IP%:8000
-    echo CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://%SERVER_IP%:3000
+    echo REACT_APP_GRAFANA_URL=http://%SERVER_IP%:3001
+    echo CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://%SERVER_IP%:3000,http://%SERVER_IP%:3001
     echo DATABASE_URL=sqlite:///./openserverhub.db
     echo SECRET_KEY=your-secret-key-here-change-this-in-development
     echo ENVIRONMENT=development
@@ -178,7 +179,7 @@ set TEMP_ENV_FILE=%SCRIPT_DIR%\.env.temp
     echo SCHEDULER_ENABLED=true
     echo POWER_STATE_REFRESH_INTERVAL=1
     echo MONITORING_ENABLED=true
-    echo GRAFANA_API_KEY=your-grafana-api-key-here
+    echo GRAFANA_API_KEY=eyJrIjoiWlhRbG9sY3B3VlF0cEpOcG5aVlZVMlF6TlV4b09KNlciLCJuIjoib3BlbnNlcnZlcmh1Yi1kZXYiLCJpZCI6MX0=
     echo PROMETHEUS_TARGETS_PATH=/etc/prometheus/targets/ipmi-targets.json
 ) > "%TEMP_ENV_FILE%"
 
