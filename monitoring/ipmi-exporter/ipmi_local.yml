@@ -12,9 +12,9 @@ modules:
     # 远程服务器配置
     # 用户名和密码由Prometheus在抓取时动态提供
     driver: "LAN_2_0"
-    username: "openshub"
-    password: "openshub"
-    privilege: "USER"
+    user: "openshub"
+    pass: "openshub"
+    privilege: "user"
     timeout: 30000
     collectors:
     - ipmi     # 核心硬件传感器数据
