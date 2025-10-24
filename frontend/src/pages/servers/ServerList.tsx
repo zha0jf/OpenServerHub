@@ -19,7 +19,8 @@ import {
   Popconfirm,
   Tooltip,
   Dropdown,
-  Menu
+  Menu,
+  Alert
 } from 'antd';
 import {
   PlusOutlined,
@@ -31,23 +32,65 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   QuestionCircleOutlined,
-  DownOutlined
+  DownOutlined,
+  SwapOutlined
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
-import { Server, CreateServerRequest, UpdateServerRequest, ServerGroup, PowerAction } from '../../types';
+import { Server, CreateServerRequest, UpdateServerRequest, ServerGroup, PowerAction, BatchPowerRequest, BatchUpdateMonitoringRequest } from '../../types';
 import { ColumnsType } from 'antd/es/table';
 
 const { Title } = Typography;
 const { Option } = Select;
+
+// 验证规则常量，与后端保持一致
+const VALIDATION_RULES = {
+  name: {
+    minLength: 1,
+    maxLength: 100,
+  },
+  ipmiIp: {
+    pattern: /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
+  },
+  ipmiUsername: {
+    minLength: 1,
+    maxLength: 50,
+  },
+  ipmiPassword: {
+    minLength: 1,
+    maxLength: 128,
+  },
+  ipmiPort: {
+    min: 1,
+    max: 65535,
+  },
+  manufacturer: {
+    maxLength: 100,
+  },
+  model: {
+    maxLength: 100,
+  },
+  serialNumber: {
+    maxLength: 100,
+  },
+  description: {
+    maxLength: 500,
+  },
+  tags: {
+    maxLength: 200,
+  },
+};
 
 const ServerList: React.FC = () => {
   const [servers, setServers] = useState<Server[]>([]);
   const [groups, setGroups] = useState<ServerGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
+  const [changingGroupServer, setChangingGroupServer] = useState<Server | null>(null);
+  const [batchLoading, setBatchLoading] = useState(false);
   const [form] = Form.useForm();
-  const [batchActionVisible, setBatchActionVisible] = useState(false);
+  const [groupForm] = Form.useForm();
   const [selectedServerIds, setSelectedServerIds] = useState<number[]>([]);
 
   useEffect(() => {
@@ -115,6 +158,76 @@ const ServerList: React.FC = () => {
     }
   };
 
+  // 处理分组切换
+  const handleChangeGroup = (server: Server) => {
+    setChangingGroupServer(server);
+    groupForm.setFieldsValue({ group_id: server.group_id });
+    setGroupModalVisible(true);
+  };
+
+  const handleGroupSubmit = async (values: { group_id?: number }) => {
+    if (!changingGroupServer) return;
+    
+    try {
+      await serverService.updateServer(changingGroupServer.id, {
+        group_id: values.group_id || undefined
+      });
+      
+      const groupName = values.group_id 
+        ? groups.find(g => g.id === values.group_id)?.name || '未知分组'
+        : '未分组';
+      
+      message.success(`${changingGroupServer.name} 已移动到 ${groupName}`);
+      setGroupModalVisible(false);
+      loadServers();
+    } catch (error) {
+      message.error('分组切换失败');
+    }
+  };
+
+  // 批量切换分组
+  const handleBatchChangeGroup = () => {
+    if (selectedServerIds.length === 0) {
+      message.warning('请选择要操作的服务器');
+      return;
+    }
+    
+    // 设置为批量模式
+    setChangingGroupServer({ id: -1, name: `${selectedServerIds.length}台服务器` } as Server);
+    groupForm.resetFields();
+    setGroupModalVisible(true);
+  };
+
+  const handleBatchGroupSubmit = async (values: { group_id?: number }) => {
+    if (selectedServerIds.length === 0) return;
+    
+    try {
+      setBatchLoading(true);
+      
+      // 批量更新服务器分组
+      const updatePromises = selectedServerIds.map(serverId => 
+        serverService.updateServer(serverId, {
+          group_id: values.group_id || undefined
+        })
+      );
+      
+      await Promise.all(updatePromises);
+      
+      const groupName = values.group_id 
+        ? groups.find(g => g.id === values.group_id)?.name || '未知分组'
+        : '未分组';
+      
+      message.success(`${selectedServerIds.length}台服务器已批量移动到 ${groupName}`);
+      setGroupModalVisible(false);
+      setSelectedServerIds([]);
+      loadServers();
+    } catch (error) {
+      message.error('批量分组切换失败');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   const handleSubmit = async (values: any) => {
     try {
       if (editingServer) {
@@ -156,7 +269,6 @@ const ServerList: React.FC = () => {
       });
       
       message.success(`批量${action === 'on' ? '开机' : action === 'off' ? '关机' : '重启'}操作完成`);
-      setBatchActionVisible(false);
       setSelectedServerIds([]);
       loadServers();
     } catch (error) {
@@ -189,6 +301,81 @@ const ServerList: React.FC = () => {
     }
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedServerIds.length === 0) {
+      message.warning('请选择要删除的服务器');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认批量删除?',
+      content: `您确定要删除选中的 ${selectedServerIds.length} 台服务器吗？此操作不可恢复。`,
+      okText: '确定',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          setBatchLoading(true);
+          let successCount = 0;
+          let failedCount = 0;
+          const failedResults: Array<{server_name: string, error: string}> = [];
+
+          // 逐个删除选中的服务器
+          for (const serverId of selectedServerIds) {
+            try {
+              const server = servers.find(s => s.id === serverId);
+              if (server) {
+                await serverService.deleteServer(serverId);
+                successCount++;
+              }
+            } catch (error) {
+              failedCount++;
+              const server = servers.find(s => s.id === serverId);
+              failedResults.push({
+                server_name: server?.name || `ID: ${serverId}`,
+                error: error instanceof Error ? error.message : '删除失败'
+              });
+            }
+          }
+
+          // 显示结果统计
+          if (failedCount === 0) {
+            message.success(`批量删除完成: 成功删除 ${successCount} 台服务器`);
+          } else {
+            message.warning(`批量删除完成: 成功 ${successCount} 台，失败 ${failedCount} 台`);
+
+            // 显示详细失败结果
+            Modal.warning({
+              title: '部分删除失败',
+              content: (
+                <div>
+                  <p>以下服务器删除失败：</p>
+                  <ul>
+                    {failedResults.map((result, index) => (
+                      <li key={index}>
+                        {result.server_name}: {result.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+              width: 600
+            });
+          }
+
+          // 清除选中状态并重新加载数据
+          setSelectedServerIds([]);
+          await loadServers();
+
+        } catch (error) {
+          message.error('批量删除操作失败');
+        } finally {
+          setBatchLoading(false);
+        }
+      }
+    });
+  };
+
   const getStatusTag = (status: string) => {
     switch (status) {
       case 'online':
@@ -217,6 +404,12 @@ const ServerList: React.FC = () => {
     return enabled ? 
       <Tag color="blue">已启用</Tag> : 
       <Tag color="default">未启用</Tag>;
+  };
+
+  const getGroupTag = (groupId: number) => {
+    if (!groupId) return <Tag color="default">未分组</Tag>;
+    const group = groups.find(g => g.id === groupId);
+    return group ? <Tag color="blue">{group.name}</Tag> : <Tag color="default">未知分组</Tag>;
   };
 
   const columns: ColumnsType<Server> = [
@@ -271,11 +464,9 @@ const ServerList: React.FC = () => {
       title: '分组',
       dataIndex: 'group_id',
       key: 'group_id',
-      render: (groupId: number) => {
-        if (!groupId) return '-';
-        const group = groups.find(g => g.id === groupId);
-        return group ? group.name : '-';
-      },
+      render: (groupId: number) => getGroupTag(groupId),
+      filters: groups.map(group => ({ text: group.name, value: group.id })),
+      onFilter: (value, record) => record.group_id === value,
     },
     {
       title: '最后更新',
@@ -305,20 +496,36 @@ const ServerList: React.FC = () => {
               size="small"
             />
           </Tooltip>
-          <Popconfirm
-            title="确定删除此服务器吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'change_group',
+                  label: '切换分组',
+                  icon: <SwapOutlined />,
+                  onClick: () => handleChangeGroup(record),
+                },
+                {
+                  key: 'delete',
+                  label: '删除',
+                  icon: <DeleteOutlined />,
+                  danger: true,
+                  onClick: () => {
+                    Modal.confirm({
+                      title: '确定要删除这台服务器吗？',
+                      content: `您确定要删除服务器 "${record.name}" 吗？此操作不可恢复。`,
+                      okText: '确定',
+                      cancelText: '取消',
+                      onOk: () => handleDelete(record.id),
+                    });
+                  },
+                },
+              ]
+            }}
+            trigger={['click']}
           >
-            <Tooltip title="删除">
-              <Button 
-                icon={<DeleteOutlined />} 
-                danger
-                size="small"
-              />
-            </Tooltip>
-          </Popconfirm>
+            <Button size="small">更多</Button>
+          </Dropdown>
         </Space>
       ),
     },
@@ -379,9 +586,36 @@ const ServerList: React.FC = () => {
                   批量监控操作 <DownOutlined />
                 </Button>
               </Dropdown>
+              <Button
+                icon={<SwapOutlined />}
+                onClick={handleBatchChangeGroup}
+                disabled={selectedServerIds.length === 0}
+              >
+                批量切换分组
+              </Button>
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                onClick={handleBatchDelete}
+                disabled={selectedServerIds.length === 0}
+              >
+                批量删除
+              </Button>
             </Space>
           </Col>
         </Row>
+
+        {/* 批量操作栏 */}
+        {selectedServerIds.length > 0 && (
+          <div style={{ marginBottom: 16, padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+            <Space>
+              <span>已选中 {selectedServerIds.length} 台服务器</span>
+              <Button onClick={() => setSelectedServerIds([])}>
+                取消选择
+              </Button>
+            </Space>
+          </div>
+        )}
 
         <Table
           columns={columns}
@@ -425,80 +659,121 @@ const ServerList: React.FC = () => {
           <Form.Item
             name="name"
             label="服务器名称"
-            rules={[{ required: true, message: '请输入服务器名称' }]}
+            rules={[
+              { required: true, message: '请输入服务器名称' },
+              {
+                min: VALIDATION_RULES.name.minLength,
+                max: VALIDATION_RULES.name.maxLength,
+                message: `服务器名称长度应为${VALIDATION_RULES.name.minLength}-${VALIDATION_RULES.name.maxLength}个字符`
+              },
+            ]}
+            hasFeedback
           >
-            <Input placeholder="请输入服务器名称" />
+            <Input
+              placeholder="请输入服务器名称"
+              showCount
+              maxLength={VALIDATION_RULES.name.maxLength}
+            />
           </Form.Item>
 
           <Form.Item
             name="ipmi_ip"
             label="IPMI IP地址"
-            rules={[{ required: true, message: '请输入IPMI IP地址' }]}
+            rules={[
+              { required: true, message: '请输入IPMI地址' },
+              {
+                pattern: VALIDATION_RULES.ipmiIp.pattern,
+                message: '请输入有效的IP地址',
+              },
+            ]}
+            hasFeedback
           >
-            <Input placeholder="请输入IPMI IP地址" />
+            <Input placeholder="请输入IPMI地址（格式：192.168.1.100）" />
           </Form.Item>
 
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="ipmi_username"
-                label="IPMI用户名"
-                rules={[{ required: true, message: '请输入IPMI用户名' }]}
-              >
-                <Input placeholder="请输入IPMI用户名" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="ipmi_password"
-                label="IPMI密码"
-                rules={[{ required: true, message: '请输入IPMI密码' }]}
-              >
-                <Input.Password placeholder="请输入IPMI密码" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item
+            name="ipmi_username"
+            label="IPMI用户名"
+            rules={[
+              { required: true, message: '请输入IPMI用户名' },
+              {
+                min: VALIDATION_RULES.ipmiUsername.minLength,
+                max: VALIDATION_RULES.ipmiUsername.maxLength,
+                message: `IPMI用户名长度应为${VALIDATION_RULES.ipmiUsername.minLength}-${VALIDATION_RULES.ipmiUsername.maxLength}个字符`
+              },
+            ]}
+            hasFeedback
+          >
+            <Input
+              placeholder="请输入IPMI用户名"
+              showCount
+              maxLength={VALIDATION_RULES.ipmiUsername.maxLength}
+            />
+          </Form.Item>
 
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="ipmi_port"
-                label="IPMI端口"
-                rules={[{ required: true, message: '请输入IPMI端口' }]}
-              >
-                <InputNumber 
-                  min={1} 
-                  max={65535} 
-                  placeholder="请输入IPMI端口" 
-                  style={{ width: '100%' }}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="monitoring_enabled"
-                label="启用监控"
-                valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item
+            name="ipmi_password"
+            label={editingServer ? "IPMI密码（留空表示不修改）" : "IPMI密码"}
+            rules={[
+              ...(editingServer ? [] : [{ required: true, message: '请输入IPMI密码' }]),
+              {
+                min: VALIDATION_RULES.ipmiPassword.minLength,
+                max: VALIDATION_RULES.ipmiPassword.maxLength,
+                message: `IPMI密码长度应为${VALIDATION_RULES.ipmiPassword.minLength}-${VALIDATION_RULES.ipmiPassword.maxLength}个字符`
+              },
+            ]}
+            hasFeedback
+          >
+            <Input.Password
+              placeholder={editingServer ? "留空表示不修改密码" : "请输入IPMI密码"}
+              showCount
+              maxLength={VALIDATION_RULES.ipmiPassword.maxLength}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="ipmi_port"
+            label="IPMI端口"
+            initialValue={623}
+            rules={[
+              {
+                type: 'number',
+                min: VALIDATION_RULES.ipmiPort.min,
+                max: VALIDATION_RULES.ipmiPort.max,
+                message: `IPMI端口应为${VALIDATION_RULES.ipmiPort.min}-${VALIDATION_RULES.ipmiPort.max}之间的数字`,
+                transform: (value) => Number(value),
+              },
+            ]}
+            hasFeedback
+          >
+            <Input
+              type="number"
+              placeholder="IPMI端口，默认623"
+              min={VALIDATION_RULES.ipmiPort.min}
+              max={VALIDATION_RULES.ipmiPort.max}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="monitoring_enabled"
+            label="启用监控"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
 
           <Form.Item
             name="group_id"
-            label="分组"
+            label="所属分组"
           >
-            <Select 
-              placeholder="请选择分组" 
+            <Select
+              placeholder="请选择分组（可选）"
               allowClear
               showSearch
               optionFilterProp="children"
             >
               {groups.map(group => (
-                <Option key={group.id} value={group.id}>
-                  {group.name}
-                </Option>
+                <Option key={group.id} value={group.id}>{group.name}</Option>
               ))}
             </Select>
           </Form.Item>
@@ -506,8 +781,60 @@ const ServerList: React.FC = () => {
           <Form.Item
             name="description"
             label="描述"
+            rules={[
+              {
+                max: VALIDATION_RULES.description.maxLength,
+                message: `描述不能超过${VALIDATION_RULES.description.maxLength}个字符`
+              },
+            ]}
           >
-            <Input.TextArea placeholder="请输入描述信息" rows={3} />
+            <Input.TextArea
+              placeholder="服务器描述信息"
+              showCount
+              maxLength={VALIDATION_RULES.description.maxLength}
+              rows={3}
+            />
+          </Form.Item>
+
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit">
+                {editingServer ? '更新' : '创建'}
+              </Button>
+              <Button onClick={() => setModalVisible(false)}>
+                取消
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 分组切换模态框 */}
+      <Modal
+        title={`切换服务器分组 - ${changingGroupServer?.name}`}
+        visible={groupModalVisible}
+        onCancel={() => setGroupModalVisible(false)}
+        onOk={() => groupForm.submit()}
+        confirmLoading={batchLoading}
+        width={400}
+      >
+        <Form
+          form={groupForm}
+          layout="vertical"
+          onFinish={changingGroupServer?.id === -1 ? handleBatchGroupSubmit : handleGroupSubmit}
+        >
+          <Form.Item
+            name="group_id"
+            label="新分组"
+          >
+            <Select
+              placeholder="请选择目标分组（可选择空值设为未分组）"
+              allowClear
+            >
+              {groups.map(group => (
+                <Option key={group.id} value={group.id}>{group.name}</Option>
+              ))}
+            </Select>
           </Form.Item>
         </Form>
       </Modal>
