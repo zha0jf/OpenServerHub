@@ -3,6 +3,7 @@ import logging
 from typing import List, Optional
 import httpx
 import os
+import base64
 
 from sqlalchemy.orm import Session
 from app.models.server import Server
@@ -127,10 +128,22 @@ class GrafanaService:
     
     def __init__(self, grafana_url: Optional[str] = None, api_key: Optional[str] = None):
         self.grafana_url = grafana_url or settings.GRAFANA_URL
-        self.headers = {
-            "Authorization": f"Bearer {api_key or settings.GRAFANA_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        # 检查是否使用默认的API密钥占位符
+        grafana_api_key = api_key or settings.GRAFANA_API_KEY
+        if grafana_api_key == "your-grafana-api-key-here":
+            # 如果是默认占位符，使用基本认证（admin:admin）
+            auth_string = "admin:admin"
+            encoded_auth = base64.b64encode(auth_string.encode()).decode()
+            self.headers = {
+                "Authorization": f"Basic {encoded_auth}",
+                "Content-Type": "application/json"
+            }
+        else:
+            # 否则使用API密钥认证
+            self.headers = {
+                "Authorization": f"Bearer {grafana_api_key}",
+                "Content-Type": "application/json"
+            }
         logger.debug(f"GrafanaService初始化完成")
         logger.debug(f"Grafana URL: {self.grafana_url}")
     

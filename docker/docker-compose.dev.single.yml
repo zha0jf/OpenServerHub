@@ -104,6 +104,7 @@ services:
       - monitoring
 
   # Grafana可视化服务
+  # 注意：匿名访问仅适用于开发环境，生产环境应禁用此配置
   grafana:
     image: grafana/grafana-enterprise:12.2.1
     container_name: grafana-dev
@@ -116,6 +117,9 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SECURITY_ADMIN_USER=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - TZ=Asia/Shanghai
     restart: unless-stopped
     networks:
