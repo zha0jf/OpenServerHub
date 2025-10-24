@@ -2,41 +2,32 @@ import React, { useState, useEffect } from 'react';
 import {
   Table,
   Button,
+  Space,
+  Typography,
+  Tag,
   Modal,
   Form,
   Input,
-  InputNumber,
-  Switch,
   Select,
   message,
-  Space,
-  Tag,
-  Card,
-  Row,
-  Col,
-  Typography,
-  Divider,
   Popconfirm,
-  Tooltip,
+  Card,
   Dropdown,
   Menu,
-  Alert
 } from 'antd';
+import './ServerList.css';
 import {
   PlusOutlined,
+  PoweroffOutlined,
+  ReloadOutlined,
   EditOutlined,
   DeleteOutlined,
-  SyncOutlined,
-  PoweroffOutlined,
-  EyeOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  QuestionCircleOutlined,
-  DownOutlined,
-  SwapOutlined
+  ThunderboltOutlined,
+  SwapOutlined,
+  MoreOutlined,
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
-import { Server, CreateServerRequest, UpdateServerRequest, ServerGroup, PowerAction, BatchPowerRequest, BatchUpdateMonitoringRequest } from '../../types';
+import { Server, ServerGroup, CreateServerRequest, PowerAction, BatchPowerRequest, UpdateServerRequest } from '../../types';
 import { ColumnsType } from 'antd/es/table';
 
 const { Title } = Typography;
@@ -83,15 +74,16 @@ const VALIDATION_RULES = {
 const ServerList: React.FC = () => {
   const [servers, setServers] = useState<Server[]>([]);
   const [groups, setGroups] = useState<ServerGroup[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [changingGroupServer, setChangingGroupServer] = useState<Server | null>(null);
+  const [refreshingStatus, setRefreshingStatus] = useState<number | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [form] = Form.useForm();
   const [groupForm] = Form.useForm();
-  const [selectedServerIds, setSelectedServerIds] = useState<number[]>([]);
 
   useEffect(() => {
     loadServers();
@@ -119,13 +111,36 @@ const ServerList: React.FC = () => {
     }
   };
 
-  const handleAdd = () => {
+  const handlePowerControl = async (server: Server, action: PowerAction) => {
+    try {
+      await serverService.powerControl(server.id, action);
+      message.success(`${server.name} 电源${action}操作成功`);
+      loadServers(); // 重新加载列表
+    } catch (error) {
+      message.error('电源操作失败');
+    }
+  };
+
+  const handleUpdateStatus = async (server: Server) => {
+    try {
+      setRefreshingStatus(server.id);
+      await serverService.updateServerStatus(server.id);
+      message.success('状态更新成功');
+      loadServers();
+    } catch (error) {
+      message.error('状态更新失败');
+    } finally {
+      setRefreshingStatus(null);
+    }
+  };
+
+  const handleCreateServer = () => {
     setEditingServer(null);
     form.resetFields();
     setModalVisible(true);
   };
 
-  const handleEdit = (server: Server) => {
+  const handleEditServer = (server: Server) => {
     setEditingServer(server);
     form.setFieldsValue({
       ...server,
@@ -135,26 +150,13 @@ const ServerList: React.FC = () => {
     setModalVisible(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDeleteServer = async (server: Server) => {
     try {
-      await serverService.deleteServer(id);
+      await serverService.deleteServer(server.id);
       message.success('服务器删除成功');
       loadServers();
     } catch (error) {
       message.error('服务器删除失败');
-    }
-  };
-
-  const handleRefreshStatus = async (id: number) => {
-    try {
-      setLoading(true);
-      await serverService.updateServerStatus(id);
-      message.success('服务器状态刷新成功');
-      loadServers();
-    } catch (error) {
-      message.error('服务器状态刷新失败');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -187,25 +189,25 @@ const ServerList: React.FC = () => {
 
   // 批量切换分组
   const handleBatchChangeGroup = () => {
-    if (selectedServerIds.length === 0) {
+    if (selectedRowKeys.length === 0) {
       message.warning('请选择要操作的服务器');
       return;
     }
     
     // 设置为批量模式
-    setChangingGroupServer({ id: -1, name: `${selectedServerIds.length}台服务器` } as Server);
+    setChangingGroupServer({ id: -1, name: `${selectedRowKeys.length}台服务器` } as Server);
     groupForm.resetFields();
     setGroupModalVisible(true);
   };
 
   const handleBatchGroupSubmit = async (values: { group_id?: number }) => {
-    if (selectedServerIds.length === 0) return;
+    if (selectedRowKeys.length === 0) return;
     
     try {
       setBatchLoading(true);
       
       // 批量更新服务器分组
-      const updatePromises = selectedServerIds.map(serverId => 
+      const updatePromises = selectedRowKeys.map(serverId => 
         serverService.updateServer(serverId, {
           group_id: values.group_id || undefined
         })
@@ -217,9 +219,9 @@ const ServerList: React.FC = () => {
         ? groups.find(g => g.id === values.group_id)?.name || '未知分组'
         : '未分组';
       
-      message.success(`${selectedServerIds.length}台服务器已批量移动到 ${groupName}`);
+      message.success(`${selectedRowKeys.length}台服务器已批量移动到 ${groupName}`);
       setGroupModalVisible(false);
-      setSelectedServerIds([]);
+      setSelectedRowKeys([]);
       loadServers();
     } catch (error) {
       message.error('批量分组切换失败');
@@ -230,13 +232,15 @@ const ServerList: React.FC = () => {
 
   const handleSubmit = async (values: any) => {
     try {
+      let createdOrUpdatedServer: Server;
+      
       if (editingServer) {
         // 更新服务器
         const updateData: UpdateServerRequest = {
           ...values,
           ipmi_port: values.ipmi_port || 623
         };
-        await serverService.updateServer(editingServer.id, updateData);
+        createdOrUpdatedServer = await serverService.updateServer(editingServer.id, updateData);
         message.success('服务器更新成功');
       } else {
         // 创建服务器
@@ -244,72 +248,128 @@ const ServerList: React.FC = () => {
           ...values,
           ipmi_port: values.ipmi_port || 623
         };
-        await serverService.createServer(createData);
+        createdOrUpdatedServer = await serverService.createServer(createData);
         message.success('服务器创建成功');
       }
+      
       setModalVisible(false);
-      form.resetFields();
-      loadServers();
-    } catch (error: any) {
+      
+      // 重新加载服务器列表
+      await loadServers();
+      
+      // 自动刷新新创建或更新的服务器状态
+      try {
+        setRefreshingStatus(createdOrUpdatedServer.id);
+        message.loading('正在刷新服务器状态...', 0.5);
+        
+        await serverService.updateServerStatus(createdOrUpdatedServer.id);
+        message.success('服务器状态已自动刷新');
+        
+        // 再次加载服务器列表以获取最新状态
+        await loadServers();
+      } catch (statusError) {
+        // 状态刷新失败时给出友好提示，但不显示具体错误信息
+        message.warning('服务器保存成功，但状态刷新失败，请手动刷新状态');
+      } finally {
+        setRefreshingStatus(null);
+      }
+    } catch (error) {
       message.error(editingServer ? '服务器更新失败' : '服务器创建失败');
     }
   };
 
-  const handleBatchPower = async (action: PowerAction) => {
-    if (selectedServerIds.length === 0) {
-      message.warning('请先选择服务器');
+  // 批量操作相关函数
+  const handleBatchPowerControl = async (action: PowerAction) => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请选择要操作的服务器');
       return;
     }
 
-    try {
-      setLoading(true);
-      const result = await serverService.batchPowerControl({
-        server_ids: selectedServerIds,
-        action
-      });
-      
-      message.success(`批量${action === 'on' ? '开机' : action === 'off' ? '关机' : '重启'}操作完成`);
-      setSelectedServerIds([]);
-      loadServers();
-    } catch (error) {
-      message.error('批量电源操作失败');
-    } finally {
-      setLoading(false);
-    }
+    Modal.confirm({
+      title: `确认批量${action === 'on' ? '开机' : action === 'off' ? '关机' : action === 'restart' ? '重启' : action === 'force_restart' ? '强制重启' : '强制关机'}?`,
+      content: `将对选中的 ${selectedRowKeys.length} 台服务器执行${action === 'on' ? '开机' : action === 'off' ? '关机' : action === 'restart' ? '重启' : action === 'force_restart' ? '强制重启' : '强制关机'}操作`,
+      onOk: async () => {
+        try {
+          setBatchLoading(true);
+          const request: BatchPowerRequest = {
+            server_ids: selectedRowKeys,
+            action
+          };
+          
+          const response = await serverService.batchPowerControl(request);
+          
+          // 显示结果统计
+          message.success(
+            `批量操作完成: 成功${response.success_count}台，失败${response.failed_count}台`
+          );
+          
+          // 显示详细结果
+          if (response.failed_count > 0) {
+            const failedResults = response.results.filter(r => !r.success);
+            Modal.warning({
+              title: '部分操作失败',
+              content: (
+                <div>
+                  <p>以下服务器操作失败：</p>
+                  <ul>
+                    {failedResults.map(result => (
+                      <li key={result.server_id}>
+                        {result.server_name}: {result.error || result.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+              width: 600
+            });
+          }
+          
+          // 清除选中状态并重新加载数据
+          setSelectedRowKeys([]);
+          await loadServers();
+          
+        } catch (error) {
+          message.error('批量操作失败');
+        } finally {
+          setBatchLoading(false);
+        }
+      }
+    });
   };
 
+  // 批量更新监控状态
   const handleBatchUpdateMonitoring = async (monitoringEnabled: boolean) => {
-    if (selectedServerIds.length === 0) {
-      message.warning('请先选择服务器');
+    if (selectedRowKeys.length === 0) {
+      message.warning('请选择要操作的服务器');
       return;
     }
 
     try {
-      setLoading(true);
+      setBatchLoading(true);
       const result = await serverService.batchUpdateMonitoring({
-        server_ids: selectedServerIds,
+        server_ids: selectedRowKeys,
         monitoring_enabled: monitoringEnabled
       });
       
       message.success(`批量${monitoringEnabled ? '启用' : '禁用'}监控操作完成`);
-      setSelectedServerIds([]);
+      setSelectedRowKeys([]);
       loadServers();
     } catch (error) {
       message.error(`批量${monitoringEnabled ? '启用' : '禁用'}监控操作失败`);
     } finally {
-      setLoading(false);
+      setBatchLoading(false);
     }
   };
 
   const handleBatchDelete = async () => {
-    if (selectedServerIds.length === 0) {
+    if (selectedRowKeys.length === 0) {
       message.warning('请选择要删除的服务器');
       return;
     }
 
     Modal.confirm({
       title: '确认批量删除?',
-      content: `您确定要删除选中的 ${selectedServerIds.length} 台服务器吗？此操作不可恢复。`,
+      content: `您确定要删除选中的 ${selectedRowKeys.length} 台服务器吗？此操作不可恢复。`,
       okText: '确定',
       cancelText: '取消',
       okButtonProps: { danger: true },
@@ -321,7 +381,7 @@ const ServerList: React.FC = () => {
           const failedResults: Array<{server_name: string, error: string}> = [];
 
           // 逐个删除选中的服务器
-          for (const serverId of selectedServerIds) {
+          for (const serverId of selectedRowKeys) {
             try {
               const server = servers.find(s => s.id === serverId);
               if (server) {
@@ -343,7 +403,7 @@ const ServerList: React.FC = () => {
             message.success(`批量删除完成: 成功删除 ${successCount} 台服务器`);
           } else {
             message.warning(`批量删除完成: 成功 ${successCount} 台，失败 ${failedCount} 台`);
-
+            
             // 显示详细失败结果
             Modal.warning({
               title: '部分删除失败',
@@ -364,7 +424,7 @@ const ServerList: React.FC = () => {
           }
 
           // 清除选中状态并重新加载数据
-          setSelectedServerIds([]);
+          setSelectedRowKeys([]);
           await loadServers();
 
         } catch (error) {
@@ -376,28 +436,35 @@ const ServerList: React.FC = () => {
     });
   };
 
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (keys: React.Key[]) => {
+      setSelectedRowKeys(keys as number[]);
+    },
+    getCheckboxProps: (record: Server) => ({
+      disabled: record.status === 'error', // 错误状态的服务器不能选中
+    }),
+  };
+
   const getStatusTag = (status: string) => {
-    switch (status) {
-      case 'online':
-        return <Tag icon={<CheckCircleOutlined />} color="success">在线</Tag>;
-      case 'offline':
-        return <Tag icon={<CloseCircleOutlined />} color="error">离线</Tag>;
-      case 'error':
-        return <Tag icon={<CloseCircleOutlined />} color="error">错误</Tag>;
-      default:
-        return <Tag icon={<QuestionCircleOutlined />} color="default">未知</Tag>;
-    }
+    const statusMap = {
+      online: { color: 'green', text: '在线' },
+      offline: { color: 'red', text: '离线' },
+      unknown: { color: 'orange', text: '未知' },
+      error: { color: 'red', text: '错误' },
+    };
+    const config = statusMap[status as keyof typeof statusMap] || { color: 'default', text: status };
+    return <Tag color={config.color}>{config.text}</Tag>;
   };
 
   const getPowerStateTag = (powerState: string) => {
-    switch (powerState) {
-      case 'on':
-        return <Tag color="green">开机</Tag>;
-      case 'off':
-        return <Tag color="red">关机</Tag>;
-      default:
-        return <Tag color="default">未知</Tag>;
-    }
+    const stateMap = {
+      on: { color: 'green', text: '开机' },
+      off: { color: 'default', text: '关机' },
+      unknown: { color: 'orange', text: '未知' },
+    };
+    const config = stateMap[powerState as keyof typeof stateMap] || { color: 'default', text: powerState };
+    return <Tag color={config.color}>{config.text}</Tag>;
   };
 
   const getMonitoringTag = (enabled: boolean) => {
@@ -406,18 +473,11 @@ const ServerList: React.FC = () => {
       <Tag color="default">未启用</Tag>;
   };
 
-  const getGroupTag = (groupId: number) => {
-    if (!groupId) return <Tag color="default">未分组</Tag>;
-    const group = groups.find(g => g.id === groupId);
-    return group ? <Tag color="blue">{group.name}</Tag> : <Tag color="default">未知分组</Tag>;
-  };
-
   const columns: ColumnsType<Server> = [
     {
       title: '服务器名称',
       dataIndex: 'name',
       key: 'name',
-      sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
       title: 'IPMI地址',
@@ -425,192 +485,273 @@ const ServerList: React.FC = () => {
       key: 'ipmi_ip',
     },
     {
-      title: '状态',
+      title: '所属分组',
+      dataIndex: 'group_id',
+      key: 'group_id',
+      render: (groupId: number) => {
+        const group = groups.find(g => g.id === groupId);
+        return group ? (
+          <Tag color="blue">{group.name}</Tag>
+        ) : (
+          <Tag color="default">未分组</Tag>
+        );
+      },
+    },
+    {
+      title: 'BMC状态',
       dataIndex: 'status',
       key: 'status',
+      width: 100,
       render: (status: string) => getStatusTag(status),
-      filters: [
-        { text: '在线', value: 'online' },
-        { text: '离线', value: 'offline' },
-        { text: '错误', value: 'error' },
-        { text: '未知', value: 'unknown' },
-      ],
-      onFilter: (value, record) => record.status === value,
     },
     {
       title: '电源状态',
       dataIndex: 'power_state',
       key: 'power_state',
+      width: 100,
       render: (powerState: string) => getPowerStateTag(powerState),
-      filters: [
-        { text: '开机', value: 'on' },
-        { text: '关机', value: 'off' },
-        { text: '未知', value: 'unknown' },
-      ],
-      onFilter: (value, record) => record.power_state === value,
     },
     {
       title: '监控状态',
       dataIndex: 'monitoring_enabled',
       key: 'monitoring_enabled',
+      width: 100,
       render: (enabled: boolean) => getMonitoringTag(enabled),
-      filters: [
-        { text: '已启用', value: true },
-        { text: '未启用', value: false },
-      ],
-      onFilter: (value, record) => record.monitoring_enabled === value,
     },
     {
-      title: '分组',
-      dataIndex: 'group_id',
-      key: 'group_id',
-      render: (groupId: number) => getGroupTag(groupId),
-      filters: groups.map(group => ({ text: group.name, value: group.id })),
-      onFilter: (value, record) => record.group_id === value,
+      title: '厂商',
+      dataIndex: 'manufacturer',
+      key: 'manufacturer',
     },
     {
-      title: '最后更新',
-      dataIndex: 'updated_at',
-      key: 'updated_at',
-      render: (date: string) => new Date(date).toLocaleString(),
-      sorter: (a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime(),
+      title: '型号',
+      dataIndex: 'model',
+      key: 'model',
     },
     {
-      title: '操作',
-      key: 'action',
-      fixed: 'right',
-      width: 200,
-      render: (_, record) => (
-        <Space size="middle">
-          <Tooltip title="刷新状态">
-            <Button 
-              icon={<SyncOutlined />} 
-              onClick={() => handleRefreshStatus(record.id)}
+      title: '电源操作',
+      key: 'power_actions',
+      render: (_, server) => {
+        return (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <Space size="middle">
+              {/* 只在服务器在线且电源状态为关机时显示开机按钮 */}
+              {server.status === 'online' && server.power_state === 'off' && (
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<PoweroffOutlined />}
+                  onClick={() => handlePowerControl(server, 'on')}
+                >
+                  开机
+                </Button>
+              )}
+              
+              {/* 只在服务器在线且电源状态为开机时显示关机按钮 */}
+              {server.status === 'online' && server.power_state === 'on' && (
+                <Button
+                  size="small"
+                  icon={<PoweroffOutlined />}
+                  onClick={() => handlePowerControl(server, 'off')}
+                >
+                  关机
+                </Button>
+              )}
+              
+              {/* 只在服务器在线且电源状态为开机时显示重启按钮 */}
+              {server.status === 'online' && server.power_state === 'on' && (
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={() => handlePowerControl(server, 'restart')}
+                >
+                  重启
+                </Button>
+              )}
+              
+              {/* 更多电源操作下拉菜单 */}
+              <Dropdown
+                menu={{ 
+                  items: [
+                    // 刷新状态按钮对所有状态的服务器都显示
+                    {
+                      key: 'refresh_status',
+                      label: refreshingStatus === server.id ? '刷新中...' : '刷新状态',
+                      icon: <ReloadOutlined />,
+                      onClick: () => handleUpdateStatus(server),
+                      disabled: refreshingStatus === server.id,
+                    },
+                    // 只在服务器在线时显示强制关机按钮
+                    ...(server.status === 'online' ? [{
+                      key: 'force_off',
+                      label: '强制关机',
+                      icon: <PoweroffOutlined />,
+                      danger: true,
+                      onClick: () => handlePowerControl(server, 'force_off'),
+                    }] : []),
+                    // 只在服务器在线且电源状态为开机时显示强制重启按钮
+                    ...(server.status === 'online' && server.power_state === 'on' ? [{
+                      key: 'force_restart',
+                      label: '强制重启',
+                      icon: <ThunderboltOutlined />,
+                      danger: true,
+                      onClick: () => handlePowerControl(server, 'force_restart'),
+                    }] : []),
+                  ].filter(Boolean)
+                }}
+                trigger={['click']}
+              >
+                <Button size="small" icon={<MoreOutlined />} />
+              </Dropdown>
+            </Space>
+          </div>
+        );
+      },
+    },
+    {
+      title: '管理操作',
+      key: 'management_actions',
+      render: (_, server) => {
+        return (
+          <Space size="middle">
+            {/* 编辑按钮对所有状态的服务器都显示 */}
+            <Button
               size="small"
-            />
-          </Tooltip>
-          <Tooltip title="编辑">
-            <Button 
-              icon={<EditOutlined />} 
-              onClick={() => handleEdit(record)}
-              size="small"
-            />
-          </Tooltip>
-          <Dropdown
-            menu={{
-              items: [
-                {
-                  key: 'change_group',
-                  label: '切换分组',
-                  icon: <SwapOutlined />,
-                  onClick: () => handleChangeGroup(record),
-                },
-                {
-                  key: 'delete',
-                  label: '删除',
-                  icon: <DeleteOutlined />,
-                  danger: true,
-                  onClick: () => {
-                    Modal.confirm({
-                      title: '确定要删除这台服务器吗？',
-                      content: `您确定要删除服务器 "${record.name}" 吗？此操作不可恢复。`,
-                      okText: '确定',
-                      cancelText: '取消',
-                      onOk: () => handleDelete(record.id),
-                    });
+              icon={<EditOutlined />}
+              onClick={() => handleEditServer(server)}
+            >
+              编辑
+            </Button>
+            
+            {/* 删除按钮已从主界面移除，只保留在下拉菜单中 */}
+            
+            {/* 更多管理操作下拉菜单 */}
+            <Dropdown
+              menu={{ 
+                items: [
+                  // 切换分组按钮对所有状态的服务器都显示
+                  {
+                    key: 'change_group',
+                    label: '切换分组',
+                    icon: <SwapOutlined />,
+                    onClick: () => handleChangeGroup(server),
                   },
-                },
-              ]
-            }}
-            trigger={['click']}
-          >
-            <Button size="small">更多</Button>
-          </Dropdown>
-        </Space>
-      ),
+                  // 删除按钮添加到下拉菜单中
+                  {
+                    key: 'delete',
+                    label: '删除',
+                    icon: <DeleteOutlined />,
+                    danger: true,
+                    onClick: () => {
+                      Modal.confirm({
+                        title: '确定要删除这台服务器吗？',
+                        content: `您确定要删除服务器 "${server.name}" 吗？此操作不可恢复。`,
+                        okText: '确定',
+                        cancelText: '取消',
+                        onOk: () => handleDeleteServer(server),
+                      });
+                    },
+                  },
+                ]
+              }}
+              trigger={['click']}
+            >
+              <Button size="small" icon={<MoreOutlined />} />
+            </Dropdown>
+          </Space>
+        );
+      },
     },
   ];
-
-  const batchMonitoringMenu = (
-    <Menu>
-      <Menu.Item key="enable" onClick={() => handleBatchUpdateMonitoring(true)}>
-        启用监控
-      </Menu.Item>
-      <Menu.Item key="disable" onClick={() => handleBatchUpdateMonitoring(false)}>
-        禁用监控
-      </Menu.Item>
-    </Menu>
-  );
-
-  const batchPowerMenu = (
-    <Menu>
-      <Menu.Item key="on" onClick={() => handleBatchPower('on')}>
-        批量开机
-      </Menu.Item>
-      <Menu.Item key="off" onClick={() => handleBatchPower('off')}>
-        批量关机
-      </Menu.Item>
-      <Menu.Item key="restart" onClick={() => handleBatchPower('restart')}>
-        批量重启
-      </Menu.Item>
-    </Menu>
-  );
 
   return (
     <div>
       <Card>
-        <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-          <Col>
-            <Title level={2} style={{ margin: 0 }}>服务器管理</Title>
-          </Col>
-          <Col>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Title level={2} style={{ margin: 0 }}>服务器管理</Title>
+          <Space>
+            <Button icon={<ReloadOutlined />} onClick={loadServers}>
+              刷新
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleCreateServer}
+            >
+              添加服务器
+            </Button>
+          </Space>
+        </div>
+
+        {/* 批量操作栏 */}
+        {selectedRowKeys.length > 0 && (
+          <div style={{ marginBottom: 16, padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
             <Space>
-              <Button 
-                type="primary" 
-                icon={<PlusOutlined />} 
-                onClick={handleAdd}
+              <span>已选中 {selectedRowKeys.length} 台服务器</span>
+              <Button
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('on')}
               >
-                添加服务器
+                批量开机
               </Button>
-              <Dropdown overlay={batchPowerMenu} disabled={selectedServerIds.length === 0}>
-                <Button 
-                  icon={<PoweroffOutlined />} 
-                >
-                  批量电源操作 <DownOutlined />
-                </Button>
-              </Dropdown>
-              <Dropdown overlay={batchMonitoringMenu} disabled={selectedServerIds.length === 0}>
-                <Button 
-                  icon={<EyeOutlined />} 
-                >
-                  批量监控操作 <DownOutlined />
-                </Button>
-              </Dropdown>
+              <Button
+                icon={<PoweroffOutlined />}
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('off')}
+              >
+                批量关机
+              </Button>
+              <Button
+                icon={<ReloadOutlined />}
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('restart')}
+              >
+                批量重启
+              </Button>
+              <Button
+                danger
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('force_restart')}
+              >
+                强制重启
+              </Button>
+              <Button
+                danger
+                loading={batchLoading}
+                onClick={() => handleBatchPowerControl('force_off')}
+              >
+                强制关机
+              </Button>
               <Button
                 icon={<SwapOutlined />}
                 onClick={handleBatchChangeGroup}
-                disabled={selectedServerIds.length === 0}
               >
                 批量切换分组
+              </Button>
+              <Button
+                icon={<EyeOutlined />}
+                loading={batchLoading}
+                onClick={() => handleBatchUpdateMonitoring(true)}
+              >
+                批量启用监控
+              </Button>
+              <Button
+                icon={<EyeOutlined />}
+                loading={batchLoading}
+                onClick={() => handleBatchUpdateMonitoring(false)}
+              >
+                批量禁用监控
               </Button>
               <Button
                 danger
                 icon={<DeleteOutlined />}
                 onClick={handleBatchDelete}
-                disabled={selectedServerIds.length === 0}
               >
                 批量删除
               </Button>
-            </Space>
-          </Col>
-        </Row>
-
-        {/* 批量操作栏 */}
-        {selectedServerIds.length > 0 && (
-          <div style={{ marginBottom: 16, padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
-            <Space>
-              <span>已选中 {selectedServerIds.length} 台服务器</span>
-              <Button onClick={() => setSelectedServerIds([])}>
+              <Button onClick={() => setSelectedRowKeys([])}>
                 取消选择
               </Button>
             </Space>
@@ -620,37 +761,36 @@ const ServerList: React.FC = () => {
         <Table
           columns={columns}
           dataSource={servers}
-          loading={loading}
           rowKey="id"
-          scroll={{ x: 1200 }}
-          rowSelection={{
-            selectedRowKeys: selectedServerIds,
-            onChange: (selectedRowKeys) => {
-              setSelectedServerIds(selectedRowKeys as number[]);
-            },
-          }}
+          rowSelection={rowSelection}
+          loading={loading}
           pagination={{
-            pageSize: 10,
             showSizeChanger: true,
             showQuickJumper: true,
+            showTotal: (total, range) => `第 ${range?.[0]}-${range?.[1]} 条，共 ${total} 条记录`,
+          }}
+          style={{
+            borderSpacing: '0 4px',
+            borderCollapse: 'separate',
+          }}
+          rowClassName={(record, index) => {
+            return index % 2 === 0 ? 'table-row-even' : 'table-row-odd';
           }}
         />
       </Card>
 
       <Modal
-        title={editingServer ? "编辑服务器" : "添加服务器"}
-        visible={modalVisible}
-        onCancel={() => {
-          setModalVisible(false);
-          form.resetFields();
-        }}
-        onOk={() => form.submit()}
+        title={editingServer ? '编辑服务器' : '添加服务器'}
+        open={modalVisible}
+        onCancel={() => setModalVisible(false)}
+        footer={null}
         width={600}
       >
         <Form
           form={form}
           layout="vertical"
           onFinish={handleSubmit}
+          validateTrigger={['onChange', 'onBlur']}
           initialValues={{
             ipmi_port: 623,
             monitoring_enabled: false
@@ -661,7 +801,7 @@ const ServerList: React.FC = () => {
             label="服务器名称"
             rules={[
               { required: true, message: '请输入服务器名称' },
-              {
+              { 
                 min: VALIDATION_RULES.name.minLength,
                 max: VALIDATION_RULES.name.maxLength,
                 message: `服务器名称长度应为${VALIDATION_RULES.name.minLength}-${VALIDATION_RULES.name.maxLength}个字符`
@@ -669,7 +809,7 @@ const ServerList: React.FC = () => {
             ]}
             hasFeedback
           >
-            <Input
+            <Input 
               placeholder="请输入服务器名称"
               showCount
               maxLength={VALIDATION_RULES.name.maxLength}
@@ -680,7 +820,7 @@ const ServerList: React.FC = () => {
             name="ipmi_ip"
             label="IPMI IP地址"
             rules={[
-              { required: true, message: '请输入IPMI地址' },
+              { required: true, message: '请输入IPMI IP地址' },
               {
                 pattern: VALIDATION_RULES.ipmiIp.pattern,
                 message: '请输入有效的IP地址',
@@ -688,7 +828,7 @@ const ServerList: React.FC = () => {
             ]}
             hasFeedback
           >
-            <Input placeholder="请输入IPMI地址（格式：192.168.1.100）" />
+            <Input placeholder="请输入IPMI IP地址（格式：192.168.1.100）" />
           </Form.Item>
 
           <Form.Item
@@ -696,7 +836,7 @@ const ServerList: React.FC = () => {
             label="IPMI用户名"
             rules={[
               { required: true, message: '请输入IPMI用户名' },
-              {
+              { 
                 min: VALIDATION_RULES.ipmiUsername.minLength,
                 max: VALIDATION_RULES.ipmiUsername.maxLength,
                 message: `IPMI用户名长度应为${VALIDATION_RULES.ipmiUsername.minLength}-${VALIDATION_RULES.ipmiUsername.maxLength}个字符`
@@ -704,7 +844,7 @@ const ServerList: React.FC = () => {
             ]}
             hasFeedback
           >
-            <Input
+            <Input 
               placeholder="请输入IPMI用户名"
               showCount
               maxLength={VALIDATION_RULES.ipmiUsername.maxLength}
@@ -716,7 +856,7 @@ const ServerList: React.FC = () => {
             label={editingServer ? "IPMI密码（留空表示不修改）" : "IPMI密码"}
             rules={[
               ...(editingServer ? [] : [{ required: true, message: '请输入IPMI密码' }]),
-              {
+              { 
                 min: VALIDATION_RULES.ipmiPassword.minLength,
                 max: VALIDATION_RULES.ipmiPassword.maxLength,
                 message: `IPMI密码长度应为${VALIDATION_RULES.ipmiPassword.minLength}-${VALIDATION_RULES.ipmiPassword.maxLength}个字符`
@@ -724,7 +864,7 @@ const ServerList: React.FC = () => {
             ]}
             hasFeedback
           >
-            <Input.Password
+            <Input.Password 
               placeholder={editingServer ? "留空表示不修改密码" : "请输入IPMI密码"}
               showCount
               maxLength={VALIDATION_RULES.ipmiPassword.maxLength}
@@ -746,27 +886,27 @@ const ServerList: React.FC = () => {
             ]}
             hasFeedback
           >
-            <Input
-              type="number"
+            <Input 
+              type="number" 
               placeholder="IPMI端口，默认623"
               min={VALIDATION_RULES.ipmiPort.min}
               max={VALIDATION_RULES.ipmiPort.max}
             />
           </Form.Item>
 
-          <Form.Item
-            name="monitoring_enabled"
+          <Form.Item 
+            name="monitoring_enabled" 
             label="启用监控"
             valuePropName="checked"
           >
             <Switch />
           </Form.Item>
 
-          <Form.Item
-            name="group_id"
+          <Form.Item 
+            name="group_id" 
             label="所属分组"
           >
-            <Select
+            <Select 
               placeholder="请选择分组（可选）"
               allowClear
               showSearch
@@ -778,17 +918,17 @@ const ServerList: React.FC = () => {
             </Select>
           </Form.Item>
 
-          <Form.Item
-            name="description"
+          <Form.Item 
+            name="description" 
             label="描述"
             rules={[
-              {
+              { 
                 max: VALIDATION_RULES.description.maxLength,
                 message: `描述不能超过${VALIDATION_RULES.description.maxLength}个字符`
               },
             ]}
           >
-            <Input.TextArea
+            <Input.TextArea 
               placeholder="服务器描述信息"
               showCount
               maxLength={VALIDATION_RULES.description.maxLength}
@@ -812,10 +952,9 @@ const ServerList: React.FC = () => {
       {/* 分组切换模态框 */}
       <Modal
         title={`切换服务器分组 - ${changingGroupServer?.name}`}
-        visible={groupModalVisible}
+        open={groupModalVisible}
         onCancel={() => setGroupModalVisible(false)}
-        onOk={() => groupForm.submit()}
-        confirmLoading={batchLoading}
+        footer={null}
         width={400}
       >
         <Form
@@ -823,11 +962,11 @@ const ServerList: React.FC = () => {
           layout="vertical"
           onFinish={changingGroupServer?.id === -1 ? handleBatchGroupSubmit : handleGroupSubmit}
         >
-          <Form.Item
-            name="group_id"
+          <Form.Item 
+            name="group_id" 
             label="新分组"
           >
-            <Select
+            <Select 
               placeholder="请选择目标分组（可选择空值设为未分组）"
               allowClear
             >
@@ -835,6 +974,21 @@ const ServerList: React.FC = () => {
                 <Option key={group.id} value={group.id}>{group.name}</Option>
               ))}
             </Select>
+          </Form.Item>
+          
+          <Form.Item>
+            <Space>
+              <Button 
+                type="primary" 
+                htmlType="submit"
+                loading={changingGroupServer?.id === -1 ? batchLoading : false}
+              >
+                {changingGroupServer?.id === -1 ? '批量切换' : '确认切换'}
+              </Button>
+              <Button onClick={() => setGroupModalVisible(false)}>
+                取消
+              </Button>
+            </Space>
           </Form.Item>
         </Form>
       </Modal>

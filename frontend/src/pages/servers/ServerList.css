@@ -1,16 +1,16 @@
 /* 表格行样式 */
 .table-row-even {
-  background-color: #fafafa !important;
+  background-color: #fafafa;
 }
 
 .table-row-odd {
-  background-color: #ffffff !important;
+  background-color: #ffffff;
 }
 
 /* 表格行悬停效果 */
 .table-row-even:hover,
 .table-row-odd:hover {
-  background-color: #f5f5f5 !important;
+  background-color: #e6f7ff;
 }
 
 /* 表格列间距优化 */
