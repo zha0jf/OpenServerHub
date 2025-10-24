@@ -11,6 +11,7 @@ from app.schemas.server import ServerCreate, ServerUpdate, ServerGroupCreate, Ba
 from app.services.ipmi import IPMIService
 from app.services.monitoring import MonitoringService
 from app.services.server_monitoring import PrometheusConfigManager
+from app.services.server_monitoring_service import ServerMonitoringService
 from app.core.exceptions import ValidationError, IPMIError
 from app.core.config import settings
 import logging
@@ -22,6 +23,7 @@ class ServerService:
         self.db = db
         self.ipmi_service = IPMIService()
         self.monitoring_service = MonitoringService(db)
+        self.server_monitoring_service = ServerMonitoringService(db)
 
     def create_server(self, server_data: ServerCreate) -> Server:
         """创建服务器"""
@@ -40,6 +42,7 @@ class ServerService:
             ipmi_username=server_data.ipmi_username,
             ipmi_password=server_data.ipmi_password,
             ipmi_port=server_data.ipmi_port,
+            monitoring_enabled=server_data.monitoring_enabled,
             manufacturer=server_data.manufacturer,
             model=server_data.model,
             serial_number=server_data.serial_number,
@@ -53,8 +56,8 @@ class ServerService:
         self.db.refresh(db_server)
         
         # 异步处理监控配置（仅在启用监控时）
-        if settings.MONITORING_ENABLED:
-            asyncio.create_task(self._sync_monitoring_config())
+        if settings.MONITORING_ENABLED and bool(db_server.monitoring_enabled):
+            asyncio.create_task(self.server_monitoring_service.on_server_added(db_server))
         
         # 标记需要状态刷新（前端会调用状态刷新接口）
         logger.info(f"服务器 {db_server.id} 创建成功，建议立即刷新状态")
@@ -87,6 +90,9 @@ class ServerService:
         db_server = self.get_server(server_id)
         if not db_server:
             return None
+        
+        # 记录原始监控启用状态
+        original_monitoring_enabled = bool(db_server.monitoring_enabled)
         
         update_data = server_data.model_dump(exclude_unset=True)
         
@@ -135,8 +141,8 @@ class ServerService:
             logger.info(f"服务器 {db_server.id} IPMI信息已更新，建议立即刷新状态")
         
         # 异步处理监控配置更新（仅在启用监控时）
-        if settings.MONITORING_ENABLED:
-            asyncio.create_task(self._sync_monitoring_config())
+        if settings.MONITORING_ENABLED and (original_monitoring_enabled != bool(db_server.monitoring_enabled) or ipmi_changed):
+            asyncio.create_task(self.server_monitoring_service.on_server_updated(db_server, original_monitoring_enabled))
         
         return db_server
 
@@ -146,12 +152,15 @@ class ServerService:
         if not db_server:
             return False
         
+        # 记录服务器的监控启用状态
+        was_monitoring_enabled = bool(db_server.monitoring_enabled)
+        
         self.db.delete(db_server)
         self.db.commit()
         
         # 异步处理监控配置清理（仅在启用监控时）
-        if settings.MONITORING_ENABLED:
-            asyncio.create_task(self._sync_monitoring_config())
+        if settings.MONITORING_ENABLED and was_monitoring_enabled:
+            asyncio.create_task(self.server_monitoring_service.on_server_deleted(server_id))
         
         return True
 
@@ -392,6 +401,61 @@ class ServerService:
                     ))
                 else:
                     results.append(task_results[i])
+        
+        return results
+    
+    async def batch_update_monitoring(self, server_ids: List[int], monitoring_enabled: bool) -> List[BatchOperationResult]:
+        """批量更新服务器监控状态"""
+        results = []
+        
+        # 获取所有有效的服务器
+        servers = self.db.query(Server).filter(Server.id.in_(server_ids)).all()
+        
+        # 检查是否有不存在的服务器ID
+        found_ids = {int(str(server.id)) for server in servers}
+        missing_ids = set(server_ids) - found_ids
+        
+        # 为不存在的服务器添加错误结果
+        for missing_id in missing_ids:
+            results.append(BatchOperationResult(
+                server_id=missing_id,
+                server_name=f"服务器{missing_id}",
+                success=False,
+                message="失败",
+                error="服务器不存在"
+            ))
+        
+        # 更新每个服务器的监控状态
+        for server in servers:
+            try:
+                # 记录原始监控启用状态
+                original_monitoring_enabled = bool(server.monitoring_enabled)
+                
+                # 更新监控状态
+                setattr(server, 'monitoring_enabled', monitoring_enabled)
+                self.db.commit()
+                self.db.refresh(server)
+                
+                # 异步处理监控配置更新（仅在启用监控时）
+                if settings.MONITORING_ENABLED and original_monitoring_enabled != monitoring_enabled:
+                    asyncio.create_task(self.server_monitoring_service.on_server_updated(server, original_monitoring_enabled))
+                
+                results.append(BatchOperationResult(
+                    server_id=int(str(server.id)),
+                    server_name=str(server.name),
+                    success=True,
+                    message=f"监控状态已{'启用' if monitoring_enabled else '禁用'}"
+                ))
+                
+            except Exception as e:
+                self.db.rollback()
+                results.append(BatchOperationResult(
+                    server_id=int(str(server.id)),
+                    server_name=str(server.name),
+                    success=False,
+                    message="失败",
+                    error=str(e)
+                ))
         
         return results
     

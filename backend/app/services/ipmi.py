@@ -3,7 +3,7 @@ import json
 import logging
 import ipaddress
 import functools  # 导入 functools
-from typing import Dict, Any, Optional, Generator
+from typing import Dict, Any, Optional, Generator, List
 from pyghmi.ipmi import command
 from pyghmi.exceptions import IpmiException
 from pyghmi.ipmi.sdr import SensorReading
@@ -484,6 +484,7 @@ class IPMIService:
         except Exception as e:
             logger.error(f"IPMI操作异常 {ip}: {e}")
             raise IPMIError(f"IPMI操作失败: {str(e)}")
+    
     async def test_connection(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
         """测试IPMI连接"""
         port = self._ensure_port_is_int(port)
@@ -503,3 +504,123 @@ class IPMIService:
         except Exception as e:
             logger.error(f"IPMI操作异常 {ip}: {e}")
             return {"status": "error", "message": f"IPMI操作失败: {str(e)}"}
+    
+    async def get_users(self, ip: str, username: str, password: str, port: int = 623) -> List[Dict[str, Any]]:
+        """获取BMC用户列表"""
+        port = self._ensure_port_is_int(port)
+        try:
+            conn = await self.pool.get_connection(ip, username, password, port)
+            users = await self._run_sync_ipmi(conn.get_users)
+            return users
+        except IpmiException as e:
+            logger.error(f"获取用户列表失败 {ip}: {e}")
+            raise IPMIError(f"获取用户列表失败: {str(e)}")
+        except Exception as e:
+            logger.error(f"IPMI操作异常 {ip}: {e}")
+            raise IPMIError(f"IPMI操作失败: {str(e)}")
+    
+    async def create_user(self, ip: str, admin_username: str, admin_password: str, 
+                         new_userid: int, new_username: str, new_password: str, 
+                         priv_level: str = 'user', port: int = 623) -> bool:
+        """创建BMC用户"""
+        port = self._ensure_port_is_int(port)
+        try:
+            conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
+            
+            # 创建用户
+            await self._run_sync_ipmi(
+                conn.create_user,
+                userid=new_userid,
+                name=new_username,
+                password=new_password,
+                priv_level=priv_level
+            )
+            
+            logger.info(f"成功为服务器 {ip} 创建用户 {new_username} (ID: {new_userid})")
+            return True
+        except IpmiException as e:
+            logger.error(f"创建用户失败 {ip}: {e}")
+            raise IPMIError(f"创建用户失败: {str(e)}")
+        except Exception as e:
+            logger.error(f"IPMI操作异常 {ip}: {e}")
+            raise IPMIError(f"IPMI操作失败: {str(e)}")
+    
+    async def set_user_priv(self, ip: str, admin_username: str, admin_password: str,
+                           userid: int, priv_level: str, port: int = 623) -> bool:
+        """设置用户权限级别"""
+        port = self._ensure_port_is_int(port)
+        try:
+            conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
+            
+            # 设置用户权限
+            await self._run_sync_ipmi(
+                conn.set_user_priv,
+                userid=userid,
+                priv_level=priv_level
+            )
+            
+            logger.info(f"成功为服务器 {ip} 用户ID {userid} 设置权限为 {priv_level}")
+            return True
+        except IpmiException as e:
+            logger.error(f"设置用户权限失败 {ip}: {e}")
+            raise IPMIError(f"设置用户权限失败: {str(e)}")
+        except Exception as e:
+            logger.error(f"IPMI操作异常 {ip}: {e}")
+            raise IPMIError(f"IPMI操作失败: {str(e)}")
+    
+    async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = 623) -> bool:
+        """确保openshub监控用户存在且配置正确"""
+        try:
+            # 1. 连接到BMC
+            conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
+            
+            # 2. 获取用户列表
+            users = await self.get_users(ip, admin_username, admin_password, port)
+            
+            openshub_user = None
+            for user in users:
+                if user.get('name', '').lower() == 'openshub':
+                    openshub_user = user
+                    break
+            
+            # 3. 如果用户不存在，则创建
+            if not openshub_user:
+                # 查找可用的用户ID（通常ID 10是安全的选择）
+                new_userid = 10
+                used_ids = [user.get('id') for user in users if user.get('id') is not None]
+                while new_userid in used_ids and new_userid < 15:
+                    new_userid += 1
+                
+                if new_userid >= 15:
+                    logger.error(f"无法为服务器 {ip} 分配用户ID，用户槽位已满")
+                    return False
+                
+                await self.create_user(
+                    ip=ip,
+                    admin_username=admin_username,
+                    admin_password=admin_password,
+                    new_userid=new_userid,
+                    new_username='openshub',
+                    new_password='openshub',
+                    priv_level='user',
+                    port=port
+                )
+                logger.info(f"为服务器 {ip} 创建了 openshub 用户")
+            else:
+                # 4. 如果用户存在，验证权限
+                if openshub_user.get('priv_level', '').lower() != 'user':
+                    # 更新权限
+                    await self.set_user_priv(
+                        ip=ip,
+                        admin_username=admin_username,
+                        admin_password=admin_password,
+                        userid=openshub_user.get('id'),
+                        priv_level='user',
+                        port=port
+                    )
+                    logger.info(f"更新了服务器 {ip} 上 openshub 用户的权限")
+            
+            return True
+        except Exception as e:
+            logger.error(f"确保openshub用户失败 {ip}: {e}")
+            return False

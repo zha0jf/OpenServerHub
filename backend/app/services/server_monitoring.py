@@ -17,7 +17,7 @@ class PrometheusConfigManager:
     def __init__(self, config_path: Optional[str] = None):
         # 通过环境变量或配置文件获取配置路径，如果没有则使用默认值
         default_path = "/etc/prometheus/targets/ipmi-targets.json"
-        self.config_path = config_path or os.getenv("PROMETHEUS_TARGETS_PATH", default_path)
+        self.config_path = config_path or settings.PROMETHEUS_TARGETS_PATH or default_path
         self.reload_url = f"{settings.PROMETHEUS_URL}/-/reload"
         
         # 记录初始化信息
@@ -36,9 +36,6 @@ class PrometheusConfigManager:
             for server in servers:
                 # 处理可能为None的字段，确保转换为字符串
                 ipmi_ip = str(server.ipmi_ip) if server.ipmi_ip is not None else ""
-                ipmi_username = str(server.ipmi_username) if server.ipmi_username is not None else ""
-                ipmi_password = str(server.ipmi_password) if server.ipmi_password is not None else ""
-                ipmi_port = str(server.ipmi_port) if server.ipmi_port is not None else "623"
                 manufacturer = str(server.manufacturer) if server.manufacturer is not None else "unknown"
                 
                 # 为每个服务器生成IPMI Exporter配置
@@ -52,10 +49,10 @@ class PrometheusConfigManager:
                         "ipmi_ip": ipmi_ip,
                         "manufacturer": manufacturer,
                         "__param_target": ipmi_ip,  # 目标服务器IPMI地址作为参数传递
-                        "__param_username": ipmi_username,
-                        "__param_password": ipmi_password,
-                        "__param_port": ipmi_port,
-                        "__param_privilege": "ADMINISTRATOR"
+                        "__param_username": "openshub",
+                        "__param_password": "openshub",
+                        "__param_port": str(server.ipmi_port),
+                        "__param_privilege": "USER"
                     }
                 }
                 

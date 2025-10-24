@@ -9,6 +9,7 @@ class ServerBase(BaseModel):
     ipmi_ip: str = Field(..., description="IPMI IP地址")
     ipmi_username: str = Field(..., min_length=1, max_length=50, description="IPMI用户名")
     ipmi_port: int = Field(default=623, ge=1, le=65535, description="IPMI端口号")
+    monitoring_enabled: bool = Field(default=False, description="是否启用监控")
     manufacturer: Optional[str] = Field(None, max_length=100, description="厂商")
     model: Optional[str] = Field(None, max_length=100, description="型号")
     serial_number: Optional[str] = Field(None, max_length=100, description="序列号")
@@ -33,6 +34,7 @@ class ServerUpdate(BaseModel):
     ipmi_username: Optional[str] = Field(None, min_length=1, max_length=50)
     ipmi_password: Optional[str] = Field(None, min_length=1, max_length=128)
     ipmi_port: Optional[int] = Field(None, ge=1, le=65535)
+    monitoring_enabled: Optional[bool] = Field(None, description="是否启用监控")
     manufacturer: Optional[str] = Field(None, max_length=100)
     model: Optional[str] = Field(None, max_length=100)
     serial_number: Optional[str] = Field(None, max_length=100)
@@ -77,7 +79,7 @@ class ServerGroupResponse(ServerGroupBase):
 # 批量操作相关模式
 class BatchPowerRequest(BaseModel):
     """批量电源操作请求"""
-    server_ids: List[int] = Field(..., min_items=1, max_items=50, description="服务器ID列表")
+    server_ids: List[int] = Field(..., min_length=1, max_length=50, description="服务器ID列表")
     action: str = Field(..., description="电源操作类型: on, off, restart, force_off")
     
     @validator('action')
@@ -154,7 +156,7 @@ class NetworkScanResponse(BaseModel):
 
 class BatchImportRequest(BaseModel):
     """批量导入请求"""
-    devices: List[Dict[str, Any]] = Field(..., min_items=1, description="要导入的设备列表")
+    devices: List[Dict[str, Any]] = Field(..., min_length=1, description="要导入的设备列表")
     default_username: str = Field(default="", description="默认IPMI用户名")
     default_password: str = Field(default="", description="默认IPMI密码")
     group_id: Optional[int] = Field(None, description="目标分组ID")

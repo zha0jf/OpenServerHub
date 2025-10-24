@@ -265,3 +265,43 @@ async def batch_power_control(
         logger.error(f"批量电源操作失败: {str(e)}")
         raise HTTPException(status_code=500, detail="批量操作失败，请稍后重试")
 
+
+class BatchUpdateMonitoringRequest(BaseModel):
+    """批量更新监控状态请求"""
+    server_ids: List[int] = Field(..., min_items=1, max_items=100, description="服务器ID列表")
+    monitoring_enabled: bool = Field(..., description="监控启用状态")
+
+@router.post("/batch/monitoring", response_model=BatchPowerResponse)
+async def batch_update_monitoring(
+    request: BatchUpdateMonitoringRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(AuthService.get_current_user)
+):
+    """批量更新服务器监控状态"""
+    try:
+        server_service = ServerService(db)
+        results = await server_service.batch_update_monitoring(
+            server_ids=request.server_ids,
+            monitoring_enabled=request.monitoring_enabled
+        )
+        
+        # 统计结果
+        total_count = len(results)
+        success_count = sum(1 for r in results if r.success)
+        failed_count = total_count - success_count
+        
+        logger.info(f"批量更新监控状态完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
+        
+        return BatchPowerResponse(
+            total_count=total_count,
+            success_count=success_count,
+            failed_count=failed_count,
+            results=results
+        )
+        
+    except ValidationError as e:
+        logger.warning(f"批量更新监控状态验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        logger.error(f"批量更新监控状态失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="批量更新监控状态失败，请稍后重试")

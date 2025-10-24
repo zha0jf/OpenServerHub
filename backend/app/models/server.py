@@ -26,6 +26,9 @@ class Server(Base):
     ipmi_password = Column(String(255), nullable=False)
     ipmi_port = Column(Integer, default=623, nullable=False)
     
+    # 监控启用状态
+    monitoring_enabled = Column(Boolean, default=False, nullable=False)
+    
     # 服务器信息
     manufacturer = Column(String(50), nullable=True)
     model = Column(String(100), nullable=True)

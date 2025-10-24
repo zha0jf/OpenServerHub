@@ -34,11 +34,20 @@ graph TD
 async def on_server_added(self, server: Server) -> bool:
     """服务器添加时的监控配置处理"""
     try:
-        # 1. 同步Prometheus目标配置
+        # 1. 如果启用了监控，创建openshub用户
+        if server.monitoring_enabled:
+            await self.ipmi_service.ensure_openshub_user(
+                server.ipmi_ip,
+                server.ipmi_username,
+                server.ipmi_password,
+                server.ipmi_port
+            )
+        
+        # 2. 同步Prometheus目标配置（仅包含启用监控的服务器）
         servers = self.db.query(Server).filter(Server.monitoring_enabled == True).all()
         await self.prometheus_manager.sync_ipmi_targets(servers)
         
-        # 2. 为新服务器创建Grafana仪表板
+        # 3. 为新服务器创建Grafana仪表板
         if server.monitoring_enabled:
             await self.grafana_service.create_server_dashboard(server)
         
@@ -56,7 +65,7 @@ async def on_server_added(self, server: Server) -> bool:
 async def on_server_deleted(self, server_id: int) -> bool:
     """服务器删除时的监控配置处理"""
     try:
-        # 1. 同步Prometheus目标配置
+        # 1. 同步Prometheus目标配置（排除已删除的服务器）
         servers = self.db.query(Server).filter(
             Server.monitoring_enabled == True,
             Server.id != server_id
@@ -76,16 +85,25 @@ async def on_server_deleted(self, server_id: int) -> bool:
 当服务器信息被更新时，系统需要执行以下操作：
 
 ```python
-async def on_server_updated(self, server: Server) -> bool:
+async def on_server_updated(self, server: Server, original_monitoring_enabled: bool) -> bool:
     """服务器更新时的监控配置处理"""
     try:
+        # 如果监控状态从禁用变为启用
+        if not original_monitoring_enabled and server.monitoring_enabled:
+            # 创建openshub用户
+            await self.ipmi_service.ensure_openshub_user(
+                server.ipmi_ip,
+                server.ipmi_username,
+                server.ipmi_password,
+                server.ipmi_port
+            )
+            
+            # 创建Grafana仪表板
+            await self.grafana_service.create_server_dashboard(server)
+        
         # 如果监控状态发生变化，则同步配置
         servers = self.db.query(Server).filter(Server.monitoring_enabled == True).all()
         await self.prometheus_manager.sync_ipmi_targets(servers)
-        
-        # 如果启用了监控且没有仪表板，则创建仪表板
-        if server.monitoring_enabled:
-            await self.grafana_service.create_server_dashboard(server)
         
         logger.info(f"服务器 {server.id} 监控配置已同步")
         return True
@@ -112,17 +130,22 @@ class PrometheusConfigManager:
             # 生成目标配置
             targets = []
             for server in servers:
-                if server.monitoring_enabled:
-                    target = {
-                        "targets": [f"{server.ipmi_ip}:9290"],
-                        "labels": {
-                            "server_id": str(server.id),
-                            "server_name": server.name,
-                            "ipmi_ip": server.ipmi_ip,
-                            "manufacturer": server.manufacturer or "unknown"
-                        }
+                target = {
+                    "targets": ["ipmi-exporter:9290"],
+                    "labels": {
+                        "server_id": str(server.id),
+                        "server_name": server.name,
+                        "module": "remote",
+                        "ipmi_ip": server.ipmi_ip,
+                        "manufacturer": server.manufacturer or "unknown",
+                        "__param_target": server.ipmi_ip,
+                        "__param_username": "openshub",
+                        "__param_password": "openshub",
+                        "__param_port": str(server.ipmi_port),
+                        "__param_privilege": "USER"
                     }
-                    targets.append(target)
+                }
+                targets.append(target)
             
             # 写入配置文件
             config_data = targets
@@ -157,21 +180,18 @@ class PrometheusConfigManager:
 ```json
 [
   {
-    "targets": ["192.168.1.100:9290"],
+    "targets": ["ipmi-exporter:9290"],
     "labels": {
       "server_id": "1",
       "server_name": "server-01",
+      "module": "remote",
       "ipmi_ip": "192.168.1.100",
-      "manufacturer": "Dell"
-    }
-  },
-  {
-    "targets": ["192.168.1.101:9290"],
-    "labels": {
-      "server_id": "2",
-      "server_name": "server-02",
-      "ipmi_ip": "192.168.1.101",
-      "manufacturer": "HP"
+      "manufacturer": "Dell",
+      "__param_target": "192.168.1.100",
+      "__param_username": "openshub",
+      "__param_password": "openshub",
+      "__param_port": "623",
+      "__param_privilege": "USER"
     }
   }
 ]
@@ -404,3 +424,72 @@ async def test_config_sync():
 1. **快速恢复**: 准备配置恢复方案
 2. **降级处理**: 配置同步失败时的降级策略
 3. **监控告警**: 监控配置同步状态并告警
+
+## 11. 监控用户管理
+
+### 11.1 openshub用户创建
+```python
+# app/services/ipmi.py
+async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = 623) -> bool:
+    """确保openshub监控用户存在且配置正确"""
+    try:
+        # 1. 连接到BMC
+        conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
+        
+        # 2. 检查openshub用户是否存在
+        users = await self._run_sync_ipmi(conn.get_users)
+        
+        openshub_user = None
+        for user in users:
+            if user.get('name', '').lower() == 'openshub':
+                openshub_user = user
+                break
+        
+        # 3. 如果用户不存在，则创建
+        if not openshub_user:
+            await self._run_sync_ipmi(
+                conn.create_user,
+                userid=10,  # 分配用户ID
+                name='openshub',
+                password='openshub',
+                priv_level='user'
+            )
+            logger.info(f"为服务器 {ip} 创建了 openshub 用户")
+        else:
+            # 4. 如果用户存在，验证权限和密码
+            # 注意：IPMI协议限制，无法直接验证密码，但可以验证权限
+            if openshub_user.get('priv_level', '').lower() != 'user':
+                # 更新权限
+                await self._run_sync_ipmi(
+                    conn.set_user_priv,
+                    userid=openshub_user.get('id'),
+                    priv_level='user'
+                )
+                logger.info(f"更新了服务器 {ip} 上 openshub 用户的权限")
+        
+        return True
+    except Exception as e:
+        logger.error(f"确保openshub用户失败 {ip}: {e}")
+        return False
+```
+
+### 11.2 IPMI Exporter配置更新
+```yaml
+# monitoring/ipmi-exporter/ipmi_local.yml
+modules:
+  default:
+    # 默认配置，用于本地采集，不运行任何收集器
+    collectors: []
+  remote:
+    # 远程服务器配置
+    # 用户名和密码由Prometheus在抓取时动态提供
+    driver: "LAN_2_0"
+    username: "openshub"
+    password: "openshub"
+    privilege: "USER"
+    timeout: 30000
+    collectors:
+    - ipmi     # 核心硬件传感器数据
+    - bmc      # BMC设备信息
+    - sel      # 系统事件日志
+```

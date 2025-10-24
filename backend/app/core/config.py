@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import os
 from pydantic_settings import BaseSettings
 
@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     PROMETHEUS_URL: str = "http://prometheus:9090"
     GRAFANA_URL: str = "http://grafana:3000"
     GRAFANA_API_KEY: str = os.getenv("GRAFANA_API_KEY", "your-grafana-api-key-here")
+    PROMETHEUS_TARGETS_PATH: str = "/etc/prometheus/targets/ipmi-targets.json"
     
     class Config:
         env_file = ".env"

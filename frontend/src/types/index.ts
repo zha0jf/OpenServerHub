@@ -45,15 +45,16 @@ export interface Server {
   ipmi_ip: string;
   ipmi_username: string;
   ipmi_port: number;
-  manufacturer?: string;
-  model?: string;
-  serial_number?: string;
+  monitoring_enabled: boolean;
+  manufacturer: string | null;
+  model: string | null;
+  serial_number: string | null;
   status: 'online' | 'offline' | 'unknown' | 'error';
   power_state: 'on' | 'off' | 'unknown';
-  last_seen?: string;
-  description?: string;
-  tags?: string;
-  group_id?: number;
+  last_seen: string | null;
+  group_id: number | null;
+  description: string | null;
+  tags: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -64,12 +65,13 @@ export interface CreateServerRequest {
   ipmi_username: string;
   ipmi_password: string;
   ipmi_port?: number;
+  monitoring_enabled?: boolean;
   manufacturer?: string;
   model?: string;
   serial_number?: string;
+  group_id?: number;
   description?: string;
   tags?: string;
-  group_id?: number;
 }
 
 export interface UpdateServerRequest {
@@ -78,15 +80,15 @@ export interface UpdateServerRequest {
   ipmi_username?: string;
   ipmi_password?: string;
   ipmi_port?: number;
+  monitoring_enabled?: boolean;
   manufacturer?: string;
   model?: string;
   serial_number?: string;
+  group_id?: number;
   description?: string;
   tags?: string;
-  group_id?: number;
 }
 
-// 服务器分组类型
 export interface ServerGroup {
   id: number;
   name: string;
@@ -100,31 +102,9 @@ export interface CreateServerGroupRequest {
   description?: string;
 }
 
-// 监控相关类型
-export interface MonitoringRecord {
-  id: number;
-  server_id: number;
-  metric_type: string;
-  metric_name: string;
-  value: number;
-  unit?: string;
-  status?: string;
-  threshold_min?: number;
-  threshold_max?: number;
-  timestamp: string;
-}
-
-// API响应类型
-export interface ApiResponse<T> {
-  data?: T;
-  message?: string;
-  error?: string;
-}
-
-// 分页类型
-export interface PaginationParams {
-  skip?: number;
-  limit?: number;
+export interface UpdateServerGroupRequest {
+  name?: string;
+  description?: string;
 }
 
 // 电源控制类型
@@ -136,25 +116,18 @@ export interface PowerControlResponse {
   message: string;
 }
 
-// 批量操作类型
-export interface BatchPowerRequest {
-  server_ids: number[];
-  action: PowerAction;
-}
-
-export interface BatchOperationResult {
+// 监控记录类型
+export interface MonitoringRecord {
+  id: number;
   server_id: number;
-  server_name: string;
-  success: boolean;
-  message: string;
-  error?: string;
-}
-
-export interface BatchPowerResponse {
-  total_count: number;
-  success_count: number;
-  failed_count: number;
-  results: BatchOperationResult[];
+  metric_type: string;
+  metric_name: string;
+  value: number;
+  unit: string | null;
+  status: string | null;
+  threshold_min: number | null;
+  threshold_max: number | null;
+  timestamp: string;
 }
 
 // 集群统计类型
@@ -176,23 +149,43 @@ export interface ClusterStats {
   manufacturer_stats: Record<string, number>;
 }
 
-// 服务器分组类型
-export interface ServerGroup {
-  id: number;
-  name: string;
-  description?: string;
-  created_at: string;
-  updated_at: string;
+// 批量操作类型
+export interface BatchPowerRequest {
+  server_ids: number[];
+  action: PowerAction;
 }
 
-export interface CreateServerGroupRequest {
-  name: string;
-  description?: string;
+export interface BatchUpdateMonitoringRequest {
+  server_ids: number[];
+  monitoring_enabled: boolean;
 }
 
-export interface UpdateServerGroupRequest {
-  name?: string;
-  description?: string;
+export interface BatchOperationResult {
+  server_id: number;
+  server_name: string;
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export interface BatchPowerResponse {
+  total_count: number;
+  success_count: number;
+  failed_count: number;
+  results: BatchOperationResult[];
+}
+
+// API响应类型
+export interface ApiResponse<T> {
+  data?: T;
+  message?: string;
+  error?: string;
+}
+
+// 分页类型
+export interface PaginationParams {
+  skip?: number;
+  limit?: number;
 }
 
 // 设备发现相关类型
@@ -214,6 +207,9 @@ export interface DiscoveredDevice {
   bmc_version: string;
   accessible: boolean;
   auth_required: boolean;
+  already_exists: boolean;
+  existing_server_id?: number;
+  existing_server_name?: string;
 }
 
 export interface NetworkScanResponse {

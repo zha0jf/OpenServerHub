@@ -1,14 +1,15 @@
 import api from './api';
 import {
   Server,
-  ServerGroup,
   CreateServerRequest,
   UpdateServerRequest,
+  ServerGroup,
   CreateServerGroupRequest,
   UpdateServerGroupRequest,
   PowerAction,
   PowerControlResponse,
   BatchPowerRequest,
+  BatchUpdateMonitoringRequest,
   BatchPowerResponse,
   ClusterStats,
 } from '../types';
@@ -63,6 +64,12 @@ export const serverService = {
   // 批量电源控制
   async batchPowerControl(request: BatchPowerRequest): Promise<BatchPowerResponse> {
     const response = await api.post<BatchPowerResponse>('/servers/batch/power', request);
+    return response.data;
+  },
+
+  // 批量更新监控状态
+  async batchUpdateMonitoring(request: BatchUpdateMonitoringRequest): Promise<BatchPowerResponse> {
+    const response = await api.post<BatchPowerResponse>('/servers/batch/monitoring', request);
     return response.data;
   },
 
