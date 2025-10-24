@@ -2,7 +2,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
 from app.core.config import settings
 
 # SQLite配置（开发阶段）
@@ -20,7 +19,8 @@ async_engine = create_async_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-AsyncSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=async_engine, class_=AsyncSession)
+# 移除有问题的异步会话配置
+# AsyncSessionLocal = sessionmaker(autocommit=False, autoflush=False, class_=AsyncSession)
 
 Base = declarative_base()
 
@@ -32,7 +32,7 @@ def get_db():
     finally:
         db.close()
 
-# 异步数据库依赖
+# 异步数据库依赖 - 使用正确的实现方式
 async def get_async_db():
-    async with AsyncSessionLocal() as session:
+    async with AsyncSession(bind=async_engine) as session:
         yield session

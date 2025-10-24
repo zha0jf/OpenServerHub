@@ -8,6 +8,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# 优先使用环境变量中的数据库URL
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/openserverhub.db")
+
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal, engine
 from app.models import Base, User, UserRole, Server, ServerGroup
@@ -52,7 +55,11 @@ def init_database():
     """初始化数据库"""
     logger.info("开始初始化数据库...")
     
-    # 首先运行迁移
+    # 首先创建所有表（如果表不存在）
+    Base.metadata.create_all(bind=engine)
+    logger.info("数据库表创建完成")
+    
+    # 然后运行迁移
     run_migrations()
     
     # 创建默认管理员用户

@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # 数据库配置 (开发阶段使用SQLite)
-    DATABASE_URL: str = "sqlite:///./openshub.db"
+    # 统一使用与Docker Compose一致的路径
+    DATABASE_URL: str = "sqlite:///./data/openserverhub.db"
     
     # 安全配置
     SECRET_KEY: str = "your-secret-key-here-change-in-production"
