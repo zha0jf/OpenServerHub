@@ -27,7 +27,8 @@ class Server(Base):
     ipmi_port = Column(Integer, default=623, nullable=False)
     
     # 监控启用状态
-    monitoring_enabled = Column(Boolean, default=False, nullable=False)
+    # 为了与SQLite兼容，允许为空，但在业务逻辑中 treat NULL as false
+    monitoring_enabled = Column(Boolean, default=False, nullable=True)
     
     # 服务器信息
     manufacturer = Column(String(50), nullable=True)
