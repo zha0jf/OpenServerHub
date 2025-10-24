@@ -8,9 +8,6 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# 优先使用环境变量中的数据库URL
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/openserverhub.db")
-
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal, engine
 from app.models import Base, User, UserRole, Server, ServerGroup
@@ -18,11 +15,15 @@ from app.services.user import UserService
 from app.services.server import ServerService
 import logging
 
-# 导入Alembic相关模块
+# 导入配置和Alembic相关模块
+from app.core.config import settings
 from alembic.config import Config
 from alembic import command
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+
+# 打印实际使用的数据库路径
+print(f"INFO: 实际使用的数据库路径: {settings.DATABASE_URL}")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -54,6 +55,9 @@ def run_migrations():
 def init_database():
     """初始化数据库"""
     logger.info("开始初始化数据库...")
+    
+    # 打印引擎使用的数据库路径
+    print(f"INFO: SQLAlchemy引擎URL: {engine.url}")
     
     # 首先创建所有表（如果表不存在）
     Base.metadata.create_all(bind=engine)

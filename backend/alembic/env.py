@@ -18,6 +18,9 @@ from app.models import user, server, monitoring  # 导入所有模型
 # access to the values within the .ini file in use.
 config = context.config
 
+# 设置数据库URL为项目配置
+config.set_main_option('sqlalchemy.url', settings.DATABASE_URL)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
@@ -48,8 +51,6 @@ def run_migrations_offline() -> None:
 
     """
     url = config.get_main_option("sqlalchemy.url")
-    if url is None:
-        url = settings.DATABASE_URL
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -68,6 +69,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # 使用项目配置的数据库URL
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
