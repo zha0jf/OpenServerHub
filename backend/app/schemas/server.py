@@ -9,7 +9,7 @@ class ServerBase(BaseModel):
     ipmi_ip: str = Field(..., description="IPMI IP地址")
     ipmi_username: str = Field(..., min_length=1, max_length=50, description="IPMI用户名")
     ipmi_port: int = Field(default=623, ge=1, le=65535, description="IPMI端口号")
-    monitoring_enabled: bool = Field(default=False, description="是否启用监控")
+    monitoring_enabled: Optional[bool] = Field(default=False, description="是否启用监控")
     manufacturer: Optional[str] = Field(None, max_length=100, description="厂商")
     model: Optional[str] = Field(None, max_length=100, description="型号")
     serial_number: Optional[str] = Field(None, max_length=100, description="序列号")
