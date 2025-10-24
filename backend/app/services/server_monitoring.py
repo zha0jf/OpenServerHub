@@ -48,11 +48,8 @@ class PrometheusConfigManager:
                         "module": "remote",  # 指定使用remote模块
                         "ipmi_ip": ipmi_ip,
                         "manufacturer": manufacturer,
-                        "__param_target": ipmi_ip,  # 目标服务器IPMI地址作为参数传递
-                        "__param_username": "openshub",
-                        "__param_password": "openshub",
-                        "__param_port": str(server.ipmi_port),
-                        "__param_privilege": "USER"
+                        "__param_target": ipmi_ip  # 目标服务器IPMI地址作为参数传递
+                        # 移除用户名、密码、端口、权限等参数
                     }
                 }
                 

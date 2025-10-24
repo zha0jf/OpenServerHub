@@ -7,11 +7,7 @@
       "module": "remote",
       "ipmi_ip": "10.10.0.141",
       "manufacturer": "Supermicro",
-      "__param_target": "10.10.0.141",
-      "__param_username": "ADMIN",
-      "__param_password": "Test@123123",
-      "__param_port": "623",
-      "__param_privilege": "ADMINISTRATOR"
+      "__param_target": "10.10.0.141"
     }
   },
   {
@@ -24,11 +20,7 @@
       "module": "remote",
       "ipmi_ip": "10.10.0.94",
       "manufacturer": "skysolidiss",
-      "__param_target": "10.10.0.94",
-      "__param_username": "root",
-      "__param_password": "0penBmc",
-      "__param_port": "623",
-      "__param_privilege": "ADMINISTRATOR"
+      "__param_target": "10.10.0.94"
     }
   },
   {
@@ -41,11 +33,7 @@
       "module": "remote",
       "ipmi_ip": "10.10.0.143",
       "manufacturer": "TGXN",
-      "__param_target": "10.10.0.143",
-      "__param_username": "root",
-      "__param_password": "0penBmc",
-      "__param_port": "623",
-      "__param_privilege": "ADMINISTRATOR"
+      "__param_target": "10.10.0.143"
     }
   },
   {
@@ -58,11 +46,7 @@
       "module": "remote",
       "ipmi_ip": "10.10.0.147",
       "manufacturer": "TONGFANG",
-      "__param_target": "10.10.0.147",
-      "__param_username": "root",
-      "__param_password": "0penBmc",
-      "__param_port": "623",
-      "__param_privilege": "ADMINISTRATOR"
+      "__param_target": "10.10.0.147"
     }
   },
   {
@@ -75,11 +59,7 @@
       "module": "remote",
       "ipmi_ip": "10.10.0.248",
       "manufacturer": "Supermicro",
-      "__param_target": "10.10.0.248",
-      "__param_username": "ADMIN",
-      "__param_password": "ADMIN",
-      "__param_port": "623",
-      "__param_privilege": "ADMINISTRATOR"
+      "__param_target": "10.10.0.248"
     }
   },
   {
@@ -92,11 +72,7 @@
       "module": "remote",
       "ipmi_ip": "10.10.0.228",
       "manufacturer": "TongFang",
-      "__param_target": "10.10.0.228",
-      "__param_username": "root",
-      "__param_password": "0penBmc",
-      "__param_port": "623",
-      "__param_privilege": "ADMINISTRATOR"
+      "__param_target": "10.10.0.228"
     }
   }
 ]
