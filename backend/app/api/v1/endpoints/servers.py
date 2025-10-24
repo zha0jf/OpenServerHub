@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import logging
@@ -8,6 +8,7 @@ from app.schemas.server import ServerCreate, ServerUpdate, ServerResponse, Serve
 from app.services.server import ServerService
 from app.services.auth import AuthService
 from app.core.exceptions import ValidationError, IPMIError, NotFoundError
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ async def create_server(
 async def get_servers(
     skip: int = 0,
     limit: int = 100,
-    group_id: int = None,
+    group_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
@@ -46,7 +47,7 @@ async def get_servers(
 # 集群统计接口（必须在 /{server_id} 之前）
 @router.get("/stats", response_model=ClusterStatsResponse)
 async def get_cluster_statistics(
-    group_id: int = None,
+    group_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
@@ -268,7 +269,7 @@ async def batch_power_control(
 
 class BatchUpdateMonitoringRequest(BaseModel):
     """批量更新监控状态请求"""
-    server_ids: List[int] = Field(..., min_items=1, max_items=100, description="服务器ID列表")
+    server_ids: List[int] = Field(..., min_length=1, max_length=100, description="服务器ID列表")
     monitoring_enabled: bool = Field(..., description="监控启用状态")
 
 @router.post("/batch/monitoring", response_model=BatchPowerResponse)
