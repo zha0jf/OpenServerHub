@@ -8,12 +8,14 @@ import {
   Modal,
   Form,
   Input,
+  InputNumber,
+  Switch,
   Select,
   message,
   Popconfirm,
   Card,
   Dropdown,
-  Menu,
+  Menu
 } from 'antd';
 import './ServerList.css';
 import {
@@ -25,6 +27,7 @@ import {
   ThunderboltOutlined,
   SwapOutlined,
   MoreOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
 import { Server, ServerGroup, CreateServerRequest, PowerAction, BatchPowerRequest, UpdateServerRequest } from '../../types';
