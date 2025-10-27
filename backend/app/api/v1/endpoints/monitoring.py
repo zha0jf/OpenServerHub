@@ -36,9 +36,51 @@ async def get_server_dashboard(
         # 获取Grafana服务
         grafana_service = GrafanaService()
         
-        # 构建仪表板URL（使用默认格式）
-        # 注意：在实际应用中，应该从Grafana API获取真实的仪表板UID
-        dashboard_uid = f"server-dashboard-{server_id}"
+        # 构建预期的仪表板UID
+        expected_dashboard_uid = f"server-dashboard-{server_id}"
+        
+        # 首先尝试通过预期的UID获取仪表板信息
+        dashboard_info = await grafana_service.get_dashboard_by_uid(expected_dashboard_uid)
+        
+        if dashboard_info.get("success"):
+            logger.info(f"通过预期UID找到仪表板: {expected_dashboard_uid}")
+            return {
+                "dashboard_uid": dashboard_info.get("dashboard_uid"),
+                "dashboard_url": dashboard_info.get("dashboard_url"),
+                "server_id": server_id,
+                "server_name": server.name
+            }
+        
+        # 如果通过预期UID找不到，尝试搜索所有仪表板
+        logger.warning(f"通过预期UID {expected_dashboard_uid} 未找到仪表板，尝试搜索所有仪表板")
+        try:
+            async with httpx.AsyncClient() as client:
+                search_url = f"{grafana_service.grafana_url}/api/search"
+                response = await client.get(search_url, headers=grafana_service.headers)
+                
+                if response.status_code == 200:
+                    dashboards = response.json()
+                    logger.debug(f"找到 {len(dashboards)} 个仪表板")
+                    
+                    # 查找包含服务器ID的仪表板
+                    for dashboard in dashboards:
+                        dashboard_title = dashboard.get('title', '')
+                        if f"服务器监控 - {server.name}" in dashboard_title or f"server-{server_id}" in dashboard_title:
+                            actual_uid = dashboard.get('uid')
+                            dashboard_url = dashboard.get('url')
+                            logger.info(f"通过搜索找到匹配的仪表板: {actual_uid}")
+                            return {
+                                "dashboard_uid": actual_uid,
+                                "dashboard_url": f"{grafana_service.grafana_url}{dashboard_url}" if dashboard_url else f"{grafana_service.grafana_url}/d/{actual_uid}",
+                                "server_id": server_id,
+                                "server_name": server.name
+                            }
+        except Exception as search_error:
+            logger.warning(f"搜索仪表板失败: {search_error}")
+        
+        # 如果所有方法都失败了，记录警告并返回预期的UID
+        logger.warning(f"无法找到服务器 {server_id} 的仪表板，使用预期UID: {expected_dashboard_uid}")
+        dashboard_uid = expected_dashboard_uid
         dashboard_url = f"{grafana_service.grafana_url}/d/{dashboard_uid}"
         
         return {

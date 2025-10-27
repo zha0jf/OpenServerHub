@@ -147,6 +147,56 @@ class GrafanaService:
         logger.debug(f"GrafanaService初始化完成")
         logger.debug(f"Grafana URL: {self.grafana_url}")
     
+    async def get_dashboard_by_uid(self, dashboard_uid: str) -> dict:
+        """根据UID获取仪表板信息"""
+        logger.info(f"获取Grafana仪表板信息，UID: {dashboard_uid}")
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.grafana_url}/api/dashboards/uid/{dashboard_uid}",
+                    headers=self.headers
+                )
+                
+                logger.debug(f"Grafana API响应状态码: {response.status_code}")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"成功获取仪表板信息")
+                    logger.debug(f"仪表板详情: {result}")
+                    return {
+                        "success": True,
+                        "dashboard": result,
+                        "dashboard_uid": result.get('dashboard', {}).get('uid', dashboard_uid),
+                        "dashboard_url": f"{self.grafana_url}/d/{result.get('dashboard', {}).get('uid', dashboard_uid)}"
+                    }
+                elif response.status_code == 404:
+                    logger.info(f"仪表板不存在: {dashboard_uid}")
+                    return {
+                        "success": False,
+                        "dashboard_uid": dashboard_uid,
+                        "dashboard_url": f"{self.grafana_url}/d/{dashboard_uid}",
+                        "error": "Dashboard not found"
+                    }
+                else:
+                    logger.error(f"Grafana API错误，状态码: {response.status_code}")
+                    logger.debug(f"响应内容: {response.text}")
+                    return {
+                        "success": False,
+                        "dashboard_uid": dashboard_uid,
+                        "dashboard_url": f"{self.grafana_url}/d/{dashboard_uid}",
+                        "error": f"Grafana API error: {response.status_code}"
+                    }
+        except Exception as e:
+            logger.error(f"获取Grafana仪表板信息失败: {e}")
+            logger.exception(e)  # 记录完整的异常堆栈
+            return {
+                "success": False,
+                "dashboard_uid": dashboard_uid,
+                "dashboard_url": f"{self.grafana_url}/d/{dashboard_uid}",
+                "error": str(e)
+            }
+    
     async def create_server_dashboard(self, server: Server) -> dict:
         """为服务器创建专用监控仪表板"""
         logger.info(f"开始为服务器 {server.name} (ID: {server.id}) 创建Grafana仪表板")
@@ -194,10 +244,15 @@ class GrafanaService:
                     result = response.json()
                     logger.info(f"服务器 {server_id} 的Grafana仪表板创建成功")
                     logger.debug(f"仪表板详情: {result}")
+                    
+                    # 获取实际创建的仪表板UID
+                    actual_uid = result.get('uid', dashboard_uid)
+                    logger.info(f"仪表板实际UID: {actual_uid}, 预期UID: {dashboard_uid}")
+                    
                     return {
                         "success": True,
-                        "dashboard_uid": result.get('uid', dashboard_uid),
-                        "dashboard_url": f"{self.grafana_url}/d/{result.get('uid', dashboard_uid)}"
+                        "dashboard_uid": actual_uid,
+                        "dashboard_url": f"{self.grafana_url}/d/{actual_uid}"
                     }
                 else:
                     logger.error(f"Grafana API错误，状态码: {response.status_code}")
