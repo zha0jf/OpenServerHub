@@ -36,8 +36,12 @@ services:
       
       # 前端配置
       NODE_ENV: development
-      REACT_APP_API_URL: ""
-      REACT_APP_WS_URL: ""
+      REACT_APP_API_URL: ${REACT_APP_API_URL}
+      REACT_APP_WS_URL: ${REACT_APP_WS_URL}
+      REACT_APP_GRAFANA_URL: ${REACT_APP_GRAFANA_URL}
+      
+      # 服务器配置
+      SERVER_IP: ${SERVER_IP}
     ports:
       - "8000:8000"  # 后端API
       - "3000:3000"  # 前端开发服务器
