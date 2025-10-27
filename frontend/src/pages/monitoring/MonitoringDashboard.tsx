@@ -40,8 +40,6 @@ const MonitoringDashboard: React.FC = () => {
   useEffect(() => {
     if (selectedServerId) {
       loadMetrics();
-      // 不再使用固定的UID格式，而是从后端API获取实际的仪表板UID
-      // setDashboardUid(`server-dashboard-${selectedServerId}`);
     }
   }, [selectedServerId]);
 
@@ -267,41 +265,51 @@ const MonitoringDashboard: React.FC = () => {
             }
             key="2"
           >
-            {dashboardUid ? (
-              <div>
-                <div style={{ marginBottom: 16 }}>
-                  <h3>CPU温度</h3>
-                  <GrafanaPanel 
-                    dashboardUid={dashboardUid}
-                    panelId="1"
-                    title="CPU温度"
-                    height={300}
-                  />
+            {/* 修改部分：检查服务器是否存在且启用了监控 */}
+            {selectedServer && selectedServer.monitoring_enabled ? (
+              dashboardUid ? (
+                <div>
+                  <div style={{ marginBottom: 16 }}>
+                    <GrafanaPanel 
+                      dashboardUid={dashboardUid}
+                      panelId="1"
+                      title="CPU温度"
+                      height={300}
+                    />
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <GrafanaPanel 
+                      dashboardUid={dashboardUid}
+                      panelId="2"
+                      title="风扇转速"
+                      height={300}
+                    />
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <GrafanaPanel 
+                      dashboardUid={dashboardUid}
+                      panelId="3"
+                      title="电压"
+                      height={300}
+                    />
+                  </div>
                 </div>
-                <div style={{ marginBottom: 16 }}>
-                  <h3>风扇转速</h3>
-                  <GrafanaPanel 
-                    dashboardUid={dashboardUid}
-                    panelId="2"
-                    title="风扇转速"
-                    height={300}
-                  />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <h3>电压</h3>
-                  <GrafanaPanel 
-                    dashboardUid={dashboardUid}
-                    panelId="3"
-                    title="电压"
-                    height={300}
-                  />
-                </div>
-              </div>
+              ) : (
+                <Alert
+                  message="暂无图表数据"
+                  description="请先选择已启用监控并采集数据后再查看监控图表"
+                  type="info"
+                />
+              )
             ) : (
+              // 对于未启用监控的服务器显示提示信息
               <Alert
-                message="暂无图表数据"
-                description="请选择服务器以查看监控图表"
-                type="info"
+                message="监控未启用"
+                description={selectedServer 
+                  ? `服务器 "${selectedServer.name}" 未启用监控功能。请先在服务器管理页面启用该服务器的监控功能。` 
+                  : "请选择一个已启用监控的服务器以查看监控图表。"}
+                type="warning"
+                showIcon
               />
             )}
           </TabPane>
