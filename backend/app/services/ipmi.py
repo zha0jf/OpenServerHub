@@ -568,8 +568,32 @@ class IPMIService:
             logger.error(f"IPMI操作异常 {ip}: {e}")
             raise IPMIError(f"IPMI操作失败: {str(e)}")
     
+    async def set_user_password(self, ip: str, admin_username: str, admin_password: str,
+                               userid: int, new_password: str, port: int = 623) -> bool:
+        """设置用户密码"""
+        port = self._ensure_port_is_int(port)
+        try:
+            conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
+            
+            # 设置用户密码
+            await self._run_sync_ipmi(
+                conn.set_user_password,
+                uid=userid,
+                mode='set_password',
+                password=new_password
+            )
+            
+            logger.info(f"成功为服务器 {ip} 用户ID {userid} 设置密码")
+            return True
+        except IpmiException as e:
+            logger.error(f"设置用户密码失败 {ip}: {e}")
+            raise IPMIError(f"设置用户密码失败: {str(e)}")
+        except Exception as e:
+            logger.error(f"IPMI操作异常 {ip}: {e}")
+            raise IPMIError(f"IPMI操作失败: {str(e)}")
+    
     async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = 623) -> bool:
-        """确保openshub监控用户存在且配置正确"""
+        """确保openshub监控用户存在且配置正确，强制更新密码为新密码"""
         try:
             # 1. 连接到BMC
             conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
@@ -612,18 +636,32 @@ class IPMIService:
                     admin_password=admin_password,
                     new_userid=new_userid,
                     new_username='openshub',
-                    new_password='openshub',
+                    new_password='0penS@hub',
                     priv_level='user',
                     port=port
                 )
                 logger.info(f"为服务器 {ip} 创建了 openshub 用户")
             else:
-                # 4. 如果用户存在，验证权限
-                if isinstance(openshub_user, dict) and openshub_user.get('priv_level', '').lower() != 'user':
-                    # 获取用户ID并确保不是None
-                    user_id = openshub_user.get('id')
-                    if user_id is not None:
-                        # 更新权限
+                # 4. 如果用户存在，更新密码和权限
+                # 获取用户ID并确保不是None
+                user_id = openshub_user.get('id')
+                if user_id is not None:
+                    try:
+                        # 强制更新密码为新密码
+                        await self.set_user_password(
+                            ip=ip,
+                            admin_username=admin_username,
+                            admin_password=admin_password,
+                            userid=int(user_id),
+                            new_password='0penS@hub',
+                            port=port
+                        )
+                        logger.info(f"更新了服务器 {ip} 上 openshub 用户的密码为新密码")
+                    except Exception as e:
+                        logger.warning(f"更新openshub用户密码失败 {ip}: {e}")
+                    
+                    # 更新权限
+                    if openshub_user.get('priv_level', '').lower() != 'user':
                         await self.set_user_priv(
                             ip=ip,
                             admin_username=admin_username,

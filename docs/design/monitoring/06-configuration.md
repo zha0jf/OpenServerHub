@@ -140,7 +140,7 @@ class PrometheusConfigManager:
                         "manufacturer": server.manufacturer or "unknown",
                         "__param_target": server.ipmi_ip,
                         "__param_username": "openshub",
-                        "__param_password": "openshub",
+                        "__param_password": "0penS@hub",
                         "__param_port": str(server.ipmi_port),
                         "__param_privilege": "USER"
                     }
@@ -189,7 +189,7 @@ class PrometheusConfigManager:
       "manufacturer": "Dell",
       "__param_target": "192.168.1.100",
       "__param_username": "openshub",
-      "__param_password": "openshub",
+      "__param_password": "0penS@hub",
       "__param_port": "623",
       "__param_privilege": "USER"
     }
@@ -451,7 +451,7 @@ async def ensure_openshub_user(self, ip: str, admin_username: str, admin_passwor
                 conn.create_user,
                 userid=10,  # 分配用户ID
                 name='openshub',
-                password='openshub',
+                password='0penS@hub',
                 priv_level='user'
             )
             logger.info(f"为服务器 {ip} 创建了 openshub 用户")
@@ -485,7 +485,7 @@ modules:
     # 用户名和密码由Prometheus在抓取时动态提供
     driver: "LAN_2_0"
     username: "openshub"
-    password: "openshub"
+    password: "0penS@hub"
     privilege: "USER"
     timeout: 30000
     collectors:

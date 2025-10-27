@@ -13,7 +13,7 @@ modules:
     # 用户名和密码由Prometheus在抓取时动态提供
     driver: "LAN_2_0"
     user: "openshub"
-    pass: "openshub"
+    pass: "0penS@hub"
     privilege: "user"
     timeout: 30000
     collectors:
