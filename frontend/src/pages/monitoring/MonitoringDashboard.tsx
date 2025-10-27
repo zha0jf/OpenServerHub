@@ -268,11 +268,35 @@ const MonitoringDashboard: React.FC = () => {
             key="2"
           >
             {dashboardUid ? (
-              <GrafanaPanel 
-                dashboardUid={dashboardUid}
-                title="服务器监控图表"
-                height={600}
-              />
+              <div>
+                <div style={{ marginBottom: 16 }}>
+                  <h3>CPU温度</h3>
+                  <GrafanaPanel 
+                    dashboardUid={dashboardUid}
+                    panelId="1"
+                    title="CPU温度"
+                    height={300}
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <h3>风扇转速</h3>
+                  <GrafanaPanel 
+                    dashboardUid={dashboardUid}
+                    panelId="2"
+                    title="风扇转速"
+                    height={300}
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <h3>电压</h3>
+                  <GrafanaPanel 
+                    dashboardUid={dashboardUid}
+                    panelId="3"
+                    title="电压"
+                    height={300}
+                  />
+                </div>
+              </div>
             ) : (
               <Alert
                 message="暂无图表数据"

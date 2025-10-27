@@ -25,13 +25,15 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
     const params = new URLSearchParams({
       orgId: '1',
       refresh: '30s',
-      kiosk: 'tv'
+      kiosk: 'true'  // 使用kiosk=true而不是kiosk=tv
     });
     
     // 根据是否有panelId构建不同的URL
     if (panelId) {
+      // 使用d-solo路径显示单独的面板
       setEmbedUrl(`${grafanaUrl}/d-solo/${dashboardUid}?panelId=${panelId}&${params}`);
     } else {
+      // 如果没有指定特定面板，显示整个仪表板但使用kiosk模式
       setEmbedUrl(`${grafanaUrl}/d/${dashboardUid}?${params}`);
     }
     

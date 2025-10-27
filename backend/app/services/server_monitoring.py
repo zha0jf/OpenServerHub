@@ -279,6 +279,7 @@ class GrafanaService:
         """创建CPU温度面板"""
         logger.debug(f"创建CPU温度面板，服务器ID: {server_id}")
         return {
+            "id": 1,  # 添加面板ID
             "title": "CPU温度",
             "type": "timeseries",
             "datasource": "Prometheus",
@@ -302,6 +303,7 @@ class GrafanaService:
         """创建风扇转速面板"""
         logger.debug(f"创建风扇转速面板，服务器ID: {server_id}")
         return {
+            "id": 2,  # 添加面板ID
             "title": "风扇转速",
             "type": "timeseries",
             "datasource": "Prometheus",
@@ -323,6 +325,7 @@ class GrafanaService:
         """创建电压面板"""
         logger.debug(f"创建电压面板，服务器ID: {server_id}")
         return {
+            "id": 3,  # 添加面板ID
             "title": "电压",
             "type": "timeseries",
             "datasource": "Prometheus",
