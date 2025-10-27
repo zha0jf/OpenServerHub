@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -39,21 +39,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"停止定时任务服务失败: {e}")
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
-    description="OpenServerHub - 服务器管理平台",
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    lifespan=lifespan
-)
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
-# 设置CORS
+# 配置CORS - 统一处理开发和生产环境
+# 从环境变量获取CORS配置，如果未设置则使用默认值
+cors_origins = settings.BACKEND_CORS_ORIGINS
+if isinstance(cors_origins, str):
+    cors_origins = [origin.strip() for origin in cors_origins.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # 包含API路由

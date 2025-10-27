@@ -20,3 +20,14 @@ export const monitoringService = {
     return response.data;
   },
 };
+
+// 添加获取服务器仪表板信息的函数
+export const getServerDashboard = async (serverId: number): Promise<any> => {
+  try {
+    const response = await api.get(`/monitoring/servers/${serverId}/dashboard`);
+    return response.data;
+  } catch (error) {
+    console.error(`获取服务器 ${serverId} 的仪表板信息失败:`, error);
+    throw error;
+  }
+};

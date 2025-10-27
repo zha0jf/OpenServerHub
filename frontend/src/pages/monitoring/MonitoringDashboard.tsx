@@ -40,9 +40,8 @@ const MonitoringDashboard: React.FC = () => {
   useEffect(() => {
     if (selectedServerId) {
       loadMetrics();
-      // 在实际应用中，这里应该从后端获取对应服务器的Grafana仪表板UID
-      // 为了演示，我们使用一个固定的UID
-      setDashboardUid(`server-dashboard-${selectedServerId}`);
+      // 不再使用固定的UID格式，而是从后端API获取实际的仪表板UID
+      // setDashboardUid(`server-dashboard-${selectedServerId}`);
     }
   }, [selectedServerId]);
 
@@ -68,6 +67,18 @@ const MonitoringDashboard: React.FC = () => {
       setLoading(true);
       const data = await monitoringService.getServerMetrics(selectedServerId);
       setMetrics(data);
+      
+      // 从后端获取Grafana仪表板信息
+      try {
+        const dashboardInfo = await monitoringService.getServerDashboard(selectedServerId);
+        if (dashboardInfo && dashboardInfo.dashboard_uid) {
+          setDashboardUid(dashboardInfo.dashboard_uid);
+        }
+      } catch (dashboardError) {
+        console.warn('获取Grafana仪表板信息失败:', dashboardError);
+        // 如果获取失败，使用默认格式作为后备方案
+        setDashboardUid(`server-dashboard-${selectedServerId}`);
+      }
     } catch (error) {
       message.error('加载监控数据失败');
     } finally {

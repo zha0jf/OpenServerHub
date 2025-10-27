@@ -154,17 +154,27 @@ class GrafanaService:
         # 获取服务器ID的整数值
         server_id = int(str(server.id))
         
+        # 使用固定的仪表板UID格式，与前端保持一致
+        dashboard_uid = f"server-dashboard-{server_id}"
+        
         dashboard_json = {
             "dashboard": {
+                "id": None,
+                "uid": dashboard_uid,
                 "title": f"服务器监控 - {server.name}",
                 "tags": ["server", "hardware", "ipmi", f"server-{server_id}"],
+                "timezone": "browser",
+                "schemaVersion": 16,
+                "version": 0,
+                "refresh": "30s",
                 "panels": [
                     self._create_cpu_temperature_panel(server_id),
                     self._create_fan_speed_panel(server_id),
                     self._create_voltage_panel(server_id),
                 ]
             },
-            "overwrite": True
+            "overwrite": True,
+            "message": f"为服务器 {server.name} (ID: {server_id}) 自动创建仪表板"
         }
         
         logger.debug(f"准备创建仪表板，服务器ID: {server_id}")
@@ -186,21 +196,27 @@ class GrafanaService:
                     logger.debug(f"仪表板详情: {result}")
                     return {
                         "success": True,
-                        "dashboard_uid": result['uid'],
-                        "dashboard_url": f"{self.grafana_url}/d/{result['uid']}"
+                        "dashboard_uid": result.get('uid', dashboard_uid),
+                        "dashboard_url": f"{self.grafana_url}/d/{result.get('uid', dashboard_uid)}"
                     }
                 else:
                     logger.error(f"Grafana API错误，状态码: {response.status_code}")
                     logger.debug(f"响应内容: {response.text}")
+                    # 即使API调用失败，也返回默认的仪表板信息
                     return {
                         "success": False,
+                        "dashboard_uid": dashboard_uid,
+                        "dashboard_url": f"{self.grafana_url}/d/{dashboard_uid}",
                         "error": f"Grafana API error: {response.status_code}"
                     }
         except Exception as e:
             logger.error(f"创建Grafana仪表板失败: {e}")
             logger.exception(e)  # 记录完整的异常堆栈
+            # 即使创建失败，也返回默认的仪表板信息
             return {
                 "success": False,
+                "dashboard_uid": dashboard_uid,
+                "dashboard_url": f"{self.grafana_url}/d/{dashboard_uid}",
                 "error": str(e)
             }
     

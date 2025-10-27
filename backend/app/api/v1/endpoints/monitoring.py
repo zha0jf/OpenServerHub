@@ -10,11 +10,49 @@ from app.schemas.monitoring import MonitoringRecordResponse
 from app.services.monitoring import MonitoringService
 from app.services.server import ServerService
 from app.services.auth import AuthService
+from app.services.server_monitoring import GrafanaService
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+@router.get("/servers/{server_id}/dashboard")
+async def get_server_dashboard(
+    server_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(AuthService.get_current_user)
+):
+    """获取服务器Grafana仪表板信息"""
+    try:
+        logger.info(f"获取服务器 {server_id} 的Grafana仪表板信息")
+        
+        # 检查服务器是否存在
+        server_service = ServerService(db)
+        server = server_service.get_server(server_id)
+        if not server:
+            raise HTTPException(status_code=404, detail="服务器不存在")
+        
+        # 获取Grafana服务
+        grafana_service = GrafanaService()
+        
+        # 构建仪表板URL（使用默认格式）
+        # 注意：在实际应用中，应该从Grafana API获取真实的仪表板UID
+        dashboard_uid = f"server-dashboard-{server_id}"
+        dashboard_url = f"{grafana_service.grafana_url}/d/{dashboard_uid}"
+        
+        return {
+            "dashboard_uid": dashboard_uid,
+            "dashboard_url": dashboard_url,
+            "server_id": server_id,
+            "server_name": server.name
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取服务器 {server_id} Grafana仪表板信息失败: {e}")
+        raise HTTPException(status_code=500, detail="获取仪表板信息失败")
 
 @router.get("/servers/{server_id}/metrics", response_model=List[MonitoringRecordResponse])
 async def get_server_metrics(

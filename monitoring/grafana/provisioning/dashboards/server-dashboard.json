@@ -1,0 +1,88 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "服务器监控默认仪表板",
+    "tags": ["server", "hardware", "ipmi", "default"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU温度",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "ipmi_temperature_celsius{name=~\".*CPU.*\"}",
+            "legendFormat": "{{name}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "celsius",
+            "min": 0,
+            "max": 100
+          }
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        }
+      },
+      {
+        "id": 2,
+        "title": "风扇转速",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "ipmi_fan_speed_rpm",
+            "legendFormat": "{{name}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "rpm"
+          }
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        }
+      },
+      {
+        "id": 3,
+        "title": "电压",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "ipmi_voltage_volts",
+            "legendFormat": "{{name}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "volt"
+          }
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 8,
+          "w": 24,
+          "h": 8
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

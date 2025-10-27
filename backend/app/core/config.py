@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 import os
 from pydantic_settings import BaseSettings
 
@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8天
     ALGORITHM: str = "HS256"
     
-    # CORS配置
-    BACKEND_CORS_ORIGINS: List[str] = [
+    # CORS配置 - 支持字符串和列表两种格式
+    BACKEND_CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",  # React前端
         "http://127.0.0.1:3000",
     ]
