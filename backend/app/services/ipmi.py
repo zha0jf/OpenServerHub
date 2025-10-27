@@ -613,7 +613,7 @@ class IPMIService:
                     new_userid=new_userid,
                     new_username='openshub',
                     new_password='openshub',
-                    priv_level='user',
+                    privilege_level='user',
                     port=port
                 )
                 logger.info(f"为服务器 {ip} 创建了 openshub 用户")
@@ -629,7 +629,7 @@ class IPMIService:
                             admin_username=admin_username,
                             admin_password=admin_password,
                             userid=int(user_id),
-                            priv_level='user',
+                            privilege_level='user',
                             port=port
                         )
                         logger.info(f"更新了服务器 {ip} 上 openshub 用户的权限")
