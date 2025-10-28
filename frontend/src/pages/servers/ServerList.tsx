@@ -114,16 +114,6 @@ const ServerList: React.FC = () => {
     }
   };
 
-  const handlePowerControl = async (server: Server, action: PowerAction) => {
-    try {
-      await serverService.powerControl(server.id, action);
-      message.success(`${server.name} 电源${action}操作成功`);
-      loadServers(); // 重新加载列表
-    } catch (error) {
-      message.error('电源操作失败');
-    }
-  };
-
   const handleUpdateStatus = async (server: Server) => {
     try {
       setRefreshingStatus(server.id);
@@ -278,6 +268,16 @@ const ServerList: React.FC = () => {
       }
     } catch (error) {
       message.error(editingServer ? '服务器更新失败' : '服务器创建失败');
+    }
+  };
+
+  const handlePowerControl = async (server: Server, action: PowerAction) => {
+    try {
+      await serverService.powerControl(server.id, action);
+      message.success(`${server.name} 电源${action}操作成功`);
+      loadServers(); // 重新加载列表
+    } catch (error) {
+      message.error('电源操作失败');
     }
   };
 

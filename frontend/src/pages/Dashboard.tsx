@@ -23,11 +23,13 @@ import {
 import { serverService } from '../services/server';
 import { useAuth } from '../contexts/AuthContext';
 import { ClusterStats } from '../types';
+import { useLocation } from 'react-router-dom';
 
 const { Title } = Typography;
 
 const Dashboard: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const location = useLocation(); // 获取当前路由位置
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ClusterStats | null>(null);
   const [error, setError] = useState<string>('');
@@ -37,6 +39,13 @@ const Dashboard: React.FC = () => {
       loadDashboardData();
     }
   }, [isAuthenticated]);
+
+  // 添加路由监听，每次切换到Dashboard页面时刷新数据
+  useEffect(() => {
+    if (isAuthenticated && location.pathname === '/dashboard') {
+      loadDashboardData();
+    }
+  }, [location.pathname, isAuthenticated]);
 
   const loadDashboardData = async () => {
     if (!isAuthenticated) {
