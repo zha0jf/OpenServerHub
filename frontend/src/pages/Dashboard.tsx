@@ -56,18 +56,19 @@ const Dashboard: React.FC = () => {
     }
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadDashboardData();
-    }
-  }, [isAuthenticated, loadDashboardData]);
-
   // 添加路由监听，每次切换到Dashboard页面时刷新数据
   useEffect(() => {
     if (isAuthenticated && location.pathname === '/dashboard') {
-      loadDashboardData();
+      // 添加防抖逻辑，避免短时间内重复调用
+      const handler = setTimeout(() => {
+        loadDashboardData();
+      }, 100);
+      
+      return () => {
+        clearTimeout(handler);
+      };
     }
-  }, [location.pathname, isAuthenticated, loadDashboardData]);
+  }, [location.pathname, isAuthenticated]);
 
   if (loading) {
     return (
