@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Select,
@@ -33,17 +33,7 @@ const MonitoringDashboard: React.FC = () => {
   const [serversLoading, setServersLoading] = useState(true);
   const [dashboardUid, setDashboardUid] = useState<string>('');
 
-  useEffect(() => {
-    loadServers();
-  }, []);
-
-  useEffect(() => {
-    if (selectedServerId) {
-      loadMetrics();
-    }
-  }, [selectedServerId]);
-
-  const loadServers = async () => {
+  const loadServers = useCallback(async () => {
     try {
       setServersLoading(true);
       const data = await serverService.getServers();
@@ -56,9 +46,9 @@ const MonitoringDashboard: React.FC = () => {
     } finally {
       setServersLoading(false);
     }
-  };
+  }, [selectedServerId]);
 
-  const loadMetrics = async () => {
+  const loadMetrics = useCallback(async () => {
     if (!selectedServerId) return;
 
     try {
@@ -82,7 +72,17 @@ const MonitoringDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedServerId]);
+
+  useEffect(() => {
+    loadServers();
+  }, [loadServers]);
+
+  useEffect(() => {
+    if (selectedServerId) {
+      loadMetrics();
+    }
+  }, [selectedServerId, loadMetrics]);
 
   const handleCollectMetrics = async () => {
     if (!selectedServerId) return;

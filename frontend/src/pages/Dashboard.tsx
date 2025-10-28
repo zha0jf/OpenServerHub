@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Row,
   Col,
@@ -34,20 +34,7 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<ClusterStats | null>(null);
   const [error, setError] = useState<string>('');
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadDashboardData();
-    }
-  }, [isAuthenticated]);
-
-  // 添加路由监听，每次切换到Dashboard页面时刷新数据
-  useEffect(() => {
-    if (isAuthenticated && location.pathname === '/dashboard') {
-      loadDashboardData();
-    }
-  }, [location.pathname, isAuthenticated]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     if (!isAuthenticated) {
       setLoading(false);
       return;
@@ -67,7 +54,20 @@ const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadDashboardData();
+    }
+  }, [isAuthenticated, loadDashboardData]);
+
+  // 添加路由监听，每次切换到Dashboard页面时刷新数据
+  useEffect(() => {
+    if (isAuthenticated && location.pathname === '/dashboard') {
+      loadDashboardData();
+    }
+  }, [location.pathname, isAuthenticated, loadDashboardData]);
 
   if (loading) {
     return (
