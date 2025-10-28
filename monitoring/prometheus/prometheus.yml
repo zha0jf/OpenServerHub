@@ -34,9 +34,9 @@ scrape_configs:
     - files:
       - /etc/prometheus/targets/ipmi-targets.json
     relabel_configs:
-    - source_labels: [module]
-      target_label: __param_module
     - source_labels: [__param_target]
       target_label: instance
+    - source_labels: [module]
+      target_label: __param_module
     - target_label: __address__
       replacement: ipmi-exporter:9290
