@@ -961,7 +961,7 @@
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(ipmi_bmc_info, instance)",
+        "definition": "label_values(ipmi_bmc_info{job=\"ipmi-servers\"}, instance)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -971,7 +971,7 @@
         "name": "instance",
         "options": [],
         "query": {
-          "query": "label_values(ipmi_bmc_info, instance)",
+          "query": "label_values(ipmi_bmc_info{job=\"ipmi-servers\"}, instance)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
