@@ -30,9 +30,12 @@
 - [质量保证计划](./management/03-quality-assurance.md) - 质量控制流程
 
 ### 用户文档 (User Documentation)
-- [用户手册](./user/01-user-manual.md) - 系统使用指南
-- [管理员手册](./user/02-admin-manual.md) - 系统管理指南
-- [API文档](./user/03-api-reference.md) - API接口参考
+- [用户指南](./user/) - 系统使用指南
+  - [认证和权限](./user/01-authentication.md) - 用户登录和权限控制
+  - [服务器管理](./user/02-server-management.md) - 服务器增删改查和电源控制
+  - [集群管理](./user/03-cluster-management.md) - 服务器分组和批量操作
+  - [设备发现](./user/device-discovery-guide.md) - 自动发现网络中的服务器设备
+  - [监控系统](./user/monitoring/) - 实时监控服务器状态和性能指标
 
 ### 故障排查 (Troubleshooting)
 - [常见问题FAQ](./troubleshooting/01-faq.md) - 常见问题和解决方案

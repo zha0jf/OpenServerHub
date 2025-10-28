@@ -47,10 +47,10 @@ graph TD
 cd OpenServerHub
 
 # 启动监控系统组件
-docker-compose -f docker-compose.monitoring.yml up -d
+docker-compose -f docker/docker-compose.monitoring.yml up -d
 
 # 查看运行状态
-docker-compose -f docker-compose.monitoring.yml ps
+docker-compose -f docker/docker-compose.monitoring.yml ps
 ```
 
 #### 2.2.2 验证部署
@@ -71,9 +71,18 @@ global:
 
 scrape_configs:
   - job_name: 'ipmi-servers'
+    scrape_interval: 1m
+    metrics_path: /ipmi
     file_sd_configs:       # 文件服务发现
       - files:
-        - '/etc/prometheus/targets/ipmi-targets.json'
+        - /etc/prometheus/targets/ipmi-targets.json
+    relabel_configs:
+    - source_labels: [module]
+      target_label: __param_module
+    - source_labels: [__param_target]
+      target_label: instance
+    - target_label: __address__
+      replacement: ipmi-exporter:9290
 ```
 
 #### 2.3.2 AlertManager 配置
@@ -103,7 +112,10 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
+    access: proxy
     url: http://prometheus:9090
+    isDefault: true
+    editable: false
 ```
 
 ## 3. 监控配置管理
@@ -117,11 +129,14 @@ datasources:
 ```json
 [
   {
-    "targets": ["192.168.1.100:9290"],
+    "targets": ["ipmi-exporter:9290"],
     "labels": {
       "server_id": "1",
       "server_name": "server-01",
-      "ipmi_ip": "192.168.1.100"
+      "module": "remote",
+      "ipmi_ip": "192.168.1.100",
+      "manufacturer": "Dell",
+      "__param_target": "192.168.1.100"
     }
   }
 ]
@@ -132,6 +147,7 @@ datasources:
 1. 更新目标配置文件
 2. 通知 Prometheus 重新加载配置
 3. 为新服务器创建 Grafana 仪表板
+4. 在IPMI设备上创建openshub用户用于监控
 
 ### 3.2 IPMI Exporter 管理
 
@@ -141,7 +157,7 @@ docker run -d \
   --name ipmi-exporter-1 \
   -p 9290:9290 \
   -v /path/to/ipmi_local.yml:/config/ipmi_local.yml \
-  prometheuscommunity/ipmi-exporter:v1.4.0 \
+  prometheuscommunity/ipmi-exporter:v1.10.1 \
   --config.file=/config/ipmi_local.yml
 ```
 
@@ -157,14 +173,51 @@ docker run -d \
 ```yaml
 groups:
   - name: server_hardware
+    interval: 30s
     rules:
+      # CPU温度告警
       - alert: HighCPUTemperature
-        expr: ipmi_temperature_celsius > 80
-        for: 5m
+        expr: ipmi_temperature_celsius{name=~".*CPU.*"} > 80
+        for: 2m
         labels:
           severity: warning
+          component: cpu
         annotations:
           summary: "CPU温度过高"
+          description: "服务器 {{ $labels.server_name }} CPU温度达到 {{ $value }}°C"
+
+      # 风扇故障告警
+      - alert: FanFailure
+        expr: ipmi_fan_speed_rpm == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: fan
+        annotations:
+          summary: "风扇故障"
+          description: "服务器 {{ $labels.server_name }} 风扇停止转动"
+
+      # 服务器离线告警
+      - alert: ServerDown
+        expr: up{job="ipmi-servers"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: connectivity
+        annotations:
+          summary: "服务器离线"
+          description: "服务器 {{ $labels.server_name }} 无法连接"
+          
+      # 电压异常告警
+      - alert: VoltageAnomaly
+        expr: abs(ipmi_voltage_volts - 3.3) > 0.3
+        for: 1m
+        labels:
+          severity: warning
+          component: voltage
+        annotations:
+          summary: "电压异常"
+          description: "服务器 {{ $labels.server_name }} 电压 {{ $labels.name }} 达到 {{ $value }}V"
 ```
 
 #### 3.3.2 添加自定义规则
@@ -186,6 +239,9 @@ docker logs alertmanager
 
 # 查看 Grafana 日志
 docker logs grafana
+
+# 查看 IPMI Exporter 日志
+docker logs ipmi-exporter
 ```
 
 #### 4.1.2 日志级别配置
@@ -230,10 +286,10 @@ docker run --rm \
 #### 4.4.1 组件升级
 ```bash
 # 拉取最新镜像
-docker-compose -f docker-compose.monitoring.yml pull
+docker-compose -f docker/docker-compose.monitoring.yml pull
 
 # 重启服务
-docker-compose -f docker-compose.monitoring.yml up -d
+docker-compose -f docker/docker-compose.monitoring.yml up -d
 ```
 
 #### 4.4.2 配置升级
@@ -249,6 +305,7 @@ docker-compose -f docker-compose.monitoring.yml up -d
 2. 检查网络连接是否正常
 3. 验证目标配置文件是否正确
 4. 查看 Prometheus 日志获取错误信息
+5. 检查服务器是否启用了监控功能
 
 #### 5.1.2 告警未触发
 检查步骤:
@@ -377,23 +434,24 @@ Grafana 支持创建自定义仪表板：
 | Prometheus | 9090 | 9090 | 监控数据存储和查询 |
 | AlertManager | 9093 | 9093 | 告警处理 |
 | Grafana | 3000 | 3001 | 数据可视化 |
+| IPMI Exporter | 9290 | 9290 | IPMI数据采集 |
 
 ### 11.2 常用命令
 ```bash
 # 启动监控系统
-docker-compose -f docker-compose.monitoring.yml up -d
+docker-compose -f docker/docker-compose.monitoring.yml up -d
 
 # 停止监控系统
-docker-compose -f docker-compose.monitoring.yml down
+docker-compose -f docker/docker-compose.monitoring.yml down
 
 # 查看运行状态
-docker-compose -f docker-compose.monitoring.yml ps
+docker-compose -f docker/docker-compose.monitoring.yml ps
 
 # 查看日志
-docker-compose -f docker-compose.monitoring.yml logs -f
+docker-compose -f docker/docker-compose.monitoring.yml logs -f
 
 # 更新配置
-docker-compose -f docker-compose.monitoring.yml exec prometheus kill -HUP 1
+docker-compose -f docker/docker-compose.monitoring.yml exec prometheus kill -HUP 1
 ```
 
 ### 11.3 配置文件位置
