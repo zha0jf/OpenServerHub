@@ -520,13 +520,13 @@ class ServerService:
         
         # 基础统计
         total_servers = len(servers)
-        online_servers = sum(1 for s in servers if str(s.status) == ServerStatus.ONLINE)
-        offline_servers = sum(1 for s in servers if str(s.status) == ServerStatus.OFFLINE)
-        unknown_servers = sum(1 for s in servers if str(s.status) == ServerStatus.UNKNOWN)
+        online_servers = sum(1 for s in servers if s.status == ServerStatus.ONLINE)
+        offline_servers = sum(1 for s in servers if s.status == ServerStatus.OFFLINE)
+        unknown_servers = sum(1 for s in servers if s.status == ServerStatus.UNKNOWN)
         
         # 电源状态统计
-        power_on_servers = sum(1 for s in servers if str(s.power_state) == PowerState.ON)
-        power_off_servers = sum(1 for s in servers if str(s.power_state) == PowerState.OFF)
+        power_on_servers = sum(1 for s in servers if s.power_state == PowerState.ON)
+        power_off_servers = sum(1 for s in servers if s.power_state == PowerState.OFF)
         
         # 分组统计
         group_stats = defaultdict(lambda: {
@@ -546,16 +546,16 @@ class ServerService:
                     group_name = group.name
             
             group_stats[group_name]['total'] += 1
-            if str(server.status) == ServerStatus.ONLINE:
+            if server.status == ServerStatus.ONLINE:
                 group_stats[group_name]['online'] += 1
-            elif str(server.status) == ServerStatus.OFFLINE:
+            elif server.status == ServerStatus.OFFLINE:
                 group_stats[group_name]['offline'] += 1
             else:
                 group_stats[group_name]['unknown'] += 1
             
-            if str(server.power_state) == PowerState.ON:
+            if server.power_state == PowerState.ON:
                 group_stats[group_name]['power_on'] += 1
-            elif str(server.power_state) == PowerState.OFF:
+            elif server.power_state == PowerState.OFF:
                 group_stats[group_name]['power_off'] += 1
         
         # 厂商统计
