@@ -45,6 +45,11 @@ OpenServerHub 是一个现代化的服务器管理平台，基于 FastAPI + Reac
 - ✅ Grafana 可视化仪表板
 - ✅ 动态监控配置管理
 
+#### Week 14-16 待开发功能
+- 🔲 SOL (Serial Over LAN) 串口访问功能
+- 🔲 用户体验优化
+- 🔲 部署文档完善
+
 ## 技术栈
 
 ### 后端
@@ -187,7 +192,19 @@ OpenServerHub/
 │   ├── grafana/            # Grafana配置
 │   └── ipmi-exporter/      # IPMI Exporter配置
 ├── docs/                   # 项目文档
-│   ├── troubleshooting/     # 故障排除指南
+│   ├── design/             # 设计文档
+│   │   ├── 01-project-overview.md
+│   │   ├── 02-system-architecture.md
+│   │   ├── 03-technology-stack.md
+│   │   ├── 04-database-design.md
+│   │   ├── 05-api-design.md
+│   │   ├── 07-sol-design.md
+│   │   └── monitoring/     # 监控系统设计文档
+│   ├── development/        # 开发文档
+│   ├── deployment/         # 部署文档
+│   ├── management/         # 项目管理文档
+│   ├── troubleshooting/    # 故障排除文档
+│   └── user/               # 用户文档
 └── docker-compose.monitoring.yml  # 监控系统Docker编排
 ```
 
