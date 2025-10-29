@@ -14,8 +14,7 @@ import {
   message,
   Popconfirm,
   Card,
-  Dropdown,
-  Menu
+  Dropdown
 } from 'antd';
 import './ServerList.css';
 import {
@@ -87,6 +86,39 @@ const ServerList: React.FC = () => {
   const [batchLoading, setBatchLoading] = useState(false);
   const [form] = Form.useForm();
   const [groupForm] = Form.useForm();
+
+  // 处理访问BMC界面
+  const handleAccessBMC = (server: Server) => {
+    // 创建一个提示，告知用户即将跳转到BMC界面
+    Modal.info({
+      title: '访问BMC管理界面',
+      content: (
+        <div>
+          <p>即将在新标签页中打开服务器 {server.name} 的BMC管理界面</p>
+          <p>IP地址: {server.ipmi_ip}</p>
+          <p>用户名: <span style={{fontWeight: 'bold', color: '#1890ff'}}>{server.ipmi_username}</span></p>
+          <div style={{marginTop: '10px', padding: '10px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '4px'}}>
+            <p style={{margin: 0, color: '#52c41a'}}><strong>提示:</strong> 用户名已复制到剪贴板，密码需要手动输入</p>
+          </div>
+        </div>
+      ),
+      onOk() {
+        // 尝试将用户名复制到剪贴板
+        navigator.clipboard.writeText(server.ipmi_username).catch(() => {
+          // 如果复制失败，不影响主要功能
+        });
+        
+        // 在新标签页中打开BMC界面
+        const bmcUrl = `https://${server.ipmi_ip}`;
+        const newWindow = window.open(bmcUrl, '_blank');
+        
+        // 检查是否成功打开新标签页
+        if (!newWindow) {
+          message.error('无法打开新标签页，请检查浏览器弹窗阻止设置');
+        }
+      },
+    });
+  };
 
   useEffect(() => {
     loadServers();
@@ -626,7 +658,16 @@ const ServerList: React.FC = () => {
               编辑
             </Button>
             
-            {/* 删除按钮已从主界面移除，只保留在下拉菜单中 */}
+            {/* 访问BMC按钮 - 只对在线状态的服务器显示 */}
+            {server.status === 'online' && (
+              <Button
+                size="small"
+                icon={<EyeOutlined />}
+                onClick={() => handleAccessBMC(server)}
+              >
+                访问BMC
+              </Button>
+            )}
             
             {/* 更多管理操作下拉菜单 */}
             <Dropdown
