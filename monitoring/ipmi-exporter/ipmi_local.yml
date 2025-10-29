@@ -20,3 +20,5 @@ modules:
     - ipmi     # 核心硬件传感器数据
     - bmc      # BMC设备信息
     - sel      # 系统事件日志
+    - dcmi     # 系统功耗信息
+    - chassis  # 机箱电源状态(on/off)
