@@ -101,15 +101,20 @@ const ServerList: React.FC = () => {
             <span 
               style={{fontWeight: 'bold', color: '#1890ff', cursor: 'pointer', marginLeft: '5px', padding: '2px 4px', border: '1px dashed #1890ff', borderRadius: '4px'}}
               onClick={() => {
-                // 检查浏览器是否支持clipboard API
+                // 使用更兼容的方法复制文本
+                const textToCopy = server.ipmi_username;
+                
+                // 检查是否支持现代Clipboard API
                 if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-                  navigator.clipboard.writeText(server.ipmi_username).then(() => {
+                  navigator.clipboard.writeText(textToCopy).then(() => {
                     message.success('用户名已复制到剪贴板');
                   }).catch(() => {
-                    message.error('复制失败，请手动选择复制');
+                    // 如果现代API失败，回退到传统方法
+                    fallbackCopyTextToClipboard(textToCopy);
                   });
                 } else {
-                  message.error('浏览器不支持自动复制，请手动选择复制');
+                  // 使用传统方法
+                  fallbackCopyTextToClipboard(textToCopy);
                 }
               }}
             >
@@ -133,6 +138,35 @@ const ServerList: React.FC = () => {
         }
       },
     });
+  };
+
+  // 传统的文本复制方法，兼容性更好
+  const fallbackCopyTextToClipboard = (text: string) => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      
+      // 避免滚动到底部
+      textArea.style.top = "0";
+      textArea.style.left = "0";
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (successful) {
+        message.success('用户名已复制到剪贴板');
+      } else {
+        message.error('复制失败，请手动选择复制');
+      }
+    } catch (err) {
+      message.error('复制失败，请手动选择复制');
+    }
   };
 
   useEffect(() => {
