@@ -96,8 +96,20 @@ const MainLayout: React.FC = () => {
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider trigger={null} collapsible collapsed={collapsed}>
+    <Layout style={{ minHeight: '100vh', overflow: 'hidden' }}>
+      <Sider 
+        trigger={null} 
+        collapsible 
+        collapsed={collapsed}
+        style={{
+          position: 'fixed',
+          height: '100vh',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          overflow: 'auto',
+        }}
+      >
         <Logo collapsed={collapsed} />
         <Menu
           theme="dark"
@@ -107,7 +119,14 @@ const MainLayout: React.FC = () => {
           onClick={({ key }) => handleMenuClick(key)}
         />
       </Sider>
-      <Layout>
+      <Layout 
+        style={{
+          marginLeft: collapsed ? 80 : 200,
+          transition: 'margin-left 0.2s',
+          height: '100vh',
+          overflow: 'hidden',
+        }}
+      >
         <Header style={{ padding: 0, background: colorBgContainer }}>
           <div style={{ 
             display: 'flex', 
@@ -141,8 +160,9 @@ const MainLayout: React.FC = () => {
           style={{
             margin: '24px 16px',
             padding: 24,
-            minHeight: 280,
             background: colorBgContainer,
+            overflowY: 'auto',
+            height: 'calc(100vh - 64px - 48px)', // 减去header高度和margin
           }}
         >
           <Outlet />
