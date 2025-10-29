@@ -37,9 +37,10 @@ class ServerMonitoringService:
             servers = self.db.query(Server).filter(Server.monitoring_enabled == True).all()
             await self.prometheus_manager.sync_ipmi_targets(servers)
             
-            # 3. 为新服务器创建Grafana仪表板
-            if bool(server.monitoring_enabled):
-                await self.grafana_service.create_server_dashboard(server)
+            # 3. 不再创建Grafana仪表板，因为前端使用固定的完整IPMI仪表板
+            # 保留此注释以备将来可能切换回基于服务器的专用仪表板
+            # if bool(server.monitoring_enabled):
+            #     await self.grafana_service.create_server_dashboard(server)
             
             logger.info(f"服务器 {server.id} 监控配置已更新")
             return True
@@ -57,7 +58,8 @@ class ServerMonitoringService:
             ).all()
             await self.prometheus_manager.sync_ipmi_targets(servers)
             
-            # 2. 可以选择删除对应的Grafana仪表板
+            # 2. 不再删除Grafana仪表板，因为前端使用固定的完整IPMI仪表板
+            # 保留此注释以备将来可能切换回基于服务器的专用仪表板
             
             logger.info(f"服务器 {server_id} 监控配置已清理")
             return True
@@ -78,8 +80,9 @@ class ServerMonitoringService:
                     port=int(str(server.ipmi_port)) if server.ipmi_port is not None else 623
                 )
                 
-                # 创建Grafana仪表板
-                await self.grafana_service.create_server_dashboard(server)
+                # 不再创建Grafana仪表板，因为前端使用固定的完整IPMI仪表板
+                # 保留此注释以备将来可能切换回基于服务器的专用仪表板
+                # await self.grafana_service.create_server_dashboard(server)
             
             # 如果监控状态发生变化，则同步配置
             servers = self.db.query(Server).filter(Server.monitoring_enabled == True).all()

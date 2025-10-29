@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   Select,
@@ -31,9 +31,19 @@ const MonitoringDashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<MonitoringRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [serversLoading, setServersLoading] = useState(true);
-  const [dashboardUid, setDashboardUid] = useState<string>('');
+  const [dashboardInfo, setDashboardInfo] = useState<any>(null); // 修改：存储完整的仪表板信息
 
-  const loadServers = useCallback(async () => {
+  useEffect(() => {
+    loadServers();
+  }, []);
+
+  useEffect(() => {
+    if (selectedServerId) {
+      loadMetrics();
+    }
+  }, [selectedServerId]);
+
+  const loadServers = async () => {
     try {
       setServersLoading(true);
       const data = await serverService.getServers();
@@ -46,9 +56,9 @@ const MonitoringDashboard: React.FC = () => {
     } finally {
       setServersLoading(false);
     }
-  }, [selectedServerId]);
+  };
 
-  const loadMetrics = useCallback(async () => {
+  const loadMetrics = async () => {
     if (!selectedServerId) return;
 
     try {
@@ -56,33 +66,19 @@ const MonitoringDashboard: React.FC = () => {
       const data = await monitoringService.getServerMetrics(selectedServerId);
       setMetrics(data);
       
-      // 从后端获取Grafana仪表板信息
+      // 从后端获取Grafana仪表板信息，包括服务器状态
       try {
         const dashboardInfo = await monitoringService.getServerDashboard(selectedServerId);
-        if (dashboardInfo && dashboardInfo.dashboard_uid) {
-          setDashboardUid(dashboardInfo.dashboard_uid);
-        }
+        setDashboardInfo(dashboardInfo);
       } catch (dashboardError) {
         console.warn('获取Grafana仪表板信息失败:', dashboardError);
-        // 如果获取失败，使用默认格式作为后备方案
-        setDashboardUid(`server-dashboard-${selectedServerId}`);
       }
     } catch (error) {
       message.error('加载监控数据失败');
     } finally {
       setLoading(false);
     }
-  }, [selectedServerId]);
-
-  useEffect(() => {
-    loadServers();
-  }, [loadServers]);
-
-  useEffect(() => {
-    if (selectedServerId) {
-      loadMetrics();
-    }
-  }, [selectedServerId, loadMetrics]);
+  };
 
   const handleCollectMetrics = async () => {
     if (!selectedServerId) return;
@@ -163,6 +159,10 @@ const MonitoringDashboard: React.FC = () => {
   }, {} as Record<string, MonitoringRecord[]>);
 
   const selectedServer = servers.find(s => s.id === selectedServerId);
+
+  // 检查服务器是否离线
+  const isServerOffline = dashboardInfo?.server_status === 'offline' || 
+                         selectedServer?.status === 'offline';
 
   return (
     <div>
@@ -267,40 +267,74 @@ const MonitoringDashboard: React.FC = () => {
           >
             {/* 修改部分：检查服务器是否存在且启用了监控 */}
             {selectedServer && selectedServer.monitoring_enabled ? (
-              dashboardUid ? (
-                <div>
-                  <div style={{ marginBottom: 16 }}>
-                    <GrafanaPanel 
-                      dashboardUid={dashboardUid}
-                      panelId="1"
-                      title="CPU温度"
-                      height={300}
-                    />
-                  </div>
-                  <div style={{ marginBottom: 16 }}>
-                    <GrafanaPanel 
-                      dashboardUid={dashboardUid}
-                      panelId="2"
-                      title="风扇转速"
-                      height={300}
-                    />
-                  </div>
-                  <div style={{ marginBottom: 16 }}>
-                    <GrafanaPanel 
-                      dashboardUid={dashboardUid}
-                      panelId="3"
-                      title="电压"
-                      height={300}
-                    />
-                  </div>
+              <div>
+                {/* 添加服务器离线状态检查 */}
+                {isServerOffline && (
+                  <Alert
+                    message="服务器离线"
+                    description={`服务器 "${selectedServer.name}" 当前处于离线状态，无法获取监控数据。请检查服务器网络连接或IPMI配置。`}
+                    type="warning"
+                    style={{ marginBottom: 16 }}
+                    showIcon
+                  />
+                )}
+                
+                {/* 使用完整IPMI仪表板显示指定的图表，并传递服务器IP作为instance参数 */}
+                <div style={{ marginBottom: 16 }}>
+                  <GrafanaPanel 
+                    dashboardUid="UKjaSZf7z"
+                    panelId="4"
+                    title="风扇转速"
+                    height={300}
+                    queryParams={{ "var-instance": selectedServer.ipmi_ip }}
+                  />
                 </div>
-              ) : (
-                <Alert
-                  message="暂无图表数据"
-                  description="请先选择已启用监控并采集数据后再查看监控图表"
-                  type="info"
-                />
-              )
+                <div style={{ marginBottom: 16 }}>
+                  <GrafanaPanel 
+                    dashboardUid="UKjaSZf7z"
+                    panelId="8"
+                    title="功耗"
+                    height={300}
+                    queryParams={{ "var-instance": selectedServer.ipmi_ip }}
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <GrafanaPanel 
+                    dashboardUid="UKjaSZf7z"
+                    panelId="12"
+                    title="电耗功耗"
+                    height={300}
+                    queryParams={{ "var-instance": selectedServer.ipmi_ip }}
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <GrafanaPanel 
+                    dashboardUid="UKjaSZf7z"
+                    panelId="19"
+                    title="电压"
+                    height={300}
+                    queryParams={{ "var-instance": selectedServer.ipmi_ip }}
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <GrafanaPanel 
+                    dashboardUid="UKjaSZf7z"
+                    panelId="16"
+                    title="温度"
+                    height={300}
+                    queryParams={{ "var-instance": selectedServer.ipmi_ip }}
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <GrafanaPanel 
+                    dashboardUid="UKjaSZf7z"
+                    panelId="14"
+                    title="传感器状态"
+                    height={300}
+                    queryParams={{ "var-instance": selectedServer.ipmi_ip }}
+                  />
+                </div>
+              </div>
             ) : (
               // 对于未启用监控的服务器显示提示信息
               <Alert

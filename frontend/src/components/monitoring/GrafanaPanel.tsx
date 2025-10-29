@@ -6,13 +6,15 @@ interface GrafanaPanelProps {
   panelId?: string;
   title: string;
   height?: number;
+  queryParams?: Record<string, string>; // 新增：支持传递额外的查询参数
 }
 
 const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
   dashboardUid,
   panelId,
   title,
-  height = 400
+  height = 400,
+  queryParams = {} // 默认为空对象
 }) => {
   const [embedUrl, setEmbedUrl] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
@@ -21,27 +23,32 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
   const grafanaUrl = process.env.REACT_APP_GRAFANA_URL || 'http://localhost:3001';
 
   useEffect(() => {
-    // 构建嵌入URL参数
-    const params = new URLSearchParams({
+    // 构建基础参数
+    const baseParams = new URLSearchParams({
       orgId: '1',
       refresh: '30s',
       kiosk: 'true'  // 使用kiosk=true而不是kiosk=tv
     });
     
+    // 添加额外的查询参数
+    Object.entries(queryParams).forEach(([key, value]) => {
+      baseParams.append(key, value);
+    });
+    
     // 根据是否有panelId构建不同的URL
     if (panelId) {
       // 使用d-solo路径显示单独的面板
-      setEmbedUrl(`${grafanaUrl}/d-solo/${dashboardUid}?panelId=${panelId}&${params}`);
+      setEmbedUrl(`${grafanaUrl}/d-solo/${dashboardUid}?panelId=${panelId}&${baseParams}`);
     } else {
       // 如果没有指定特定面板，显示整个仪表板但使用kiosk模式
-      setEmbedUrl(`${grafanaUrl}/d/${dashboardUid}?${params}`);
+      setEmbedUrl(`${grafanaUrl}/d/${dashboardUid}?${baseParams}`);
     }
     
     // 简单模拟加载完成
     setTimeout(() => {
       setLoading(false);
     }, 1000);
-  }, [dashboardUid, panelId, grafanaUrl]);
+  }, [dashboardUid, panelId, grafanaUrl, queryParams]);
 
   if (loading) {
     return (
