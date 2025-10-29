@@ -96,18 +96,33 @@ const ServerList: React.FC = () => {
         <div>
           <p>即将在新标签页中打开服务器 {server.name} 的BMC管理界面</p>
           <p>IP地址: {server.ipmi_ip}</p>
-          <p>用户名: <span style={{fontWeight: 'bold', color: '#1890ff'}}>{server.ipmi_username}</span></p>
+          <p>
+            用户名: 
+            <span 
+              style={{fontWeight: 'bold', color: '#1890ff', cursor: 'pointer', marginLeft: '5px', padding: '2px 4px', border: '1px dashed #1890ff', borderRadius: '4px'}}
+              onClick={() => {
+                // 检查浏览器是否支持clipboard API
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                  navigator.clipboard.writeText(server.ipmi_username).then(() => {
+                    message.success('用户名已复制到剪贴板');
+                  }).catch(() => {
+                    message.error('复制失败，请手动选择复制');
+                  });
+                } else {
+                  message.error('浏览器不支持自动复制，请手动选择复制');
+                }
+              }}
+            >
+              {server.ipmi_username}
+            </span>
+            <span style={{marginLeft: '10px', fontSize: '12px', color: '#888'}}>(点击复制)</span>
+          </p>
           <div style={{marginTop: '10px', padding: '10px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '4px'}}>
-            <p style={{margin: 0, color: '#52c41a'}}><strong>提示:</strong> 用户名已复制到剪贴板，密码需要手动输入</p>
+            <p style={{margin: 0, color: '#52c41a'}}><strong>提示:</strong> 密码需要手动输入</p>
           </div>
         </div>
       ),
       onOk() {
-        // 尝试将用户名复制到剪贴板
-        navigator.clipboard.writeText(server.ipmi_username).catch(() => {
-          // 如果复制失败，不影响主要功能
-        });
-        
         // 在新标签页中打开BMC界面
         const bmcUrl = `https://${server.ipmi_ip}`;
         const newWindow = window.open(bmcUrl, '_blank');
