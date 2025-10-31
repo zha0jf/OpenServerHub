@@ -8,12 +8,18 @@ import {
   Button, 
   message, 
   Alert,
-  Tabs
+  Tabs,
+  Tag,
+  Row,
+  Col,
+  Descriptions
 } from 'antd';
 import { 
   ReloadOutlined, 
   LineChartOutlined,
-  BarChartOutlined
+  BarChartOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
 import { monitoringService } from '../../services/monitoring';
@@ -111,6 +117,58 @@ const MonitoringDashboard: React.FC = () => {
     }
   };
 
+  // 启用监控
+  const handleEnableMonitoring = async () => {
+    if (!selectedServerId) return;
+    
+    try {
+      setLoading(true);
+      const selectedServer = servers.find(s => s.id === selectedServerId);
+      if (!selectedServer) return;
+      
+      await serverService.batchUpdateMonitoring({
+        server_ids: [selectedServerId],
+        monitoring_enabled: true
+      });
+      
+      message.success('监控已启用');
+      // 重新加载服务器列表以更新状态
+      await loadServers();
+      // 重新加载当前指标
+      await loadMetrics();
+    } catch (error) {
+      message.error('启用监控失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 禁用监控
+  const handleDisableMonitoring = async () => {
+    if (!selectedServerId) return;
+    
+    try {
+      setLoading(true);
+      const selectedServer = servers.find(s => s.id === selectedServerId);
+      if (!selectedServer) return;
+      
+      await serverService.batchUpdateMonitoring({
+        server_ids: [selectedServerId],
+        monitoring_enabled: false
+      });
+      
+      message.success('监控已禁用');
+      // 重新加载服务器列表以更新状态
+      await loadServers();
+      // 重新加载当前指标
+      await loadMetrics();
+    } catch (error) {
+      message.error('禁用监控失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getMetricTypeDisplay = (type: string) => {
     const typeMap = {
       temperature: '温度',
@@ -130,6 +188,33 @@ const MonitoringDashboard: React.FC = () => {
     };
     const config = statusMap[status as keyof typeof statusMap] || { color: 'default', text: status };
     return <span style={{ color: config.color }}>{config.text}</span>;
+  };
+
+  const getPowerStateTag = (powerState: string) => {
+    const stateMap = {
+      on: { color: 'green', text: '开机' },
+      off: { color: 'default', text: '关机' },
+      unknown: { color: 'orange', text: '未知' },
+    };
+    const config = stateMap[powerState as keyof typeof stateMap] || { color: 'default', text: powerState };
+    return <Tag color={config.color}>{config.text}</Tag>;
+  };
+
+  const getStatusTagDisplay = (status: string) => {
+    const statusMap = {
+      online: { color: 'green', text: '在线' },
+      offline: { color: 'red', text: '离线' },
+      unknown: { color: 'orange', text: '未知' },
+      error: { color: 'red', text: '错误' },
+    };
+    const config = statusMap[status as keyof typeof statusMap] || { color: 'default', text: status };
+    return <Tag color={config.color}>{config.text}</Tag>;
+  };
+
+  const getMonitoringTag = (enabled: boolean) => {
+    return enabled ? 
+      <Tag color="blue">已启用</Tag> : 
+      <Tag color="default">未启用</Tag>;
   };
 
   const columns: ColumnsType<MonitoringRecord> = [
@@ -226,12 +311,52 @@ const MonitoringDashboard: React.FC = () => {
         </div>
 
         {selectedServer && (
-          <Alert
-            message={`当前监控服务器: ${selectedServer.name}`}
-            description={`IPMI地址: ${selectedServer.ipmi_ip} | 状态: ${selectedServer.status} | 电源状态: ${selectedServer.power_state}`}
-            type="info"
-            style={{ marginBottom: 16 }}
-          />
+          <Card style={{ marginBottom: 24 }} size="small">
+            <Descriptions 
+              title={`服务器信息: ${selectedServer.name}`} 
+              column={{ xs: 1, sm: 2, md: 3, lg: 4, xl: 4, xxl: 4 }}
+              bordered
+              size="small"
+            >
+              <Descriptions.Item label="IPMI地址">{selectedServer.ipmi_ip}</Descriptions.Item>
+              <Descriptions.Item label="BMC状态">{getStatusTagDisplay(selectedServer.status)}</Descriptions.Item>
+              <Descriptions.Item label="电源状态">{getPowerStateTag(selectedServer.power_state)}</Descriptions.Item>
+              <Descriptions.Item label="监控状态">
+                <Space>
+                  {getMonitoringTag(selectedServer.monitoring_enabled)}
+                  {selectedServer.monitoring_enabled ? (
+                    <Button 
+                      icon={<EyeInvisibleOutlined />} 
+                      onClick={handleDisableMonitoring}
+                      loading={loading}
+                      size="small"
+                      danger
+                    >
+                      禁用监控
+                    </Button>
+                  ) : (
+                    <Button 
+                      icon={<EyeOutlined />} 
+                      onClick={handleEnableMonitoring}
+                      loading={loading}
+                      size="small"
+                      type="primary"
+                    >
+                      启用监控
+                    </Button>
+                  )}
+                </Space>
+              </Descriptions.Item>
+              <Descriptions.Item label="厂商">{selectedServer.manufacturer || 'N/A'}</Descriptions.Item>
+              <Descriptions.Item label="型号">{selectedServer.model || 'N/A'}</Descriptions.Item>
+              <Descriptions.Item label="序列号">{selectedServer.serial_number || 'N/A'}</Descriptions.Item>
+              <Descriptions.Item label="分组">
+                {selectedServer.group_id ? 
+                  (servers.find(s => s.id === selectedServer.group_id)?.name || '未知分组') : 
+                  '未分组'}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
         )}
 
         <Tabs defaultActiveKey="1">
