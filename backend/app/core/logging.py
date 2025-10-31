@@ -12,6 +12,10 @@ def setup_logging():
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     
+    # 根据DEBUG环境变量确定日志级别
+    log_level = settings.LOG_LEVEL
+    console_level = "DEBUG" if os.getenv("DEBUG", "").lower() == "true" else "INFO"
+    
     logging_config = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -28,7 +32,7 @@ def setup_logging():
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
-                "level": "INFO",
+                "level": console_level,
                 "formatter": "default",
                 "stream": "ext://sys.stdout",
             },
@@ -43,7 +47,7 @@ def setup_logging():
             },
         },
         "root": {
-            "level": settings.LOG_LEVEL,
+            "level": log_level,
             "handlers": ["console", "file"],
         },
         "loggers": {

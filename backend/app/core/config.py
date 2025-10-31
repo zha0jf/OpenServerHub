@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     ]
     
     # 日志配置
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: str = "DEBUG" if os.getenv("DEBUG", "").lower() == "true" else "INFO"
     LOG_FILE: str = "logs/app.log"
     
     # IPMI配置
