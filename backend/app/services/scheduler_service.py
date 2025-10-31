@@ -120,6 +120,9 @@ class PowerStateSchedulerService:
                 except asyncio.TimeoutError:
                     logger.error("电源状态刷新任务超时")
                     return
+                except asyncio.CancelledError:
+                    logger.warning("电源状态刷新任务被取消")
+                    return
                 
                 # 统计结果
                 success_count = sum(1 for r in results if r is True)
@@ -132,6 +135,8 @@ class PowerStateSchedulerService:
                     f"总计: {len(servers)}, 耗时: {elapsed_time:.2f}秒"
                 )
                 
+        except asyncio.CancelledError:
+            logger.warning("电源状态刷新任务被取消")
         except Exception as e:
             logger.error(f"刷新所有服务器电源状态失败: {e}")
         finally:
