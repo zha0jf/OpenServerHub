@@ -87,6 +87,21 @@ const MonitoringDashboard: React.FC = () => {
     }
   };
 
+  // 仅加载监控指标数据，不加载Grafana仪表板信息
+  const loadMetricsOnly = async () => {
+    if (!selectedServerId) return;
+
+    try {
+      setLoading(true);
+      const data = await monitoringService.getServerMetrics(selectedServerId);
+      setMetrics(data);
+    } catch (error) {
+      message.error('加载监控数据失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCollectMetrics = async () => {
     if (!selectedServerId) return;
 
@@ -94,7 +109,8 @@ const MonitoringDashboard: React.FC = () => {
       setLoading(true);
       await monitoringService.collectServerMetrics(selectedServerId);
       message.success('监控数据采集成功');
-      await loadMetrics();
+      // 只重新加载监控指标数据，不加载Grafana仪表板信息
+      await loadMetricsOnly();
     } catch (error) {
       message.error('监控数据采集失败');
     } finally {
@@ -108,7 +124,8 @@ const MonitoringDashboard: React.FC = () => {
       await monitoringService.collectAllServersMetrics();
       message.success('所有服务器监控数据采集任务已启动');
       if (selectedServerId) {
-        await loadMetrics();
+        // 只重新加载监控指标数据，不加载Grafana仪表板信息
+        await loadMetricsOnly();
       }
     } catch (error) {
       message.error('启动监控数据采集任务失败');
