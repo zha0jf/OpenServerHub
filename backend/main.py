@@ -22,6 +22,10 @@ async def lifespan(app: FastAPI):
     # 启动时创建数据库表
     Base.metadata.create_all(bind=engine)
     
+    # 打印配置值用于调试
+    logger.info(f"POWER_STATE_REFRESH_ENABLED 配置值: {settings.POWER_STATE_REFRESH_ENABLED}")
+    logger.info(f"POWER_STATE_REFRESH_INTERVAL 配置值: {settings.POWER_STATE_REFRESH_INTERVAL}")
+    
     # 启动电源状态定时刷新服务（如果启用）
     if settings.POWER_STATE_REFRESH_ENABLED:
         try:
