@@ -10,7 +10,7 @@ from app.core.database import engine
 from app.core.logging import setup_logging
 from app.api.v1.api import api_router
 from app.models import Base
-from app.services import scheduler_service
+from app.services import scheduler_service, monitoring_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +22,21 @@ async def lifespan(app: FastAPI):
     # 启动时创建数据库表
     Base.metadata.create_all(bind=engine)
     
-    # 启动定时任务服务（如果启用）
+    # 启动电源状态定时刷新服务（如果启用）
     if settings.POWER_STATE_REFRESH_ENABLED:
         try:
             await scheduler_service.start()
             logger.info("电源状态定时刷新服务已启动")
         except Exception as e:
-            logger.error(f"启动定时任务服务失败: {e}")
+            logger.error(f"启动电源状态定时任务服务失败: {e}")
+    
+    # 启动监控数据采集定时任务服务（如果启用）
+    if settings.MONITORING_ENABLED:
+        try:
+            await monitoring_scheduler.monitoring_scheduler_service.start()
+            logger.info("监控数据采集定时任务服务已启动")
+        except Exception as e:
+            logger.error(f"启动监控数据采集定时任务服务失败: {e}")
     
     yield
     
@@ -37,7 +45,13 @@ async def lifespan(app: FastAPI):
         await scheduler_service.stop()
         logger.info("电源状态定时刷新服务已停止")
     except Exception as e:
-        logger.error(f"停止定时任务服务失败: {e}")
+        logger.error(f"停止电源状态定时任务服务失败: {e}")
+        
+    try:
+        await monitoring_scheduler.monitoring_scheduler_service.stop()
+        logger.info("监控数据采集定时任务服务已停止")
+    except Exception as e:
+        logger.error(f"停止监控数据采集定时任务服务失败: {e}")
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
@@ -93,10 +107,14 @@ async def health_check():
 async def get_scheduler_status():
     """获取定时任务状态"""
     try:
-        status = scheduler_service.get_status()
+        power_status = scheduler_service.get_status()
+        monitoring_status = monitoring_scheduler.monitoring_scheduler_service.get_status()
         return {
             "success": True,
-            "data": status
+            "data": {
+                "power_state_scheduler": power_status,
+                "monitoring_scheduler": monitoring_status
+            }
         }
     except Exception as e:
         logger.error(f"获取定时任务状态失败: {e}")
@@ -116,6 +134,28 @@ async def manual_refresh_power_state():
         }
     except Exception as e:
         logger.error(f"手动刷新电源状态失败: {e}")
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
+@app.post("/api/v1/scheduler/collect-monitoring-data")
+async def manual_collect_monitoring_data():
+    """手动采集所有服务器监控数据"""
+    try:
+        if not settings.MONITORING_ENABLED:
+            return {
+                "success": False,
+                "message": "监控功能未启用"
+            }
+            
+        await monitoring_scheduler.monitoring_scheduler_service.collect_all_servers_metrics()
+        return {
+            "success": True,
+            "message": "监控数据采集任务已提交"
+        }
+    except Exception as e:
+        logger.error(f"手动采集监控数据失败: {e}")
         return {
             "success": False,
             "message": str(e)

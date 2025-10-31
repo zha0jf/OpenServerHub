@@ -1,4 +1,4 @@
- @echo off
+@echo off
 REM 单容器开发环境快速启动脚本（Windows）
 
 setlocal enabledelayedexpansion
@@ -169,7 +169,7 @@ set TEMP_ENV_FILE=%SCRIPT_DIR%\.env.temp
     echo REACT_APP_WS_URL=ws://%%SERVER_IP%%:8000
     echo REACT_APP_GRAFANA_URL=http://%%SERVER_IP%%:3001
     echo CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://%%SERVER_IP%%:3000,http://%%SERVER_IP%%:3001
-    echo DATABASE_URL=sqlite:///./openserverhub.db
+    echo DATABASE_URL=sqlite:///./data/openserverhub.db
     echo SECRET_KEY=your-secret-key-here-change-this-in-development
     echo ENVIRONMENT=development
     echo DEBUG=true
@@ -179,6 +179,7 @@ set TEMP_ENV_FILE=%SCRIPT_DIR%\.env.temp
     echo SCHEDULER_ENABLED=true
     echo POWER_STATE_REFRESH_INTERVAL=1
     echo MONITORING_ENABLED=true
+    echo MONITORING_INTERVAL=5
     echo GRAFANA_API_KEY=your-grafana-api-key-here
     echo PROMETHEUS_TARGETS_PATH=/etc/prometheus/targets/ipmi-targets.json
 ) > "%TEMP_ENV_FILE%"
@@ -226,11 +227,11 @@ if "%REMOTE_ACCESS%"=="true" (
     echo - 如需远程访问，请编辑 .env.dev 文件设置 SERVER_IP
 )
 
-echo - 数据库: SQLite (本地文件)
+echo - 数据库: SQLite (本地文件，路径: ./data/openserverhub.db)
 echo.
 echo 使用说明:
 echo - 代码修改后自动热重载
-echo - 后端日志: docker logs -f openserverhub-dev
+echo - 主应用日志: docker logs -f openserverhub-dev
 echo - Prometheus日志: docker logs -f prometheus-dev
 echo - Grafana日志: docker logs -f grafana-dev
 echo - AlertManager日志: docker logs -f alertmanager-dev

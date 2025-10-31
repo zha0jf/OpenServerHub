@@ -54,7 +54,7 @@ OpenServerHub 是一个现代化的服务器管理平台，基于 FastAPI + Reac
 
 ### 后端
 - **Framework**: FastAPI
-- **Database**: SQLite (开发) / PostgreSQL (生产)
+- **Database**: SQLite (开发和生产)
 - **ORM**: SQLAlchemy (不再使用Alembic迁移)
 - **Authentication**: JWT
 - **IPMI**: pyghmi
@@ -133,6 +133,34 @@ start-dev-single.bat
 
 # 或使用启动脚本（Linux/macOS）
 ./start-dev-single.sh
+```
+
+### 生产环境部署 (SQLite版本)
+
+OpenServerHub支持使用SQLite数据库的生产环境部署，适用于小型部署场景。
+
+```bash
+# 进入docker目录
+cd docker
+
+# 启动生产环境（SQLite版本）
+docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod up -d
+
+# 或使用启动脚本（Windows）
+start-prod-sqlite.bat
+
+# 或使用启动脚本（Linux/macOS）
+./start-prod-sqlite.sh
+```
+
+首次部署时，请先复制并修改环境配置文件：
+
+```bash
+# 复制环境配置示例
+cp .env.prod.example .env.prod
+
+# 编辑环境配置文件，特别注意修改SECRET_KEY等安全配置
+vim .env.prod
 ```
 
 ### 访问应用
@@ -388,10 +416,10 @@ OpenServerHub/
 ### 开发进度说明
 - **当前状态**: 项目已完成Week 1-8的所有核心功能，进度超出预期
 - **测试状态**: 所有已实现功能都已经过基础功能测试
-- **部署就绪**: 可以使用 `start.bat` 一键启动，支持快速体验
+- **部署就绪**: 可以使用 `start-prod-sqlite.bat` 一键启动，支持快速体验
 
 ### 环境配置
-1. **开发环境**: 当前使用 SQLite 数据库，生产环境建议使用 PostgreSQL
+1. **开发环境**: 当前使用 SQLite 数据库，生产环境也使用 SQLite
 2. **IPMI 测试**: 需要真实的服务器设备或 IPMI 模拟器进行测试
 3. **安全配置**: 生产环境请修改默认密钥和密码
 4. **端口配置**: 前端默认3000端口，后端默认8000端口，监控系统使用9090/9093/3001端口
@@ -403,7 +431,7 @@ OpenServerHub/
 8. **监控系统**: 已完成Prometheus+Grafana+AlertManager完整集成
 
 ### 验收测试
-9. **快速启动**: 请使用 `start.bat` 脚本进行完整测试，确保所有功能正常工作
+9. **快速启动**: 请使用 `start-prod-sqlite.bat` 脚本进行完整测试，确保所有功能正常工作
 10. **默认账号**: admin / admin123 (生产环境请及时修改)
 11. **功能测试**: 建议测试登录、服务器管理、用户管理、监控面板等核心功能
 

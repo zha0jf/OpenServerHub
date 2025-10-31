@@ -1,21 +1,22 @@
+# 生产环境Docker Compose配置 - SQLite版本
 version: '3.8'
 
 services:
 
-  # 全栈开发服务（后端+前端）
-  app:
+  # 后端生产服务
+  backend:
     build:
       context: ..
-      dockerfile: docker/backend.dev.dockerfile
-    container_name: openserverhub-dev
+      dockerfile: docker/backend.prod.sqlite.dockerfile
+    container_name: openserverhub-backend-prod
     environment:
-      # 数据库配置 - 开发环境使用SQLite
+      # 数据库配置 - 生产环境使用SQLite
       DATABASE_URL: sqlite:///./data/openserverhub.db
       
       # 应用配置
       APP_NAME: OpenServerHub
       APP_VERSION: 1.0.0
-      DEBUG: "true"
+      DEBUG: "false"
       TZ: Asia/Shanghai
       
       # CORS配置
@@ -28,65 +29,31 @@ services:
       # 监控配置
       MONITORING_ENABLED: "true"
       MONITORING_INTERVAL: "5"
-      PROMETHEUS_TARGETS_PATH: "/etc/prometheus/targets/ipmi-targets.json"
       
       # 定时任务配置
       SCHEDULER_ENABLED: "true"
       SCHEDULER_TIMEZONE: Asia/Shanghai
       
-      # 前端配置
-      NODE_ENV: development
-      REACT_APP_API_URL: ${REACT_APP_API_URL}
-      REACT_APP_WS_URL: ${REACT_APP_WS_URL}
-      REACT_APP_GRAFANA_URL: ${REACT_APP_GRAFANA_URL}
-      
-      # 服务器配置
-      SERVER_IP: ${SERVER_IP}
+      # 安全配置
+      SECRET_KEY: "your-secret-key-here-change-in-production"
     ports:
-      - "8000:8000"  # 后端API
-      - "3000:3000"  # 前端开发服务器
+      - "8000:8000"
     volumes:
-      # 后端代码热重载
-      - ../backend:/app/backend
-      # 前端代码热重载（排除node_modules目录）
-      - ../frontend:/app/frontend
-      - /app/frontend/node_modules
       # SQLite数据持久化
-      - dev_data:/app/data
+      - backend_prod_data:/app/data
+      # 日志持久化
+      - backend_prod_logs:/app/logs
       # 共享Prometheus目标配置目录
       - ../monitoring/prometheus/targets:/etc/prometheus/targets
     networks:
-      - openserverhub-dev-network
+      - openserverhub-prod-network
       - monitoring
-    working_dir: /app
-    command: >
-      sh -c "
-        echo '=== 启动OpenServerHub开发环境 ===' &&
-        echo '正在初始化后端数据库...' &&
-        cd /app/backend &&
-        python init_db.py &&
-        echo '启动后端服务...' &&
-        cd /app/backend &&
-        uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend &
-        BACKEND_PID=\$! &&
-        echo '等待后端服务启动...' &&
-        sleep 5 &&
-        echo '启动前端开发服务器...' &&
-        cd /app/frontend &&
-        npm start -- --host 0.0.0.0 &
-        FRONTEND_PID=\$! &&
-        echo '=== 开发环境启动完成 ===' &&
-        echo '后端API: http://\${SERVER_IP:-localhost}:8000' &&
-        echo '前端应用: http://\${SERVER_IP:-localhost}:3000' &&
-        echo 'API文档: http://\${SERVER_IP:-localhost}:8000/docs' &&
-        echo '按 Ctrl+C 停止服务' &&
-        wait \$BACKEND_PID \$FRONTEND_PID
-      "
+    restart: unless-stopped
 
   # Prometheus监控服务
   prometheus:
     image: prom/prometheus:v3.7.1
-    container_name: prometheus-dev
+    container_name: prometheus-prod
     environment:
       - TZ=Asia/Shanghai
     ports:
@@ -101,17 +68,16 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
     restart: unless-stopped
     networks:
       - monitoring
 
   # Grafana可视化服务
-  # 注意：匿名访问仅适用于开发环境，生产环境应禁用此配置
   grafana:
     image: grafana/grafana-enterprise:12.2.1
-    container_name: grafana-dev
+    container_name: grafana-prod
     ports:
       - "3001:3000"
     volumes:
@@ -121,15 +87,9 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_SERVER_DOMAIN=$SERVER_IP
-      - GF_SERVER_ROOT_URL=http://$SERVER_IP:3001
-      # 允许iframe嵌入
-      - GF_SECURITY_ALLOW_EMBEDDING=true
-      # 禁用严格的跨域检查（仅限开发环境）
-      - GF_SECURITY_COOKIE_SAMESITE=disabled
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_ROOT_URL=http://localhost:3001
       - TZ=Asia/Shanghai
     restart: unless-stopped
     networks:
@@ -140,13 +100,13 @@ services:
   # AlertManager告警服务
   alertmanager:
     image: prom/alertmanager:v0.28.1
-    container_name: alertmanager-dev
+    container_name: alertmanager-prod
     environment:
       - TZ=Asia/Shanghai
     ports:
       - "9093:9093"
     volumes:
-      - ../monitoring/alertmanager/alertmanager.dev.yml:/etc/alertmanager/alertmanager.yml
+      - ../monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
       - alertmanager_data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
@@ -158,7 +118,7 @@ services:
   # IPMI Exporter服务
   ipmi-exporter:
     image: prometheuscommunity/ipmi-exporter:v1.10.1
-    container_name: ipmi-exporter-dev
+    container_name: ipmi-exporter-prod
     environment:
       - TZ=Asia/Shanghai
     ports:
@@ -167,19 +127,20 @@ services:
       - ../monitoring/ipmi-exporter/ipmi_local.yml:/config/ipmi_local.yml
     command:
       - '--config.file=/config/ipmi_local.yml'
-      - '--log.level=debug'
     restart: unless-stopped
     networks:
       - monitoring
 
 networks:
-  openserverhub-dev-network:
+  openserverhub-prod-network:
     driver: bridge
   monitoring:
     driver: bridge
 
 volumes:
-  dev_data:
+  backend_prod_data:
+    driver: local
+  backend_prod_logs:
     driver: local
   prometheus_data:
   grafana_data:

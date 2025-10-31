@@ -119,7 +119,7 @@ REACT_APP_API_URL=http://$SERVER_IP:8000
 REACT_APP_WS_URL=ws://$SERVER_IP:8000
 REACT_APP_GRAFANA_URL=http://$SERVER_IP:3001
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://$SERVER_IP:3000,http://$SERVER_IP:3001
-DATABASE_URL=sqlite:///./openserverhub.db
+DATABASE_URL=sqlite:///./data/openserverhub.db
 SECRET_KEY=your-secret-key-here-change-this-in-development
 ENVIRONMENT=development
 DEBUG=true
@@ -129,6 +129,7 @@ IPMI_RETRY_COUNT=3
 SCHEDULER_ENABLED=true
 POWER_STATE_REFRESH_INTERVAL=1
 MONITORING_ENABLED=true
+MONITORING_INTERVAL=5
 GRAFANA_API_KEY=your-grafana-api-key-here
 PROMETHEUS_TARGETS_PATH=/etc/prometheus/targets/ipmi-targets.json
 EOF
@@ -170,7 +171,7 @@ EOF
         echo "- 如需远程访问，请编辑 .env.dev 文件设置 SERVER_IP"
     fi
     
-    echo "- 数据库: SQLite (本地文件)"
+    echo "- 数据库: SQLite (本地文件，路径: ./data/openserverhub.db)"
     echo ""
     echo "使用说明:"
     echo "- 代码修改后自动热重载"

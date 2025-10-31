@@ -12,6 +12,7 @@ from app.services.server import ServerService
 from app.services.auth import AuthService
 from app.services.server_monitoring import GrafanaService
 from app.core.config import settings
+from app.services import monitoring_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,33 @@ async def collect_server_metrics(
         logger.error(f"手动采集服务器 {server_id} 监控指标时发生异常: {e}")
         raise HTTPException(status_code=500, detail="采集监控指标失败")
 
+@router.post("/collect-all")
+async def collect_all_servers_metrics(
+    db: Session = Depends(get_db),
+    current_user = Depends(AuthService.get_current_user)
+):
+    """手动采集所有服务器指标"""
+    try:
+        logger.info("开始手动采集所有服务器的监控指标")
+        
+        if not settings.MONITORING_ENABLED:
+            return {
+                "success": False,
+                "message": "监控功能未启用"
+            }
+        
+        # 触发采集任务
+        await monitoring_scheduler.monitoring_scheduler_service.collect_all_servers_metrics()
+        
+        return {
+            "success": True,
+            "message": "所有服务器监控数据采集任务已启动"
+        }
+        
+    except Exception as e:
+        logger.error(f"手动采集所有服务器监控指标时发生异常: {e}")
+        raise HTTPException(status_code=500, detail="采集监控指标失败")
+
 @router.get("/prometheus/query")
 async def query_prometheus_metrics(
     query: str = Query(..., description="Prometheus查询表达式"),
@@ -198,12 +226,12 @@ async def query_prometheus_metrics_range(
         }
             
         # 发送查询请求
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(prometheus_url, params=params)
             response.raise_for_status()
             
             result = response.json()
-            logger.info(f"Prometheus范围查询成功，返回 {len(result.get('data', {}).get('result', []))} 个时间序列")
+            logger.info(f"Prometheus范围查询成功，返回 {len(result.get('data', {}).get('result', []))} 条结果")
             return result
             
     except httpx.TimeoutException:
@@ -281,16 +309,8 @@ async def monitoring_health_check():
         # 计算整体状态
         health_status["overall"] = health_status["prometheus"] and health_status["grafana"]
         
-        return {
-            "status": "healthy" if health_status["overall"] else "unhealthy",
-            "checks": health_status,
-            "timestamp": datetime.now().isoformat()
-        }
+        return health_status
         
     except Exception as e:
         logger.error(f"监控系统健康检查失败: {e}")
-        return {
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
+        raise HTTPException(status_code=500, detail="健康检查失败")

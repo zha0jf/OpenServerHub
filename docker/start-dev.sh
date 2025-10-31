@@ -1,4 +1,3 @@
-#!/bin/bash
 # 开发环境快速启动脚本（Linux/Mac）
 
 # 颜色输出
@@ -126,7 +125,7 @@ start_dev() {
         echo "- 如需远程访问，请编辑 .env.dev 文件设置 SERVER_IP"
     fi
     
-    echo "- 数据库: SQLite (本地文件)"
+    echo "- 数据库: SQLite (本地文件，路径: ./data/openserverhub.db)"
     echo ""
     echo "使用说明:"
     echo "- 代码修改后自动热重载"

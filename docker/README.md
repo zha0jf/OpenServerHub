@@ -25,7 +25,7 @@ docker-compose up -d
 
 #### 开发环境
 ```bash
-docker-compose -f docker-compose.dev.yml up -d
+docker-compose -f docker-compose.dev.single.yml up -d
 ```
 
 #### 开发监控环境（集成在单容器版本中）
@@ -53,7 +53,7 @@ docker-compose -f docker-compose.monitoring.yml up -d
 ### 包含的服务
 
 #### 生产环境
-- **PostgreSQL**: 主数据库
+- **SQLite**: 主数据库
 - **Redis**: 缓存和会话存储
 - **Backend**: FastAPI后端服务
 - **Frontend**: React前端应用
@@ -80,7 +80,6 @@ docker-compose -f docker-compose.monitoring.yml up -d
 ### 端口映射
 - 3000: 前端开发服务器
 - 8000: 后端API
-- 5432: PostgreSQL（仅生产环境）
 - 6379: Redis（仅生产环境）
 - 80: Nginx（仅生产环境）
 - 9090: Prometheus
@@ -109,12 +108,13 @@ docker-compose build --no-cache
 
 ### 数据备份
 ```bash
-docker-compose exec postgres pg_dump -U postgres openserverhub > backup.sql
+docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod exec backend cp /app/data/openserverhub.db /app/data/backup.db
+docker cp openserverhub-backend-prod:/app/data/backup.db ./backup.db
 ```
 
 ### 数据恢复
 ```bash
-docker-compose exec -T postgres psql -U postgres openserverhub < backup.sql
+docker cp ./backup.db openserverhub-backend-prod:/app/data/openserverhub.db
 ```
 
 ## 配置说明
@@ -129,7 +129,7 @@ docker-compose exec -T postgres psql -U postgres openserverhub < backup.sql
 - `CORS_ORIGINS`: CORS允许的源
 
 ### 数据持久化
-- PostgreSQL数据: `postgres_data`卷
+- SQLite数据: `./backend/data`目录
 - 应用数据: `./backend/data`目录
 - 日志文件: `./backend/logs`目录
 
@@ -149,7 +149,7 @@ docker-compose exec -T postgres psql -U postgres openserverhub < backup.sql
 3. 确保环境变量配置正确
 
 ### 数据库连接失败
-1. 检查数据库服务状态（生产环境为PostgreSQL，开发环境为SQLite）
+1. 检查数据库服务状态（开发和生产环境均为SQLite）
 2. 验证数据库连接字符串
 3. 检查网络连通性（生产环境）
 

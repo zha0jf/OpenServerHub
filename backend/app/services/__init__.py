@@ -1,1 +1,2 @@
 from .scheduler_service import scheduler_service, PowerStateSchedulerService
+from .monitoring_scheduler import monitoring_scheduler_service, MonitoringSchedulerService

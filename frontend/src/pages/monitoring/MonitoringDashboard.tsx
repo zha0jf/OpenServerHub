@@ -1,33 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Card,
-  Select,
-  Button,
-  Space,
-  Typography,
-  Table,
+import { 
+  Card, 
+  Table, 
+  Typography, 
+  Space, 
+  Select, 
+  Button, 
+  message, 
   Alert,
-  message,
-  Tabs,
+  Tabs
 } from 'antd';
-import {
-  ReloadOutlined,
+import { 
+  ReloadOutlined, 
   LineChartOutlined,
-  BarChartOutlined,
+  BarChartOutlined
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
 import { monitoringService } from '../../services/monitoring';
-import { Server, MonitoringRecord } from '../../types';
-import { ColumnsType } from 'antd/es/table';
+import { Server } from '../../types';
 import GrafanaPanel from '../../components/monitoring/GrafanaPanel';
+import type { ColumnsType } from 'antd/es/table';
+import type { MonitoringRecord } from '../../types';
 
 const { Title } = Typography;
-const { Option } = Select;
 const { TabPane } = Tabs;
+const { Option } = Select;
 
 const MonitoringDashboard: React.FC = () => {
   const [servers, setServers] = useState<Server[]>([]);
-  const [selectedServerId, setSelectedServerId] = useState<number | undefined>();
+  const [selectedServerId, setSelectedServerId] = useState<number | undefined>(undefined);
   const [metrics, setMetrics] = useState<MonitoringRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [serversLoading, setServersLoading] = useState(true);
@@ -90,6 +91,21 @@ const MonitoringDashboard: React.FC = () => {
       await loadMetrics();
     } catch (error) {
       message.error('监控数据采集失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCollectAllMetrics = async () => {
+    try {
+      setLoading(true);
+      await monitoringService.collectAllServersMetrics();
+      message.success('所有服务器监控数据采集任务已启动');
+      if (selectedServerId) {
+        await loadMetrics();
+      }
+    } catch (error) {
+      message.error('启动监控数据采集任务失败');
     } finally {
       setLoading(false);
     }
@@ -198,6 +214,13 @@ const MonitoringDashboard: React.FC = () => {
               disabled={!selectedServerId}
             >
               采集数据
+            </Button>
+            <Button
+              icon={<LineChartOutlined />}
+              onClick={handleCollectAllMetrics}
+              loading={loading}
+            >
+              采集所有数据
             </Button>
           </Space>
         </div>
