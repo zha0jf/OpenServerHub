@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"停止监控数据采集定时任务服务失败: {e}")
 
-app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
 
 # 配置CORS - 统一处理开发和生产环境
 # 从环境变量获取CORS配置，如果未设置则使用默认值
