@@ -266,6 +266,10 @@ const MonitoringDashboard: React.FC = () => {
   const isServerOffline = dashboardInfo?.server_status === 'offline' || 
                          selectedServer?.status === 'offline';
 
+  // 检查服务器是否关机
+  const isServerOff = dashboardInfo?.server_power_state === 'off' || 
+                      selectedServer?.power_state === 'off';
+
   return (
     <div>
       <Card>
@@ -297,7 +301,7 @@ const MonitoringDashboard: React.FC = () => {
               icon={<LineChartOutlined />}
               onClick={handleCollectMetrics}
               loading={loading}
-              disabled={!selectedServerId}
+              disabled={!selectedServerId || isServerOff}
             >
               采集数据
             </Button>
@@ -363,16 +367,24 @@ const MonitoringDashboard: React.FC = () => {
             }
             key="1"
           >
-            {Object.keys(groupedMetrics).length === 0 && !loading && (
+            {isServerOff ? (
+              <Alert
+                message="服务器关机"
+                description={`服务器 "${selectedServer?.name}" 当前处于关机状态，无有效监控数据。请先开机后再查看监控数据。`}
+                type="warning"
+                style={{ marginBottom: 16 }}
+                showIcon
+              />
+            ) : Object.keys(groupedMetrics).length === 0 && !loading ? (
               <Alert
                 message="暂无监控数据"
                 description="请选择服务器并点击采集数据按钮开始采集监控数据"
                 type="warning"
                 style={{ marginBottom: 16 }}
               />
-            )}
+            ) : null}
 
-            {Object.entries(groupedMetrics).map(([type, typeMetrics]) => (
+            {!isServerOff && Object.entries(groupedMetrics).map(([type, typeMetrics]) => (
               <Card
                 key={type}
                 title={getMetricTypeDisplay(type)}
@@ -389,7 +401,7 @@ const MonitoringDashboard: React.FC = () => {
               </Card>
             ))}
 
-            {Object.keys(groupedMetrics).length > 0 && (
+            {!isServerOff && Object.keys(groupedMetrics).length > 0 && (
               <Alert
                 message="监控数据说明"
                 description="以上数据为最近24小时的监控记录。"
