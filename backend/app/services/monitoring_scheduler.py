@@ -114,7 +114,7 @@ class MonitoringSchedulerService:
                 logger.info(f"找到 {len(servers)} 台启用监控的服务器需要采集数据")
                 
                 # 并发采集监控数据，但限制并发数量以避免资源耗尽
-                semaphore = asyncio.Semaphore(10)  # 限制并发数为10
+                semaphore = asyncio.Semaphore(20)  # 增加并发数到20以提高性能
                 
                 async def collect_with_semaphore(server):
                     async with semaphore:
@@ -156,29 +156,38 @@ class MonitoringSchedulerService:
         """采集单个服务器的监控数据"""
         try:
             # 创建监控服务实例
-            monitoring_service = MonitoringService(session)
+            # 注意：这里需要使用同步会话而不是异步会话
+            # 我们需要获取同步会话来与MonitoringService兼容
+            from ..core.database import SessionLocal
+            sync_session = SessionLocal()
             
-            # 采集监控数据
-            result = await monitoring_service.collect_server_metrics(server.id)
-            
-            if result.get("status") == "success":
-                logger.debug(
-                    f"服务器 {server.name} ({server.ipmi_ip}) 监控数据采集成功: "
-                    f"{len(result.get('collected_metrics', []))} 个指标"
-                )
-                return True
-            elif result.get("status") == "partial_success":
-                logger.warning(
-                    f"服务器 {server.name} ({server.ipmi_ip}) 监控数据部分采集成功，存在错误: "
-                    f"{result.get('errors', [])}"
-                )
-                return True
-            else:
-                logger.error(
-                    f"服务器 {server.name} ({server.ipmi_ip}) 监控数据采集失败: "
-                    f"{result.get('message', 'Unknown error')}"
-                )
-                return False
+            try:
+                monitoring_service = MonitoringService(sync_session)
+                
+                # 采集监控数据（仅采集指标，不涉及图形化监控）
+                result = await monitoring_service.collect_server_metrics(server.id)
+                
+                if result.get("status") == "success":
+                    logger.debug(
+                        f"服务器 {server.name} ({server.ipmi_ip}) 监控数据采集成功: "
+                        f"{len(result.get('collected_metrics', []))} 个指标"
+                    )
+                    return True
+                elif result.get("status") == "partial_success":
+                    logger.warning(
+                        f"服务器 {server.name} ({server.ipmi_ip}) 监控数据部分采集成功，存在错误: "
+                        f"{result.get('errors', [])}"
+                    )
+                    return True
+                else:
+                    logger.error(
+                        f"服务器 {server.name} ({server.ipmi_ip}) 监控数据采集失败: "
+                        f"{result.get('message', 'Unknown error')}"
+                    )
+                    return False
+            finally:
+                # 确保同步会话被正确关闭
+                sync_session.close()
                 
         except Exception as e:
             logger.error(
