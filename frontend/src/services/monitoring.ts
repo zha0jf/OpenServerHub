@@ -45,12 +45,6 @@ export const monitoringService = {
     return response.data;
   },
 
-  // 手动采集所有服务器指标
-  collectAllServersMetrics: async (): Promise<any> => {
-    const response = await api.post(`/monitoring/collect-all`);
-    return response.data;
-  },
-
   // 查询Prometheus数据
   queryPrometheus: async (query: string, time?: string): Promise<any> => {
     const params = new URLSearchParams({ query });

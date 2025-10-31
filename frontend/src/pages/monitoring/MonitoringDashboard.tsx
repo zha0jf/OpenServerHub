@@ -118,22 +118,6 @@ const MonitoringDashboard: React.FC = () => {
     }
   };
 
-  const handleCollectAllMetrics = async () => {
-    try {
-      setLoading(true);
-      await monitoringService.collectAllServersMetrics();
-      message.success('所有服务器监控数据采集任务已启动');
-      if (selectedServerId) {
-        // 只重新加载监控指标数据，不加载Grafana仪表板信息
-        await loadMetricsOnly();
-      }
-    } catch (error) {
-      message.error('启动监控数据采集任务失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 启用监控
   const handleEnableMonitoring = async () => {
     if (!selectedServerId) return;
@@ -316,13 +300,6 @@ const MonitoringDashboard: React.FC = () => {
               disabled={!selectedServerId}
             >
               采集数据
-            </Button>
-            <Button
-              icon={<LineChartOutlined />}
-              onClick={handleCollectAllMetrics}
-              loading={loading}
-            >
-              采集所有数据
             </Button>
           </Space>
         </div>
