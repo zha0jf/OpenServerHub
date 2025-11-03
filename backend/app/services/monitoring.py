@@ -2,6 +2,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from sqlalchemy.exc import SQLAlchemyError
+import time
 
 from app.models.monitoring import MonitoringRecord
 from app.models.server import Server
@@ -44,24 +45,36 @@ class MonitoringService:
 
     async def collect_server_metrics(self, server_id: int) -> Dict[str, Any]:
         """采集服务器指标数据"""
+        start_time = time.time()
+        logger.debug(f"[监控采集] 开始采集服务器 {server_id} 的监控指标")
+        
         # 获取服务器信息
+        server_info_start = time.time()
         server = self.db.query(Server).filter(Server.id == server_id).first()
+        server_info_time = time.time() - server_info_start
+        logger.debug(f"[监控采集] 获取服务器信息耗时: {server_info_time:.3f}秒")
+        
         if not server:
             raise ValidationError("服务器不存在")
         
         try:
             # 获取传感器数据
+            sensor_start = time.time()
+            logger.debug(f"[监控采集] 开始获取服务器 {server_id} 的传感器数据")
             sensor_data = await self.ipmi_service.get_sensor_data(
                 ip=server.ipmi_ip,
                 username=server.ipmi_username,
                 password=server.ipmi_password,
                 port=server.ipmi_port
             )
+            sensor_time = time.time() - sensor_start
+            logger.debug(f"[监控采集] 获取传感器数据耗时: {sensor_time:.3f}秒")
             
             collected_metrics = []
             errors = []
             
             # 处理温度传感器
+            temp_start = time.time()
             for temp_sensor in sensor_data.get('temperature', []):
                 try:
                     record = MonitoringRecord(
@@ -79,8 +92,11 @@ class MonitoringService:
                     error_msg = f"处理温度传感器 {temp_sensor.get('name', 'unknown')} 失败: {e}"
                     logger.warning(error_msg)
                     errors.append(error_msg)
+            temp_time = time.time() - temp_start
+            logger.debug(f"[监控采集] 处理温度传感器数据耗时: {temp_time:.3f}秒")
             
             # 处理电压传感器
+            voltage_start = time.time()
             for voltage_sensor in sensor_data.get('voltage', []):
                 try:
                     record = MonitoringRecord(
@@ -98,8 +114,11 @@ class MonitoringService:
                     error_msg = f"处理电压传感器 {voltage_sensor.get('name', 'unknown')} 失败: {e}"
                     logger.warning(error_msg)
                     errors.append(error_msg)
+            voltage_time = time.time() - voltage_start
+            logger.debug(f"[监控采集] 处理电压传感器数据耗时: {voltage_time:.3f}秒")
             
             # 处理风扇转速传感器
+            fan_start = time.time()
             for fan_sensor in sensor_data.get('fan_speed', []):
                 try:
                     record = MonitoringRecord(
@@ -117,8 +136,11 @@ class MonitoringService:
                     error_msg = f"处理风扇传感器 {fan_sensor.get('name', 'unknown')} 失败: {e}"
                     logger.warning(error_msg)
                     errors.append(error_msg)
+            fan_time = time.time() - fan_start
+            logger.debug(f"[监控采集] 处理风扇传感器数据耗时: {fan_time:.3f}秒")
             
             # 提交数据库事务
+            commit_start = time.time()
             try:
                 self.db.commit()
                 logger.info(f"成功保存服务器 {server_id} 的 {len(collected_metrics)} 条监控记录到数据库")
@@ -130,11 +152,25 @@ class MonitoringService:
                     "message": "保存监控数据到数据库失败",
                     "timestamp": datetime.now().isoformat()
                 }
+            commit_time = time.time() - commit_start
+            logger.debug(f"[监控采集] 数据库提交耗时: {commit_time:.3f}秒")
+            
+            total_time = time.time() - start_time
+            logger.debug(f"[监控采集] 服务器 {server_id} 监控指标采集总耗时: {total_time:.3f}秒")
             
             result = {
                 "status": "success",
                 "collected_metrics": collected_metrics,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "execution_time": {
+                    "total": round(total_time, 3),
+                    "server_info": round(server_info_time, 3),
+                    "sensor_data": round(sensor_time, 3),
+                    "temperature_processing": round(temp_time, 3),
+                    "voltage_processing": round(voltage_time, 3),
+                    "fan_processing": round(fan_time, 3),
+                    "database_commit": round(commit_time, 3)
+                }
             }
             
             # 如果有错误，但有成功采集的数据，则标记为部分成功
@@ -155,20 +191,31 @@ class MonitoringService:
             except Exception as rollback_error:
                 logger.error(f"回滚数据库事务失败: {rollback_error}")
             
-            logger.error(f"采集服务器 {server_id} 指标失败: {e}")
+            total_time = time.time() - start_time
+            logger.error(f"[监控采集] 采集服务器 {server_id} 指标失败，总耗时: {total_time:.3f}秒, 错误: {e}")
             return {
                 "status": "error",
                 "message": str(e),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "execution_time": {
+                    "total": round(total_time, 3)
+                }
             }
 
     def cleanup_old_metrics(self, days: int = 30) -> int:
         """清理旧的监控数据"""
-        cutoff_date = datetime.now() - timedelta(days=days)
-        
-        deleted_count = self.db.query(MonitoringRecord).filter(
-            MonitoringRecord.timestamp < cutoff_date
-        ).delete()
-        
-        self.db.commit()
-        return deleted_count
+        try:
+            cutoff_date = datetime.now() - timedelta(days=days)
+            
+            deleted_count = self.db.query(MonitoringRecord).filter(
+                MonitoringRecord.timestamp < cutoff_date
+            ).delete()
+            
+            self.db.commit()
+            logger.info(f"成功清理 {deleted_count} 条 {days} 天前的旧监控数据")
+            return deleted_count
+            
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"清理旧监控数据失败: {e}")
+            raise ValidationError("清理监控数据失败")

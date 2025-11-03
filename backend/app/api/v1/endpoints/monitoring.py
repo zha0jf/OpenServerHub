@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import httpx
 import logging
+import time
 
 from app.core.database import get_db
 from app.schemas.monitoring import MonitoringRecordResponse
@@ -67,7 +68,7 @@ async def get_server_metrics(
 ):
     """获取服务器监控指标"""
     try:
-        logger.info(f"获取服务器 {server_id} 监控指标，类型: {metric_type}, 时间范围: {hours}小时")
+        logger.info(f"获取服务器 {server_id} 的监控指标，类型: {metric_type}, 时间范围: {hours}小时")
         
         # 验证参数
         if hours <= 0 or hours > 8760:  # 最多一年
@@ -98,9 +99,10 @@ async def collect_server_metrics(
     current_user = Depends(AuthService.get_current_user)
 ):
     """手动采集服务器指标"""
+    start_time = time.time()
+    logger.info(f"[API监控采集] 开始手动采集服务器 {server_id} 的监控指标")
+    
     try:
-        logger.info(f"开始手动采集服务器 {server_id} 的监控指标")
-        
         # 检查服务器是否存在
         server_service = ServerService(db)
         server = server_service.get_server(server_id)
@@ -118,12 +120,18 @@ async def collect_server_metrics(
         else:
             logger.error(f"采集服务器 {server_id} 监控指标失败: {result.get('message', 'Unknown error')}")
         
+        execution_time = time.time() - start_time
+        logger.info(f"[API监控采集] 手动采集服务器 {server_id} 的监控指标完成，总耗时: {execution_time:.3f}秒")
+        
+        # 添加执行时间到返回结果中
+        result["api_execution_time"] = round(execution_time, 3)
         return result
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"手动采集服务器 {server_id} 监控指标时发生异常: {e}")
+        execution_time = time.time() - start_time
+        logger.error(f"[API监控采集] 手动采集服务器 {server_id} 监控指标时发生异常，耗时: {execution_time:.3f}秒, 错误: {e}")
         raise HTTPException(status_code=500, detail="采集监控指标失败")
 
 @router.get("/prometheus/query")

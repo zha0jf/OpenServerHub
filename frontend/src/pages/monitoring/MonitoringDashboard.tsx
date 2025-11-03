@@ -52,12 +52,16 @@ const MonitoringDashboard: React.FC = () => {
 
   const loadServers = async () => {
     try {
+      console.debug('[前端监控仪表板] 开始加载服务器列表');
+      const startTime = Date.now();
       setServersLoading(true);
       const data = await serverService.getServers();
       setServers(data);
       if (data.length > 0 && !selectedServerId) {
         setSelectedServerId(data[0].id);
       }
+      const endTime = Date.now();
+      console.debug(`[前端监控仪表板] 加载服务器列表完成，耗时: ${endTime - startTime}ms`);
     } catch (error) {
       message.error('加载服务器列表失败');
     } finally {
@@ -69,6 +73,8 @@ const MonitoringDashboard: React.FC = () => {
     if (!selectedServerId) return;
 
     try {
+      console.debug(`[前端监控仪表板] 开始加载服务器 ${selectedServerId} 的监控数据`);
+      const startTime = Date.now();
       setLoading(true);
       const data = await monitoringService.getServerMetrics(selectedServerId);
       setMetrics(data);
@@ -80,6 +86,8 @@ const MonitoringDashboard: React.FC = () => {
       } catch (dashboardError) {
         console.warn('获取Grafana仪表板信息失败:', dashboardError);
       }
+      const endTime = Date.now();
+      console.debug(`[前端监控仪表板] 加载服务器 ${selectedServerId} 的监控数据完成，耗时: ${endTime - startTime}ms`);
     } catch (error) {
       message.error('加载监控数据失败');
     } finally {
@@ -92,9 +100,13 @@ const MonitoringDashboard: React.FC = () => {
     if (!selectedServerId) return;
 
     try {
+      console.debug(`[前端监控仪表板] 开始仅加载服务器 ${selectedServerId} 的监控指标`);
+      const startTime = Date.now();
       setLoading(true);
       const data = await monitoringService.getServerMetrics(selectedServerId);
       setMetrics(data);
+      const endTime = Date.now();
+      console.debug(`[前端监控仪表板] 仅加载服务器 ${selectedServerId} 的监控指标完成，耗时: ${endTime - startTime}ms`);
     } catch (error) {
       message.error('加载监控数据失败');
     } finally {
@@ -106,13 +118,19 @@ const MonitoringDashboard: React.FC = () => {
     if (!selectedServerId) return;
 
     try {
+      console.debug(`[前端监控仪表板] 开始采集服务器 ${selectedServerId} 的监控数据`);
+      const startTime = Date.now();
       setLoading(true);
-      await monitoringService.collectServerMetrics(selectedServerId);
+      const result = await monitoringService.collectServerMetrics(selectedServerId);
       message.success('监控数据采集成功');
+      console.log(`[前端监控仪表板] 服务器 ${selectedServerId} 监控数据采集结果:`, result);
       // 只重新加载监控指标数据，不加载Grafana仪表板信息
       await loadMetricsOnly();
+      const endTime = Date.now();
+      console.debug(`[前端监控仪表板] 采集服务器 ${selectedServerId} 的监控数据完成，耗时: ${endTime - startTime}ms`);
     } catch (error) {
       message.error('监控数据采集失败');
+      console.error(`[前端监控仪表板] 采集服务器 ${selectedServerId} 的监控数据失败:`, error);
     } finally {
       setLoading(false);
     }
@@ -123,6 +141,8 @@ const MonitoringDashboard: React.FC = () => {
     if (!selectedServerId) return;
     
     try {
+      console.debug(`[前端监控仪表板] 开始启用服务器 ${selectedServerId} 的监控`);
+      const startTime = Date.now();
       setLoading(true);
       const selectedServer = servers.find(s => s.id === selectedServerId);
       if (!selectedServer) return;
@@ -137,6 +157,8 @@ const MonitoringDashboard: React.FC = () => {
       await loadServers();
       // 重新加载当前指标
       await loadMetrics();
+      const endTime = Date.now();
+      console.debug(`[前端监控仪表板] 启用服务器 ${selectedServerId} 的监控完成，耗时: ${endTime - startTime}ms`);
     } catch (error) {
       message.error('启用监控失败');
     } finally {
@@ -149,6 +171,8 @@ const MonitoringDashboard: React.FC = () => {
     if (!selectedServerId) return;
     
     try {
+      console.debug(`[前端监控仪表板] 开始禁用服务器 ${selectedServerId} 的监控`);
+      const startTime = Date.now();
       setLoading(true);
       const selectedServer = servers.find(s => s.id === selectedServerId);
       if (!selectedServer) return;
@@ -163,6 +187,8 @@ const MonitoringDashboard: React.FC = () => {
       await loadServers();
       // 重新加载当前指标
       await loadMetrics();
+      const endTime = Date.now();
+      console.debug(`[前端监控仪表板] 禁用服务器 ${selectedServerId} 的监控完成，耗时: ${endTime - startTime}ms`);
     } catch (error) {
       message.error('禁用监控失败');
     } finally {

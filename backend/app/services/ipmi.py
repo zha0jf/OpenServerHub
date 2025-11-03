@@ -2,7 +2,8 @@ import asyncio
 import json
 import logging
 import ipaddress
-import functools  # 导入 functools
+import functools
+import time  # 添加time模块
 from typing import Dict, Any, Optional, Generator, List
 from pyghmi.ipmi import command
 from pyghmi.exceptions import IpmiException
@@ -87,6 +88,9 @@ class IPMIConnectionPool:
                 return self.connections[connection_key]
 
             loop = asyncio.get_running_loop()
+            
+            start_time = time.time()
+            logger.debug(f"[IPMI连接] 开始创建连接: {ip}:{port}")
 
             def _make_conn():
                 return command.Command(
@@ -102,13 +106,17 @@ class IPMIConnectionPool:
             try:
                 # 在子线程里跑，并设置超时
                 conn = await asyncio.wait_for(loop.run_in_executor(None, _make_conn), timeout=timeout)
+                connection_time = time.time() - start_time
+                logger.debug(f"[IPMI连接] 连接创建成功: {ip}:{port}, 耗时: {connection_time:.3f}秒")
                 self.connections[connection_key] = conn
                 return conn
             except asyncio.TimeoutError:
-                logger.error(f"创建IPMI连接超时: {ip}:{port}")
+                connection_time = time.time() - start_time
+                logger.error(f"[IPMI连接] 创建连接超时: {ip}:{port}, 耗时: {connection_time:.3f}秒")
                 raise IPMIError(f"IPMI连接超时: {ip}:{port}")
             except Exception as e:
-                logger.error(f"创建IPMI连接失败: {e}")
+                connection_time = time.time() - start_time
+                logger.error(f"[IPMI连接] 创建连接失败: {ip}:{port}, 耗时: {connection_time:.3f}秒, 错误: {e}")
                 raise IPMIError(f"IPMI连接失败: {e}")
 
 # 全局连接池实例
@@ -141,8 +149,12 @@ class IPMIService:
         """获取电源状态"""
         port = self._ensure_port_is_int(port)
         try:
+            start_time = time.time()
+            logger.debug(f"[电源状态] 开始获取电源状态: {ip}:{port}")
             conn = await self.pool.get_connection(ip, username, password, port)
             result = await self._run_sync_ipmi(conn.get_power)
+            execution_time = time.time() - start_time
+            logger.debug(f"[电源状态] 获取电源状态完成: {ip}:{port}, 耗时: {execution_time:.3f}秒")
             return result.get('powerstate', 'unknown')
         except IpmiException as e:
             logger.error(f"获取电源状态失败 {ip}: {e}")
@@ -161,6 +173,8 @@ class IPMIService:
         """电源控制"""
         port = self._ensure_port_is_int(port)
         try:
+            start_time = time.time()
+            logger.debug(f"[电源控制] 开始电源控制操作: {ip}:{port}, 操作: {action}")
             conn = await self.pool.get_connection(ip, username, password, port)
             
             power_actions = {'on': 'on', 'off': 'off', 'restart': 'reset', 'force_off': 'off', 'force_restart': 'cycle'}
@@ -168,6 +182,9 @@ class IPMIService:
                 raise IPMIError(f"不支持的电源操作: {action}")
             
             await self._run_sync_ipmi(conn.set_power, power_actions[action])
+            
+            execution_time = time.time() - start_time
+            logger.debug(f"[电源控制] 电源控制操作完成: {ip}:{port}, 操作: {action}, 耗时: {execution_time:.3f}秒")
             
             return {"action": action, "result": "success", "message": f"电源{action}操作成功"}
             
@@ -386,7 +403,8 @@ class IPMIService:
         port = self._ensure_port_is_int(port)
         timeout = self._ensure_port_is_int(timeout)
         try:
-            logger.info(f"开始获取系统信息: {ip}:{port} 用户:{username}")
+            start_time = time.time()
+            logger.info(f"[系统信息] 开始获取系统信息: {ip}:{port} 用户:{username}")
             
             conn = await self.pool.get_connection(ip, username, password, port)
             
@@ -406,7 +424,8 @@ class IPMIService:
                 "bmc_version": system_info.get('bmc_version', 'Unknown'),
             }
 
-            logger.info(f"系统信息获取成功: {ip}:{port} - {final_info}")
+            execution_time = time.time() - start_time
+            logger.info(f"[系统信息] 系统信息获取成功: {ip}:{port} - {final_info}, 耗时: {execution_time:.3f}秒")
             return final_info
             
         except asyncio.TimeoutError:
@@ -421,6 +440,8 @@ class IPMIService:
 
     def _sync_fetch_and_parse_sensors(self, conn: command.Command) -> Dict[str, Any]:
         """同步函数：获取并解析所有传感器数据。此函数将在线程池中运行。"""
+        start_time = time.time()
+        logger.debug(f"[传感器数据] 开始获取并解析传感器数据")
         sensors = {}
         try:
             sensors_generator = conn.get_sensor_data()
@@ -437,12 +458,17 @@ class IPMIService:
         except Exception as e:
             logger.warning(f"解析传感器数据时发生错误: {e}")
             return {}
+        
+        execution_time = time.time() - start_time
+        logger.debug(f"[传感器数据] 获取并解析传感器数据完成, 共获取 {len(sensors)} 个传感器, 耗时: {execution_time:.3f}秒")
         return sensors
 
     async def get_sensor_data(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
         """获取传感器数据"""
         port = self._ensure_port_is_int(port)
         try:
+            start_time = time.time()
+            logger.debug(f"[传感器采集] 开始采集传感器数据: {ip}:{port}")
             conn = await self.pool.get_connection(ip, username, password, port)
             
             # 将整个阻塞的获取和迭代过程放入线程池
@@ -476,6 +502,8 @@ class IPMIService:
                 else:
                     sensor_data["other"].append(sensor_entry)
             
+            execution_time = time.time() - start_time
+            logger.debug(f"[传感器采集] 传感器数据采集完成: {ip}:{port}, 耗时: {execution_time:.3f}秒")
             return sensor_data
             
         except IpmiException as e:
@@ -489,8 +517,13 @@ class IPMIService:
         """测试IPMI连接"""
         port = self._ensure_port_is_int(port)
         try:
+            start_time = time.time()
+            logger.debug(f"[连接测试] 开始测试IPMI连接: {ip}:{port}")
             conn = await self.pool.get_connection(ip, username, password, port)
             result = await self._run_sync_ipmi(conn.get_power)
+            
+            execution_time = time.time() - start_time
+            logger.debug(f"[连接测试] IPMI连接测试完成: {ip}:{port}, 耗时: {execution_time:.3f}秒")
             
             return {
                 "status": "success",
@@ -509,8 +542,12 @@ class IPMIService:
         """获取BMC用户列表"""
         port = self._ensure_port_is_int(port)
         try:
+            start_time = time.time()
+            logger.debug(f"[用户列表] 开始获取用户列表: {ip}:{port}")
             conn = await self.pool.get_connection(ip, username, password, port)
             users = await self._run_sync_ipmi(conn.get_users)
+            execution_time = time.time() - start_time
+            logger.debug(f"[用户列表] 获取用户列表完成: {ip}:{port}, 用户数: {len(users)}, 耗时: {execution_time:.3f}秒")
             return users
         except IpmiException as e:
             logger.error(f"获取用户列表失败 {ip}: {e}")
@@ -525,6 +562,8 @@ class IPMIService:
         """创建BMC用户"""
         port = self._ensure_port_is_int(port)
         try:
+            start_time = time.time()
+            logger.debug(f"[创建用户] 开始创建用户: {ip}:{port}, 用户名: {new_username}")
             conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
             
             # 创建用户
@@ -536,7 +575,8 @@ class IPMIService:
                 privilege_level=priv_level
             )
             
-            logger.info(f"成功为服务器 {ip} 创建用户 {new_username} (ID: {new_userid})")
+            execution_time = time.time() - start_time
+            logger.info(f"[创建用户] 成功创建用户: {ip}:{port}, 用户名: {new_username}, 耗时: {execution_time:.3f}秒")
             return True
         except IpmiException as e:
             logger.error(f"创建用户失败 {ip}: {e}")
@@ -550,6 +590,8 @@ class IPMIService:
         """设置用户权限级别"""
         port = self._ensure_port_is_int(port)
         try:
+            start_time = time.time()
+            logger.debug(f"[设置权限] 开始设置用户权限: {ip}:{port}, 用户ID: {userid}")
             conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
             
             # 设置用户权限
@@ -559,7 +601,8 @@ class IPMIService:
                 privilege_level=priv_level
             )
             
-            logger.info(f"成功为服务器 {ip} 用户ID {userid} 设置权限为 {priv_level}")
+            execution_time = time.time() - start_time
+            logger.info(f"[设置权限] 成功设置用户权限: {ip}:{port}, 用户ID: {userid}, 权限: {priv_level}, 耗时: {execution_time:.3f}秒")
             return True
         except IpmiException as e:
             logger.error(f"设置用户权限失败 {ip}: {e}")
@@ -573,6 +616,8 @@ class IPMIService:
         """设置用户密码"""
         port = self._ensure_port_is_int(port)
         try:
+            start_time = time.time()
+            logger.debug(f"[设置密码] 开始设置用户密码: {ip}:{port}, 用户ID: {userid}")
             conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
             
             # 设置用户密码
@@ -583,7 +628,8 @@ class IPMIService:
                 password=new_password
             )
             
-            logger.info(f"成功为服务器 {ip} 用户ID {userid} 设置密码")
+            execution_time = time.time() - start_time
+            logger.info(f"[设置密码] 成功设置用户密码: {ip}:{port}, 用户ID: {userid}, 耗时: {execution_time:.3f}秒")
             return True
         except IpmiException as e:
             logger.error(f"设置用户密码失败 {ip}: {e}")
@@ -595,6 +641,8 @@ class IPMIService:
     async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = 623) -> bool:
         """确保openshub监控用户存在且配置正确，强制更新密码为新密码"""
         try:
+            start_time = time.time()
+            logger.debug(f"[确保用户] 开始确保openshub用户存在: {ip}:{port}")
             # 1. 连接到BMC
             conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
             
@@ -672,6 +720,8 @@ class IPMIService:
                         )
                         logger.info(f"更新了服务器 {ip} 上 openshub 用户的权限")
             
+            execution_time = time.time() - start_time
+            logger.debug(f"[确保用户] 确保openshub用户存在完成: {ip}:{port}, 耗时: {execution_time:.3f}秒")
             return True
         except Exception as e:
             logger.error(f"确保openshub用户失败 {ip}: {e}")
