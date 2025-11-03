@@ -517,51 +517,6 @@ class IPMIService:
                 'unavailable': True
             }
 
-    def _sync_fetch_and_parse_sensors(self, conn: command.Command) -> Dict[str, Any]:
-        """同步函数：并发获取并解析所有传感器数据。此函数将在线程池中运行。"""
-        start_time = time.time()
-        logger.debug(f"[传感器数据] 开始并发获取并解析传感器数据")
-        sensors = {}
-        try:
-            # 记录 get_sensor_data() 调用的用时
-            get_sensor_start = time.time()
-            sensors_list = list(conn.get_sensor_data())
-            get_sensor_time = time.time() - get_sensor_start
-            logger.debug(f"[传感器数据] conn.get_sensor_data() 调用耗时: {get_sensor_time:.3f}秒, 共获取 {len(sensors_list)} 个传感器")
-            
-            # 传感器去重：某些 BMC 返回重复项
-            unique_sensors = {}
-            for sensor in sensors_list:
-                if sensor.name not in unique_sensors:
-                    unique_sensors[sensor.name] = sensor
-            sensors_list = list(unique_sensors.values())
-            logger.debug(f"[传感器数据] 去重后剩余 {len(sensors_list)} 个传感器")
-            
-            # 使用全局线程池并发获取所有传感器的实时读数
-            # 参考高效示例，为每个传感器读取设置独立的超时控制
-            sensor_results = {}
-            
-            # 使用真正的并发处理而不是顺序处理
-            futures = [SENSOR_EXECUTOR.submit(self._sync_read_sensor_value, sensor) for sensor in sensors_list]
-            
-            # 等待所有任务完成并收集结果
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    name, sensor_info = future.result(timeout=10)  # 每个传感器10秒超时
-                    sensor_results[name] = sensor_info
-                except concurrent.futures.TimeoutError:
-                    logger.warning("传感器读取超时")
-                except Exception as e:
-                    logger.warning(f"传感器读取异常: {e}")
-                        
-        except Exception as e:
-            logger.warning(f"解析传感器数据时发生错误: {e}")
-            return {}
-        
-        execution_time = time.time() - start_time
-        logger.debug(f"[传感器数据] 并发获取并解析传感器数据完成, 共获取 {len(sensor_results)} 个传感器, 耗时: {execution_time:.3f}秒")
-        return sensor_results
-
     async def get_sensor_data(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
         """获取传感器数据"""
         port = self._ensure_port_is_int(port)
@@ -571,23 +526,31 @@ class IPMIService:
             conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             
             # 获取传感器列表
+            sensors_start = time.time()
             sensors_list = list(conn.get_sensor_data())
-            logger.debug(f"[传感器采集] 获取传感器列表完成，共 {len(sensors_list)} 个传感器")
+            sensors_time = time.time() - sensors_start
+            logger.debug(f"[传感器采集] 获取传感器列表完成，共 {len(sensors_list)} 个传感器, 耗时: {sensors_time:.3f}秒")
             
             # 传感器去重：某些 BMC 返回重复项
+            unique_start = time.time()
             unique_sensors = {}
             for sensor in sensors_list:
                 if sensor.name not in unique_sensors:
                     unique_sensors[sensor.name] = sensor
             sensors_list = list(unique_sensors.values())
-            logger.debug(f"[传感器采集] 去重后剩余 {len(sensors_list)} 个传感器")
+            unique_time = time.time() - unique_start
+            logger.debug(f"[传感器采集] 去重后剩余 {len(sensors_list)} 个传感器, 耗时: {unique_time:.3f}秒")
             
             # 异步并发获取所有传感器数据，参考高效示例的实现
             # 移除外层的asyncio.wait_for，让IPMI调用自主管理超时
+            tasks_start = time.time()
             tasks = [self._async_get_sensor_data(sensor, conn, timeout=10) for sensor in sensors_list]
             results = await asyncio.gather(*tasks)
+            tasks_time = time.time() - tasks_start
+            logger.debug(f"[传感器采集] 并发获取传感器数据完成, 耗时: {tasks_time:.3f}秒")
             
             # 处理结果并分类
+            process_start = time.time()
             sensor_data = {"temperature": [], "voltage": [], "fan_speed": [], "other": []}
             for name, sensor_info in results:
                 if sensor_info.get('unavailable', False):
@@ -616,7 +579,9 @@ class IPMIService:
                 else:
                     sensor_data["other"].append(sensor_entry)
             
+            process_time = time.time() - process_start
             execution_time = time.time() - start_time
+            logger.debug(f"[传感器采集] 传感器数据处理完成, 耗时: {process_time:.3f}秒")
             logger.debug(f"[传感器采集] 传感器数据采集完成: {ip}:{port}, 耗时: {execution_time:.3f}秒")
             return sensor_data
             
