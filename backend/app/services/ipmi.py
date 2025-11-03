@@ -69,8 +69,12 @@ class IPMIConnectionPool:
                 else:
                     logger.error(f"创建IPMI连接失败: {e}")
                     raise IPMIError(f"IPMI连接失败: {e}")
-    async def get_connection(self, ip: str, username: str, password: str, port: int = 623, timeout: int = 5):
+    async def get_connection(self, ip: str, username: str, password: str, port: int = 623, timeout: int = 30):
         """获取IPMI连接（安全版，带超时保护，避免在OpenBMC卡死）"""
+        # 使用配置的超时值作为默认值
+        if timeout == 30:  # 如果使用默认值，则使用配置的超时值
+            timeout = settings.IPMI_TIMEOUT
+            
         # 参数检查
         try:
             ip = str(ip)
@@ -151,7 +155,7 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[电源状态] 开始获取电源状态: {ip}:{port}")
-            conn = await self.pool.get_connection(ip, username, password, port)
+            conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             result = await self._run_sync_ipmi(conn.get_power)
             execution_time = time.time() - start_time
             logger.debug(f"[电源状态] 获取电源状态完成: {ip}:{port}, 耗时: {execution_time:.3f}秒")
@@ -175,7 +179,7 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[电源控制] 开始电源控制操作: {ip}:{port}, 操作: {action}")
-            conn = await self.pool.get_connection(ip, username, password, port)
+            conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             
             power_actions = {'on': 'on', 'off': 'off', 'restart': 'reset', 'force_off': 'off', 'force_restart': 'cycle'}
             if action not in power_actions:
@@ -401,12 +405,13 @@ class IPMIService:
     async def get_system_info(self, ip: str, username: str, password: str, port: int = 623, timeout: int = 30) -> Dict[str, Any]:
         """获取系统信息 (使用正确的 pyghmi.ipmi.command API)"""
         port = self._ensure_port_is_int(port)
-        timeout = self._ensure_port_is_int(timeout)
+        # 使用配置的超时值
+        timeout = settings.IPMI_TIMEOUT
         try:
             start_time = time.time()
             logger.info(f"[系统信息] 开始获取系统信息: {ip}:{port} 用户:{username}")
             
-            conn = await self.pool.get_connection(ip, username, password, port)
+            conn = await self.pool.get_connection(ip, username, password, port, timeout=timeout)
             
             # 在线程池中执行所有同步操作
             system_info = await asyncio.wait_for(
@@ -444,8 +449,18 @@ class IPMIService:
         logger.debug(f"[传感器数据] 开始获取并解析传感器数据")
         sensors = {}
         try:
+            # 记录 get_sensor_data() 调用的用时
+            get_sensor_start = time.time()
             sensors_generator = conn.get_sensor_data()
+            get_sensor_time = time.time() - get_sensor_start
+            logger.debug(f"[传感器数据] conn.get_sensor_data() 调用耗时: {get_sensor_time:.3f}秒")
+            
+            sensor_count = 0
+            slow_sensors = []
+            
             for sensor_reading in sensors_generator:
+                sensor_start = time.time()
+                sensor_count += 1
                 if hasattr(sensor_reading, 'name') and hasattr(sensor_reading, 'value'):
                     sensors[sensor_reading.name] = {
                         'value': getattr(sensor_reading, 'value', 0),
@@ -455,11 +470,17 @@ class IPMIService:
                         'imprecision': getattr(sensor_reading, 'imprecision', None),
                         'unavailable': getattr(sensor_reading, 'unavailable', False)
                     }
+                    sensor_time = time.time() - sensor_start
+                    if sensor_time > 2.0:  # 记录耗时超过2秒的传感器
+                        slow_sensors.append(f"{sensor_reading.name}({sensor_time:.3f}s)")
+                        
         except Exception as e:
             logger.warning(f"解析传感器数据时发生错误: {e}")
             return {}
         
         execution_time = time.time() - start_time
+        if slow_sensors:
+            logger.debug(f"[传感器数据] 检测到慢速传感器: {', '.join(slow_sensors)}")
         logger.debug(f"[传感器数据] 获取并解析传感器数据完成, 共获取 {len(sensors)} 个传感器, 耗时: {execution_time:.3f}秒")
         return sensors
 
@@ -469,7 +490,7 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[传感器采集] 开始采集传感器数据: {ip}:{port}")
-            conn = await self.pool.get_connection(ip, username, password, port)
+            conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             
             # 将整个阻塞的获取和迭代过程放入线程池
             sensors = await self._run_sync_ipmi(self._sync_fetch_and_parse_sensors, conn)
@@ -519,7 +540,7 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[连接测试] 开始测试IPMI连接: {ip}:{port}")
-            conn = await self.pool.get_connection(ip, username, password, port)
+            conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             result = await self._run_sync_ipmi(conn.get_power)
             
             execution_time = time.time() - start_time
@@ -544,7 +565,7 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[用户列表] 开始获取用户列表: {ip}:{port}")
-            conn = await self.pool.get_connection(ip, username, password, port)
+            conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             users = await self._run_sync_ipmi(conn.get_users)
             execution_time = time.time() - start_time
             logger.debug(f"[用户列表] 获取用户列表完成: {ip}:{port}, 用户数: {len(users)}, 耗时: {execution_time:.3f}秒")
@@ -564,7 +585,7 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[创建用户] 开始创建用户: {ip}:{port}, 用户名: {new_username}")
-            conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
+            conn = await self.pool.get_connection(ip, admin_username, admin_password, port, timeout=settings.IPMI_TIMEOUT)
             
             # 创建用户
             await self._run_sync_ipmi(
@@ -592,7 +613,7 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[设置权限] 开始设置用户权限: {ip}:{port}, 用户ID: {userid}")
-            conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
+            conn = await self.pool.get_connection(ip, admin_username, admin_password, port, timeout=settings.IPMI_TIMEOUT)
             
             # 设置用户权限
             await self._run_sync_ipmi(
@@ -618,7 +639,7 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[设置密码] 开始设置用户密码: {ip}:{port}, 用户ID: {userid}")
-            conn = await self.pool.get_connection(ip, admin_username, admin_password, port)
+            conn = await self.pool.get_connection(ip, admin_username, admin_password, port, timeout=settings.IPMI_TIMEOUT)
             
             # 设置用户密码
             await self._run_sync_ipmi(
