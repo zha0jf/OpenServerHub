@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     
     # IPMI配置
     IPMI_CONNECTION_POOL_SIZE: int = 50
-    IPMI_TIMEOUT: int = 30
+    IPMI_TIMEOUT: int = 10  # 进一步降低超时时间到10秒
     
     # 定时任务配置
     POWER_STATE_REFRESH_INTERVAL: int = 3  # 电源状态刷新间隔（分钟）

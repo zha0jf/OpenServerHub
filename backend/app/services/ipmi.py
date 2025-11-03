@@ -3,7 +3,8 @@ import json
 import logging
 import ipaddress
 import functools
-import time  # 添加time模块
+import time
+import concurrent.futures
 from typing import Dict, Any, Optional, Generator, List
 from pyghmi.ipmi import command
 from pyghmi.exceptions import IpmiException
@@ -89,7 +90,10 @@ class IPMIConnectionPool:
 
         async with self.semaphore:
             if connection_key in self.connections:
-                return self.connections[connection_key]
+                # 为现有连接也更新超时设置
+                existing_conn = self.connections[connection_key]
+                # 注意：pyghmi的Command对象不支持动态修改超时，所以我们只能复用连接
+                return existing_conn
 
             loop = asyncio.get_running_loop()
             
@@ -97,6 +101,7 @@ class IPMIConnectionPool:
             logger.debug(f"[IPMI连接] 开始创建连接: {ip}:{port}")
 
             def _make_conn():
+                # 在创建连接时设置超时参数
                 return command.Command(
                     bmc=ip,
                     userid=username,
@@ -104,7 +109,9 @@ class IPMIConnectionPool:
                     port=port,
                     keepalive=True,
                     interface="lanplus",
-                    privlevel=4
+                    privlevel=4,
+                    # 注意：pyghmi的Command构造函数不直接支持timeout参数
+                    # 超时控制主要通过外部的asyncio.wait_for实现
                 )
 
             try:
@@ -137,7 +144,8 @@ class IPMIService:
         loop = asyncio.get_running_loop()
         # 使用 functools.partial 封装函数和其参数
         partial_func = functools.partial(func, *args, **kwargs)
-        return await loop.run_in_executor(None, partial_func)
+        # 为同步IPMI操作设置超时
+        return await asyncio.wait_for(loop.run_in_executor(None, partial_func), timeout=settings.IPMI_TIMEOUT)
 
     def _ensure_port_is_int(self, port):
         """确保端口是整数类型"""
@@ -444,35 +452,66 @@ class IPMIService:
             raise IPMIError(f"IPMI操作失败: {str(e)}")
 
     def _sync_fetch_and_parse_sensors(self, conn: command.Command) -> Dict[str, Any]:
-        """同步函数：获取并解析所有传感器数据。此函数将在线程池中运行。"""
+        """同步函数：并发获取并解析所有传感器数据。此函数将在线程池中运行。"""
         start_time = time.time()
-        logger.debug(f"[传感器数据] 开始获取并解析传感器数据")
+        logger.debug(f"[传感器数据] 开始并发获取并解析传感器数据")
         sensors = {}
         try:
             # 记录 get_sensor_data() 调用的用时
             get_sensor_start = time.time()
-            sensors_generator = conn.get_sensor_data()
+            sensors_list = list(conn.get_sensor_data())
             get_sensor_time = time.time() - get_sensor_start
-            logger.debug(f"[传感器数据] conn.get_sensor_data() 调用耗时: {get_sensor_time:.3f}秒")
+            logger.debug(f"[传感器数据] conn.get_sensor_data() 调用耗时: {get_sensor_time:.3f}秒, 共获取 {len(sensors_list)} 个传感器")
             
-            sensor_count = 0
+            # 使用线程池并发获取所有传感器的实时读数
+            MAX_WORKERS = 32  # 设置并发线程数
             slow_sensors = []
             
-            for sensor_reading in sensors_generator:
-                sensor_start = time.time()
-                sensor_count += 1
-                if hasattr(sensor_reading, 'name') and hasattr(sensor_reading, 'value'):
-                    sensors[sensor_reading.name] = {
-                        'value': getattr(sensor_reading, 'value', 0),
-                        'units': getattr(sensor_reading, 'units', ''),
-                        'type': getattr(sensor_reading, 'type', ''),
-                        'health': getattr(sensor_reading, 'health', 'unknown'),
-                        'imprecision': getattr(sensor_reading, 'imprecision', None),
-                        'unavailable': getattr(sensor_reading, 'unavailable', False)
+            def read_sensor_value(sensor):
+                """在新线程中读取传感器值和状态"""
+                try:
+                    # 访问 .value 触发实际的IPMI调用
+                    current_value = sensor.value
+                    
+                    # 从内部的 ._reading 对象中获取 health 属性
+                    current_health = "Unknown"
+                    if hasattr(sensor, '_reading') and sensor._reading:
+                        current_health = getattr(sensor._reading, 'health', 'Unknown')
+                    
+                    # 获取其他传感器属性
+                    units = getattr(sensor, 'units', '')
+                    sensor_type = getattr(sensor, 'type', '')
+                    imprecision = getattr(sensor, 'imprecision', None)
+                    unavailable = getattr(sensor, 'unavailable', False)
+                    
+                    return sensor.name, {
+                        'value': current_value,
+                        'units': units,
+                        'type': sensor_type,
+                        'health': current_health,
+                        'imprecision': imprecision,
+                        'unavailable': unavailable
                     }
-                    sensor_time = time.time() - sensor_start
-                    if sensor_time > 2.0:  # 记录耗时超过2秒的传感器
-                        slow_sensors.append(f"{sensor_reading.name}({sensor_time:.3f}s)")
+                except Exception as e:
+                    return sensor.name, {
+                        'value': None,
+                        'units': '',
+                        'type': '',
+                        'health': f"Error: {e}",
+                        'imprecision': None,
+                        'unavailable': True
+                    }
+            
+            # 使用线程池并发执行传感器读取
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                results = executor.map(read_sensor_value, sensors_list)
+            
+            # 处理并发执行结果
+            for name, sensor_info in results:
+                sensors[name] = sensor_info
+                # 记录无效或异常的传感器
+                if sensor_info.get('unavailable', False) or sensor_info.get('health', '').startswith('Error'):
+                    slow_sensors.append(name)
                         
         except Exception as e:
             logger.warning(f"解析传感器数据时发生错误: {e}")
@@ -480,8 +519,8 @@ class IPMIService:
         
         execution_time = time.time() - start_time
         if slow_sensors:
-            logger.debug(f"[传感器数据] 检测到慢速传感器: {', '.join(slow_sensors)}")
-        logger.debug(f"[传感器数据] 获取并解析传感器数据完成, 共获取 {len(sensors)} 个传感器, 耗时: {execution_time:.3f}秒")
+            logger.debug(f"[传感器数据] 检测到异常传感器: {', '.join(slow_sensors)}")
+        logger.debug(f"[传感器数据] 并发获取并解析传感器数据完成, 共获取 {len(sensors)} 个传感器, 耗时: {execution_time:.3f}秒")
         return sensors
 
     async def get_sensor_data(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
