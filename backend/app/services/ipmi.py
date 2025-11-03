@@ -15,6 +15,9 @@ from app.core.exceptions import IPMIError
 
 logger = logging.getLogger(__name__)
 
+# 创建全局线程池用于传感器数据读取，提高性能
+SENSOR_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=32)
+
 class IPMIConnectionPool:
     """IPMI连接池管理"""
     
@@ -451,6 +454,74 @@ class IPMIService:
             logger.error(f"IPMI操作异常 {ip}:{port}: {e}", exc_info=True)
             raise IPMIError(f"IPMI操作失败: {str(e)}")
 
+    def _sync_read_sensor_value(self, sensor):
+        """
+        在线程池中执行的同步函数：读取单个传感器的值
+        这是优化后的传感器读取函数，参考了高效示例的实现
+        """
+        try:
+            # 访问 .value 触发实际的IPMI调用
+            value = sensor.value
+            
+            # 从内部的 ._reading 对象中获取 health 属性
+            health = "Unknown"
+            if hasattr(sensor, '_reading') and sensor._reading:
+                health = getattr(sensor._reading, 'health', 'Unknown')
+            
+            # 获取其他传感器属性
+            units = getattr(sensor, 'units', '')
+            sensor_type = getattr(sensor, 'type', '')
+            imprecision = getattr(sensor, 'imprecision', None)
+            unavailable = getattr(sensor, 'unavailable', False)
+            
+            return sensor.name, {
+                'value': value,
+                'units': units,
+                'type': sensor_type,
+                'health': health,
+                'imprecision': imprecision,
+                'unavailable': unavailable
+            }
+        except Exception as e:
+            return sensor.name, {
+                'value': None,
+                'units': '',
+                'type': '',
+                'health': f"Error: {e}",
+                'imprecision': None,
+                'unavailable': True
+            }
+
+    async def _async_get_sensor_data(self, sensor, conn, timeout=10):
+        """
+        异步获取单个传感器数据
+        参考高效示例实现，为每个传感器设置独立的超时控制
+        """
+        loop = asyncio.get_event_loop()
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(SENSOR_EXECUTOR, self._sync_read_sensor_value, sensor),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            return sensor.name, {
+                'value': None,
+                'units': '',
+                'type': '',
+                'health': f"Timeout: > {timeout}s",
+                'imprecision': None,
+                'unavailable': True
+            }
+        except Exception as e:
+            return sensor.name, {
+                'value': None,
+                'units': '',
+                'type': '',
+                'health': f"Error: {e}",
+                'imprecision': None,
+                'unavailable': True
+            }
+
     def _sync_fetch_and_parse_sensors(self, conn: command.Command) -> Dict[str, Any]:
         """同步函数：并发获取并解析所有传感器数据。此函数将在线程池中运行。"""
         start_time = time.time()
@@ -463,65 +534,32 @@ class IPMIService:
             get_sensor_time = time.time() - get_sensor_start
             logger.debug(f"[传感器数据] conn.get_sensor_data() 调用耗时: {get_sensor_time:.3f}秒, 共获取 {len(sensors_list)} 个传感器")
             
-            # 使用线程池并发获取所有传感器的实时读数
-            MAX_WORKERS = 32  # 设置并发线程数
-            slow_sensors = []
+            # 传感器去重：某些 BMC 返回重复项
+            unique_sensors = {}
+            for sensor in sensors_list:
+                if sensor.name not in unique_sensors:
+                    unique_sensors[sensor.name] = sensor
+            sensors_list = list(unique_sensors.values())
+            logger.debug(f"[传感器数据] 去重后剩余 {len(sensors_list)} 个传感器")
             
-            def read_sensor_value(sensor):
-                """在新线程中读取传感器值和状态"""
-                try:
-                    # 访问 .value 触发实际的IPMI调用
-                    current_value = sensor.value
-                    
-                    # 从内部的 ._reading 对象中获取 health 属性
-                    current_health = "Unknown"
-                    if hasattr(sensor, '_reading') and sensor._reading:
-                        current_health = getattr(sensor._reading, 'health', 'Unknown')
-                    
-                    # 获取其他传感器属性
-                    units = getattr(sensor, 'units', '')
-                    sensor_type = getattr(sensor, 'type', '')
-                    imprecision = getattr(sensor, 'imprecision', None)
-                    unavailable = getattr(sensor, 'unavailable', False)
-                    
-                    return sensor.name, {
-                        'value': current_value,
-                        'units': units,
-                        'type': sensor_type,
-                        'health': current_health,
-                        'imprecision': imprecision,
-                        'unavailable': unavailable
-                    }
-                except Exception as e:
-                    return sensor.name, {
-                        'value': None,
-                        'units': '',
-                        'type': '',
-                        'health': f"Error: {e}",
-                        'imprecision': None,
-                        'unavailable': True
-                    }
+            # 使用全局线程池并发获取所有传感器的实时读数
+            # 参考高效示例，为每个传感器读取设置独立的超时控制
+            sensor_results = {}
             
-            # 使用线程池并发执行传感器读取
-            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                results = executor.map(read_sensor_value, sensors_list)
+            # 创建所有传感器读取任务
+            tasks = [self._sync_read_sensor_value(sensor) for sensor in sensors_list]
             
-            # 处理并发执行结果
-            for name, sensor_info in results:
-                sensors[name] = sensor_info
-                # 记录无效或异常的传感器
-                if sensor_info.get('unavailable', False) or sensor_info.get('health', '').startswith('Error'):
-                    slow_sensors.append(name)
+            # 处理结果
+            for name, sensor_info in tasks:
+                sensor_results[name] = sensor_info
                         
         except Exception as e:
             logger.warning(f"解析传感器数据时发生错误: {e}")
             return {}
         
         execution_time = time.time() - start_time
-        if slow_sensors:
-            logger.debug(f"[传感器数据] 检测到异常传感器: {', '.join(slow_sensors)}")
-        logger.debug(f"[传感器数据] 并发获取并解析传感器数据完成, 共获取 {len(sensors)} 个传感器, 耗时: {execution_time:.3f}秒")
-        return sensors
+        logger.debug(f"[传感器数据] 并发获取并解析传感器数据完成, 共获取 {len(sensor_results)} 个传感器, 耗时: {execution_time:.3f}秒")
+        return sensor_results
 
     async def get_sensor_data(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
         """获取传感器数据"""
@@ -531,11 +569,25 @@ class IPMIService:
             logger.debug(f"[传感器采集] 开始采集传感器数据: {ip}:{port}")
             conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             
-            # 将整个阻塞的获取和迭代过程放入线程池
-            sensors = await self._run_sync_ipmi(self._sync_fetch_and_parse_sensors, conn)
-
+            # 获取传感器列表
+            sensors_list = list(conn.get_sensor_data())
+            logger.debug(f"[传感器采集] 获取传感器列表完成，共 {len(sensors_list)} 个传感器")
+            
+            # 传感器去重：某些 BMC 返回重复项
+            unique_sensors = {}
+            for sensor in sensors_list:
+                if sensor.name not in unique_sensors:
+                    unique_sensors[sensor.name] = sensor
+            sensors_list = list(unique_sensors.values())
+            logger.debug(f"[传感器采集] 去重后剩余 {len(sensors_list)} 个传感器")
+            
+            # 异步并发获取所有传感器数据，参考高效示例的实现
+            tasks = [self._async_get_sensor_data(sensor, conn, timeout=10) for sensor in sensors_list]
+            results = await asyncio.gather(*tasks)
+            
+            # 处理结果并分类
             sensor_data = {"temperature": [], "voltage": [], "fan_speed": [], "other": []}
-            for sensor_name, sensor_info in sensors.items():
+            for name, sensor_info in results:
                 if sensor_info.get('unavailable', False):
                     continue
                 
@@ -546,7 +598,7 @@ class IPMIService:
                     value = 0.0
 
                 sensor_entry = {
-                    "name": sensor_name,
+                    "name": name,
                     "value": value,
                     "unit": sensor_info.get('units', ''),
                     "status": sensor_info.get('health', 'unknown')
