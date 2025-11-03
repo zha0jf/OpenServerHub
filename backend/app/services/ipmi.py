@@ -523,15 +523,20 @@ class IPMIService:
         try:
             start_time = time.time()
             logger.debug(f"[传感器采集] 开始采集传感器数据: {ip}:{port}")
-            conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             
-            # 获取传感器列表
+            # 连接耗时
+            connect_start = time.time()
+            conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
+            connect_time = time.time() - connect_start
+            logger.debug(f"[传感器采集] IPMI连接完成: {ip}:{port}, 耗时: {connect_time:.3f}秒")
+            
+            # 获取传感器列表耗时
             sensors_start = time.time()
             sensors_list = list(conn.get_sensor_data())
             sensors_time = time.time() - sensors_start
             logger.debug(f"[传感器采集] 获取传感器列表完成，共 {len(sensors_list)} 个传感器, 耗时: {sensors_time:.3f}秒")
             
-            # 传感器去重：某些 BMC 返回重复项
+            # 传感器去重耗时
             unique_start = time.time()
             unique_sensors = {}
             for sensor in sensors_list:
@@ -541,17 +546,17 @@ class IPMIService:
             unique_time = time.time() - unique_start
             logger.debug(f"[传感器采集] 去重后剩余 {len(sensors_list)} 个传感器, 耗时: {unique_time:.3f}秒")
             
-            # 异步并发获取所有传感器数据，参考高效示例的实现
-            # 移除外层的asyncio.wait_for，让IPMI调用自主管理超时
-            tasks_start = time.time()
+            # 异步并发获取所有传感器数据耗时
+            fetch_start = time.time()
             tasks = [self._async_get_sensor_data(sensor, conn, timeout=10) for sensor in sensors_list]
             results = await asyncio.gather(*tasks)
-            tasks_time = time.time() - tasks_start
-            logger.debug(f"[传感器采集] 并发获取传感器数据完成, 耗时: {tasks_time:.3f}秒")
+            fetch_time = time.time() - fetch_start
+            logger.debug(f"[传感器采集] 并发获取传感器数据完成, 耗时: {fetch_time:.3f}秒, 有效传感器: {len(results)}个")
             
-            # 处理结果并分类
+            # 数据处理和分类耗时
             process_start = time.time()
             sensor_data = {"temperature": [], "voltage": [], "fan_speed": [], "other": []}
+            valid_sensors = 0
             for name, sensor_info in results:
                 if sensor_info.get('unavailable', False):
                     continue
@@ -578,11 +583,14 @@ class IPMIService:
                     sensor_data["fan_speed"].append(sensor_entry)
                 else:
                     sensor_data["other"].append(sensor_entry)
+                valid_sensors += 1
             
             process_time = time.time() - process_start
             execution_time = time.time() - start_time
-            logger.debug(f"[传感器采集] 传感器数据处理完成, 耗时: {process_time:.3f}秒")
-            logger.debug(f"[传感器采集] 传感器数据采集完成: {ip}:{port}, 耗时: {execution_time:.3f}秒")
+            logger.debug(f"[传感器采集] 传感器数据处理完成, 有效传感器: {valid_sensors}个, 耗时: {process_time:.3f}秒")
+            logger.debug(f"[传感器采集] 传感器数据采集完成: {ip}:{port}, 总耗时: {execution_time:.3f}秒, "
+                        f"连接: {connect_time:.3f}s, 获取列表: {sensors_time:.3f}s, 去重: {unique_time:.3f}s, "
+                        f"并发读取: {fetch_time:.3f}s, 处理: {process_time:.3f}s")
             return sensor_data
             
         except IpmiException as e:
