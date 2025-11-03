@@ -147,8 +147,8 @@ class IPMIService:
         loop = asyncio.get_running_loop()
         # 使用 functools.partial 封装函数和其参数
         partial_func = functools.partial(func, *args, **kwargs)
-        # 为同步IPMI操作设置超时
-        return await asyncio.wait_for(loop.run_in_executor(None, partial_func), timeout=settings.IPMI_TIMEOUT)
+        # 移除外层的asyncio.wait_for包装，让IPMI调用自主管理超时
+        return await loop.run_in_executor(None, partial_func)
 
     def _ensure_port_is_int(self, port):
         """确保端口是整数类型"""
@@ -425,10 +425,8 @@ class IPMIService:
             conn = await self.pool.get_connection(ip, username, password, port, timeout=timeout)
             
             # 在线程池中执行所有同步操作
-            system_info = await asyncio.wait_for(
-                self._run_sync_ipmi(self._sync_get_all_info, conn, ip),
-                timeout=timeout
-            )
+            # 移除外层的asyncio.wait_for包装，让IPMI调用自主管理超时
+            system_info = await self._run_sync_ipmi(self._sync_get_all_info, conn, ip)
             
             # 为未获取到的信息提供默认值
             final_info = {
@@ -444,9 +442,6 @@ class IPMIService:
             logger.info(f"[系统信息] 系统信息获取成功: {ip}:{port} - {final_info}, 耗时: {execution_time:.3f}秒")
             return final_info
             
-        except asyncio.TimeoutError:
-            logger.warning(f"获取系统信息超时 {ip}:{port}")
-            raise IPMIError("获取系统信息超时")
         except IpmiException as e:
             logger.error(f"获取系统信息失败 {ip}:{port}: {e}")
             raise IPMIError(f"获取系统信息失败: {str(e)}")
@@ -546,12 +541,18 @@ class IPMIService:
             # 参考高效示例，为每个传感器读取设置独立的超时控制
             sensor_results = {}
             
-            # 创建所有传感器读取任务
-            tasks = [self._sync_read_sensor_value(sensor) for sensor in sensors_list]
+            # 使用真正的并发处理而不是顺序处理
+            futures = [SENSOR_EXECUTOR.submit(self._sync_read_sensor_value, sensor) for sensor in sensors_list]
             
-            # 处理结果
-            for name, sensor_info in tasks:
-                sensor_results[name] = sensor_info
+            # 等待所有任务完成并收集结果
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    name, sensor_info = future.result(timeout=10)  # 每个传感器10秒超时
+                    sensor_results[name] = sensor_info
+                except concurrent.futures.TimeoutError:
+                    logger.warning("传感器读取超时")
+                except Exception as e:
+                    logger.warning(f"传感器读取异常: {e}")
                         
         except Exception as e:
             logger.warning(f"解析传感器数据时发生错误: {e}")
@@ -582,6 +583,7 @@ class IPMIService:
             logger.debug(f"[传感器采集] 去重后剩余 {len(sensors_list)} 个传感器")
             
             # 异步并发获取所有传感器数据，参考高效示例的实现
+            # 移除外层的asyncio.wait_for，让IPMI调用自主管理超时
             tasks = [self._async_get_sensor_data(sensor, conn, timeout=10) for sensor in sensors_list]
             results = await asyncio.gather(*tasks)
             
