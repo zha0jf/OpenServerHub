@@ -66,19 +66,16 @@ async def get_server_metrics(
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
-    """获取服务器监控指标 - 只显示当前数据"""
+    """获取服务器监控指标 - 显示当前数据"""
     try:
         logger.info(f"获取服务器 {server_id} 的当前监控指标，类型: {metric_type}")
         
         monitoring_service = MonitoringService(db)
         
-        # 只获取最新的数据记录（最近1分钟内的数据）
-        since = datetime.now() - timedelta(minutes=1)
-        
+        # 根据项目存储策略，数据库中只保留最新数据，无需时间过滤
         metrics = monitoring_service.get_server_metrics(
             server_id=server_id,
-            metric_type=metric_type,
-            since=since
+            metric_type=metric_type
         )
         
         logger.info(f"成功获取服务器 {server_id} 的 {len(metrics)} 条当前监控记录")
