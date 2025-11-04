@@ -12,9 +12,9 @@ def setup_logging():
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     
-    # 根据DEBUG环境变量确定日志级别
+    # 使用标准配置方式
     log_level = settings.LOG_LEVEL
-    console_level = "DEBUG" if os.getenv("DEBUG", "").lower() == "true" else "INFO"
+    console_level = "DEBUG" if settings.DEBUG else "INFO"
     
     logging_config = {
         "version": 1,
