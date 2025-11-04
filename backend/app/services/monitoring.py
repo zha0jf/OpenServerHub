@@ -44,7 +44,7 @@ class MonitoringService:
             raise ValidationError("获取监控数据失败")
 
     async def collect_server_metrics(self, server_id: int) -> Dict[str, Any]:
-        """采集服务器指标数据"""
+        """采集服务器指标数据并删除旧数据"""
         start_time = time.time()
         logger.debug(f"[监控采集] 开始采集服务器 {server_id} 的监控指标")
         
@@ -139,7 +139,25 @@ class MonitoringService:
             fan_time = time.time() - fan_start
             logger.debug(f"[监控采集] 处理风扇传感器数据耗时: {fan_time:.3f}秒")
             
-            # 提交数据库事务
+            # 删除此服务器的所有旧数据
+            cleanup_start = time.time()
+            try:
+                deleted_count = self.db.query(MonitoringRecord).filter(
+                    MonitoringRecord.server_id == server_id
+                ).delete()
+                logger.info(f"成功删除服务器 {server_id} 的 {deleted_count} 条旧监控数据")
+            except Exception as e:
+                self.db.rollback()
+                logger.error(f"删除旧监控数据失败 (server_id={server_id}): {e}")
+                return {
+                    "status": "error",
+                    "message": "删除旧监控数据失败",
+                    "timestamp": datetime.now().isoformat()
+                }
+            cleanup_time = time.time() - cleanup_start
+            logger.debug(f"[监控采集] 删除旧数据耗时: {cleanup_time:.3f}秒")
+            
+            # 提交新数据到数据库（包括删除旧数据和插入新数据）
             commit_start = time.time()
             try:
                 self.db.commit()
@@ -169,6 +187,7 @@ class MonitoringService:
                     "temperature_processing": round(temp_time, 3),
                     "voltage_processing": round(voltage_time, 3),
                     "fan_processing": round(fan_time, 3),
+                    "cleanup": round(cleanup_time, 3),
                     "database_commit": round(commit_time, 3)
                 }
             }
@@ -201,21 +220,3 @@ class MonitoringService:
                     "total": round(total_time, 3)
                 }
             }
-
-    def cleanup_old_metrics(self, days: int = 30) -> int:
-        """清理旧的监控数据"""
-        try:
-            cutoff_date = datetime.now() - timedelta(days=days)
-            
-            deleted_count = self.db.query(MonitoringRecord).filter(
-                MonitoringRecord.timestamp < cutoff_date
-            ).delete()
-            
-            self.db.commit()
-            logger.info(f"成功清理 {deleted_count} 条 {days} 天前的旧监控数据")
-            return deleted_count
-            
-        except Exception as e:
-            self.db.rollback()
-            logger.error(f"清理旧监控数据失败: {e}")
-            raise ValidationError("清理监控数据失败")

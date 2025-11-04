@@ -430,7 +430,7 @@ const MonitoringDashboard: React.FC = () => {
             {!isServerOff && Object.keys(groupedMetrics).length > 0 && (
               <Alert
                 message="监控数据说明"
-                description="以上数据为最近24小时的监控记录。"
+                description="以上为服务器当前的监控数据。"
                 type="info"
               />
             )}

@@ -39,8 +39,20 @@ class MonitoringSchedulerService:
             return
             
         try:
-            # 已删除定时自动采集数据功能
-            logger.info("监控数据采集定时任务服务已启动（已禁用自动采集功能）")
+            # 添加定时采集任务，使用配置的时间间隔
+            self.scheduler.add_job(
+                self.collect_monitoring_data,
+                "interval",
+                minutes=settings.MONITORING_INTERVAL,  # 使用配置的时间间隔
+                id=self._collect_job_id,
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True
+            )
+            
+            self.scheduler.start()
+            self.is_running = True
+            logger.info(f"监控数据采集定时任务服务已启动，采集间隔：{settings.MONITORING_INTERVAL}分钟")
             
         except Exception as e:
             logger.error(f"启动监控数据采集定时任务失败: {e}")
@@ -58,29 +70,56 @@ class MonitoringSchedulerService:
         except Exception as e:
             logger.error(f"停止监控数据采集定时任务失败: {e}")
     
-    async def cleanup_old_metrics(self):
-        """清理旧的监控数据"""
+    async def collect_monitoring_data(self):
+        """定时采集所有启用监控的服务器数据"""
+        # 检查是否已经有任务在运行，防止重叠执行
+        if self._is_collecting:
+            logger.warning("监控数据采集任务已在运行中，跳过本次执行")
+            return
+            
         try:
-            logger.info("开始清理旧的监控数据")
+            self._is_collecting = True
+            logger.info("开始定时采集所有启用监控的服务器数据")
             
             # 使用异步上下文管理器正确处理会话
             async with AsyncSessionLocal() as session:
-                # 创建监控服务实例
-                monitoring_service = MonitoringService(session)
+                # 获取所有启用监控的服务器
+                stmt = select(Server).where(Server.monitoring_enabled == True)
+                result = await session.execute(stmt)
+                servers = result.scalars().all()
                 
-                # 清理30天前的监控数据
-                deleted_count = monitoring_service.cleanup_old_metrics(30)
+                if not servers:
+                    logger.info("没有启用监控的服务器，跳过数据采集")
+                    return
                 
-                logger.info(f"成功清理 {deleted_count} 条旧监控数据")
+                logger.info(f"找到 {len(servers)} 台启用监控的服务器，开始采集数据")
+                
+                # 为每台服务器采集数据
+                for server in servers:
+                    try:
+                        monitoring_service = MonitoringService(session)
+                        result = await monitoring_service.collect_server_metrics(server.id)
+                        
+                        if result.get("status") == "success":
+                            logger.info(f"成功采集服务器 {server.id} ({server.name}) 的监控数据: {len(result.get('collected_metrics', []))} 个指标")
+                        elif result.get("status") == "partial_success":
+                            logger.warning(f"部分成功采集服务器 {server.id} ({server.name}) 的监控数据，存在错误: {result.get('errors', [])}")
+                        else:
+                            logger.error(f"采集服务器 {server.id} ({server.name}) 监控数据失败: {result.get('message', 'Unknown error')}")
+                    except Exception as e:
+                        logger.error(f"采集服务器 {server.id} ({server.name}) 监控数据时发生异常: {e}")
+                
+                logger.info("定时采集所有服务器监控数据完成")
                 
         except Exception as e:
-            logger.error(f"清理旧监控数据失败: {e}")
-    
+            logger.error(f"定时采集监控数据失败: {e}")
+        finally:
+            self._is_collecting = False
+
     def get_status(self) -> Dict[str, Any]:
         """获取定时任务状态"""
         try:
             collect_job = self.scheduler.get_job(self._collect_job_id)
-            cleanup_job = self.scheduler.get_job(self._cleanup_job_id)
             
             status: Dict[str, Union[bool, Dict[str, Any]]] = {
                 "running": self.is_running,
@@ -91,13 +130,7 @@ class MonitoringSchedulerService:
                 status["collect_job"] = {
                     "job_id": self._collect_job_id,
                     "next_run_time": collect_job.next_run_time.isoformat() if collect_job.next_run_time else None,
-                    "interval_minutes": settings.MONITORING_INTERVAL if hasattr(settings, 'MONITORING_INTERVAL') else 5
-                }
-            
-            if cleanup_job:
-                status["cleanup_job"] = {
-                    "job_id": self._cleanup_job_id,
-                    "next_run_time": cleanup_job.next_run_time.isoformat() if cleanup_job.next_run_time else None
+                    "interval_minutes": settings.MONITORING_INTERVAL  # 使用配置的时间间隔
                 }
                 
             return status

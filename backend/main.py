@@ -12,7 +12,7 @@ from app.core.database import engine
 from app.core.logging import setup_logging
 from app.api.v1.api import api_router
 from app.models import Base
-from app.services import scheduler_service, monitoring_scheduler
+from app.services import scheduler_service, monitoring_scheduler_service
 from app.services.ipmi import ipmi_pool
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"启动电源状态定时任务服务失败: {e}")
     
+    # 启动监控数据采集定时任务服务
+    try:
+        await monitoring_scheduler_service.start()
+        logger.info("监控数据采集定时任务服务已启动")
+    except Exception as e:
+        logger.error(f"启动监控数据采集定时任务服务失败: {e}")
+    
     yield
     
     # 关闭时停止定时任务服务
@@ -60,6 +67,13 @@ async def lifespan(app: FastAPI):
         logger.info("电源状态定时刷新服务已停止")
     except Exception as e:
         logger.error(f"停止电源状态定时任务服务失败: {e}")
+    
+    # 停止监控数据采集定时任务服务
+    try:
+        await monitoring_scheduler_service.stop()
+        logger.info("监控数据采集定时任务服务已停止")
+    except Exception as e:
+        logger.error(f"停止监控数据采集定时任务服务失败: {e}")
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
 

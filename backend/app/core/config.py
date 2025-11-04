@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     
     # 监控系统配置
     MONITORING_ENABLED: bool = True  # 默认启用监控
-    MONITORING_INTERVAL: int = 5  # 监控数据采集间隔（分钟）
+    MONITORING_INTERVAL: int = 10  # 监控数据采集间隔（分钟）
     PROMETHEUS_URL: str = "http://prometheus:9090"
     GRAFANA_URL: str = "http://grafana:3000"
     GRAFANA_API_KEY: str = os.getenv("GRAFANA_API_KEY", "your-grafana-api-key-here")

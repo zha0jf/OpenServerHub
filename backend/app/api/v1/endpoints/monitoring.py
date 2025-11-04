@@ -66,16 +66,14 @@ async def get_server_metrics(
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
-    """获取服务器监控指标"""
+    """获取服务器监控指标 - 只显示当前数据"""
     try:
-        logger.info(f"获取服务器 {server_id} 的监控指标，类型: {metric_type}, 时间范围: {hours}小时")
-        
-        # 验证参数
-        if hours <= 0 or hours > 8760:  # 最多一年
-            raise HTTPException(status_code=400, detail="时间范围必须在1小时到1年之间")
+        logger.info(f"获取服务器 {server_id} 的当前监控指标，类型: {metric_type}")
         
         monitoring_service = MonitoringService(db)
-        since = datetime.now() - timedelta(hours=hours)
+        
+        # 只获取最新的数据记录（最近1分钟内的数据）
+        since = datetime.now() - timedelta(minutes=1)
         
         metrics = monitoring_service.get_server_metrics(
             server_id=server_id,
@@ -83,7 +81,7 @@ async def get_server_metrics(
             since=since
         )
         
-        logger.info(f"成功获取服务器 {server_id} 的 {len(metrics)} 条监控记录")
+        logger.info(f"成功获取服务器 {server_id} 的 {len(metrics)} 条当前监控记录")
         return metrics
         
     except HTTPException:
