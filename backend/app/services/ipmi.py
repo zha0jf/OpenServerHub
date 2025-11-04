@@ -26,53 +26,6 @@ class IPMIConnectionPool:
         self.connections = {}
         self.semaphore = asyncio.Semaphore(max_connections)
     
-    async def get_connection1(self, ip: str, username: str, password: str, port: int = 623):
-        """获取IPMI连接（安全版，确保参数类型正确）"""
-        # 确保参数类型
-        try:
-            ip = str(ip)
-            port = int(port)
-            username = str(username) if username is not None else ""
-            password = str(password) if password is not None else ""
-        except (ValueError, TypeError) as e:
-            logger.error(f"IPMI连接参数类型无效: ip={ip}({type(ip)}), port={port}({type(port)}), "
-                        f"user={username}({type(username)}), password={password}({type(password)})")
-            raise IPMIError(f"IPMI连接参数类型错误: {e}")
-
-        connection_key = f"{ip}:{port}:{username}"
-
-        async with self.semaphore:
-            try:
-                logger.info(f"准备创建IPMI连接: bmc={repr(ip)}, port={port}, user={repr(username)}, password={repr(password)}")
-
-                if connection_key not in self.connections:
-                    conn = command.Command(
-                        bmc=ip,
-                        userid=username,
-                        password=password,
-                        port=port,
-                        keepalive=True,
-                        interface="lanplus",
-                        privlevel=4
-                    )
-                    self.connections[connection_key] = conn
-
-                return self.connections[connection_key]
-
-            except TypeError as e:
-                logger.error(f"TypeError创建IPMI连接失败: {e}")
-                logger.error(f"参数: bmc={repr(ip)}, port={repr(port)}, user={repr(username)}, password={repr(password)}")
-                raise IPMIError(f"IPMI连接失败（类型错误）: {e}")
-
-            except Exception as e:
-                # 处理pyghmi库内部的特定错误
-                error_msg = str(e)
-                if "'Session' object has no attribute 'errormsg'" in error_msg:
-                    logger.error(f"创建IPMI连接失败: IPMI会话初始化失败，可能是网络连接问题或认证失败")
-                    raise IPMIError(f"IPMI连接失败: 无法建立IPMI会话，请检查网络连接和认证信息")
-                else:
-                    logger.error(f"创建IPMI连接失败: {e}")
-                    raise IPMIError(f"IPMI连接失败: {e}")
     async def get_connection(self, ip: str, username: str, password: str, port: int = 623, timeout: int = 30):
         """获取IPMI连接（安全版，带超时保护，避免在OpenBMC卡死）"""
         # 使用配置的超时值作为默认值
@@ -132,6 +85,18 @@ class IPMIConnectionPool:
                 connection_time = time.time() - start_time
                 logger.error(f"[IPMI连接] 创建连接失败: {ip}:{port}, 耗时: {connection_time:.3f}秒, 错误: {e}")
                 raise IPMIError(f"IPMI连接失败: {e}")
+
+    def close(self):
+        """关闭连接池并清理资源"""
+        # 清理所有连接
+        for conn_key, conn in self.connections.items():
+            try:
+                if hasattr(conn, 'close'):
+                    conn.close()
+            except Exception as e:
+                logger.error(f"关闭IPMI连接 {conn_key} 时出错: {e}")
+        
+        self.connections.clear()
 
 # 全局连接池实例
 ipmi_pool = IPMIConnectionPool(settings.IPMI_CONNECTION_POOL_SIZE)

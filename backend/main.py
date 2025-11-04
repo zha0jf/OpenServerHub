@@ -5,22 +5,40 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 
+from pyghmi.ipmi.command import Housekeeper
+
 from app.core.config import settings
 from app.core.database import engine
 from app.core.logging import setup_logging
 from app.api.v1.api import api_router
 from app.models import Base
 from app.services import scheduler_service, monitoring_scheduler
+from app.services.ipmi import ipmi_pool
 
 logger = logging.getLogger(__name__)
 
 # 设置日志
 setup_logging()
 
+# 全局Housekeeper实例
+housekeeper = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global housekeeper
+    
     # 启动时创建数据库表
     Base.metadata.create_all(bind=engine)
+    
+    # 初始化并启动Housekeeper
+    try:
+        housekeeper = Housekeeper()
+        housekeeper.start()
+        logger.info("IPMI Housekeeper初始化并启动成功")
+    except Exception as e:
+        logger.error(f"IPMI Housekeeper初始化失败: {e}")
+        # 不应该因为Housekeeper初始化失败而阻止应用启动
+        housekeeper = None
     
     # 打印配置值用于调试
     logger.info(f"POWER_STATE_REFRESH_ENABLED 配置值: {settings.POWER_STATE_REFRESH_ENABLED}")
