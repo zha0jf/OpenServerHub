@@ -3,6 +3,12 @@ echo ====================================
 echo OpenServerHub 启动脚本
 echo ====================================
 
+REM 设置PowerShell执行策略以允许脚本运行
+powershell -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force" >nul 2>&1
+
+REM 设置文件句柄限制（Windows中通过PowerShell）
+powershell -Command "[System.Threading.Thread]::CurrentThread.Priority = 'Highest'" >nul 2>&1
+
 echo.
 echo 1. 启动后端服务...
 cd /d "%~dp0backend"

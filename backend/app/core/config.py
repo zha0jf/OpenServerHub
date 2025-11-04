@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     LOG_FILE: str = "logs/app.log"
     
     # IPMI配置
-    IPMI_CONNECTION_POOL_SIZE: int = 50
+    IPMI_CONNECTION_POOL_SIZE: int = 500  # 从50提高到500以支持更多服务器
     IPMI_TIMEOUT: int = 10  # 进一步降低超时时间到10秒
     
     # 定时任务配置
