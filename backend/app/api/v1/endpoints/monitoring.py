@@ -1,4 +1,4 @@
-from backend.app.models.monitoring import MonitoringRecord
+from app.models.monitoring import MonitoringRecord
 from typing import List
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
