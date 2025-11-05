@@ -1,3 +1,4 @@
+from backend.app.models.monitoring import MonitoringRecord
 from typing import List
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
@@ -74,7 +75,7 @@ async def get_server_metrics(
         monitoring_service = MonitoringService(db)
         
         # 根据项目存储策略，数据库中只保留最新数据，无需时间过滤
-        metrics = await monitoring_service.get_server_metrics_async(
+        metrics: List[MonitoringRecord] = await monitoring_service.get_server_metrics_async(
             server_id=server_id,
             metric_type=metric_type
         )
