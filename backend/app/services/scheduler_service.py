@@ -58,11 +58,14 @@ class PowerStateSchedulerService:
             
         except Exception as e:
             logger.error(f"启动定时任务失败: {e}")
+            # 即使启动失败，也要确保状态正确
+            self.is_running = False
             raise
     
     async def stop(self):
         """停止定时任务"""
         if not self.is_running:
+            logger.info("电源状态定时刷新服务未运行，无需停止")
             return
             
         try:
@@ -71,6 +74,8 @@ class PowerStateSchedulerService:
             logger.info("电源状态定时刷新服务已停止")
         except Exception as e:
             logger.error(f"停止定时任务失败: {e}")
+            # 即使停止失败，也要确保状态正确
+            self.is_running = False
     
     async def refresh_all_servers_power_state(self):
         """刷新所有服务器的电源状态"""
@@ -241,6 +246,15 @@ class PowerStateSchedulerService:
                 "job_id": self._job_id,
                 "next_run_time": None,
                 "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL
+            }
+        except Exception as e:
+            logger.error(f"获取定时任务状态失败: {e}")
+            return {
+                "running": self.is_running,
+                "job_id": self._job_id,
+                "next_run_time": None,
+                "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL,
+                "error": str(e)
             }
 
 

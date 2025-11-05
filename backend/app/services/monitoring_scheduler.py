@@ -56,11 +56,14 @@ class MonitoringSchedulerService:
             
         except Exception as e:
             logger.error(f"启动监控数据采集定时任务失败: {e}")
+            # 即使启动失败，也要确保状态正确
+            self.is_running = False
             raise
     
     async def stop(self):
         """停止定时任务"""
         if not self.is_running:
+            logger.info("监控数据采集定时任务服务未运行，无需停止")
             return
             
         try:
@@ -69,6 +72,8 @@ class MonitoringSchedulerService:
             logger.info("监控数据采集定时任务服务已停止")
         except Exception as e:
             logger.error(f"停止监控数据采集定时任务失败: {e}")
+            # 即使停止失败，也要确保状态正确
+            self.is_running = False
     
     async def collect_monitoring_data(self):
         """定时采集所有启用监控的服务器数据"""
@@ -138,6 +143,13 @@ class MonitoringSchedulerService:
             return {
                 "running": self.is_running,
                 "monitoring_enabled": settings.MONITORING_ENABLED,
+            }
+        except Exception as e:
+            logger.error(f"获取定时任务状态失败: {e}")
+            return {
+                "running": self.is_running,
+                "monitoring_enabled": settings.MONITORING_ENABLED,
+                "error": str(e)
             }
 
 

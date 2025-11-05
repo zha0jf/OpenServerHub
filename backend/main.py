@@ -130,10 +130,12 @@ async def get_scheduler_status():
     """获取定时任务状态"""
     try:
         power_status = scheduler_service.get_status()
+        monitoring_status = monitoring_scheduler_service.get_status()
         return {
             "success": True,
             "data": {
-                "power_state_scheduler": power_status
+                "power_state_scheduler": power_status,
+                "monitoring_scheduler": monitoring_status
             }
         }
     except Exception as e:
