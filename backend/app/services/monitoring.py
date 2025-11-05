@@ -136,7 +136,25 @@ class MonitoringService:
             raise ValidationError("服务器不存在")
         
         try:
-            # 获取传感器数据
+            # 步骤 1: 先删除此服务器的所有旧数据
+            cleanup_start = time.time()
+            try:
+                stmt = delete(MonitoringRecord).where(MonitoringRecord.server_id == server_id)
+                result = await self.db.execute(stmt)
+                deleted_count = result.rowcount
+                logger.info(f"成功删除服务器 {server_id} 的 {deleted_count} 条旧监控数据")
+            except Exception as e:
+                await self.db.rollback()
+                logger.error(f"删除旧监控数据失败 (server_id={server_id}): {e}")
+                return {
+                    "status": "error",
+                    "message": "删除旧监控数据失败",
+                    "timestamp": datetime.now().isoformat()
+                }
+            cleanup_time = time.time() - cleanup_start
+            logger.debug(f"[监控采集] 删除旧数据耗时: {cleanup_time:.3f}秒")
+
+            # 步骤 2: 获取并处理新的传感器数据
             sensor_start = time.time()
             logger.debug(f"[监控采集] 开始获取服务器 {server_id} 的传感器数据")
             sensor_data = await self.ipmi_service.get_sensor_data(
@@ -147,6 +165,12 @@ class MonitoringService:
             )
             sensor_time = time.time() - sensor_start
             logger.debug(f"[监控采集] 获取传感器数据耗时: {sensor_time:.3f}秒")
+            
+            # 记录传感器数据统计信息
+            temp_count = len(sensor_data.get('temperature', []))
+            voltage_count = len(sensor_data.get('voltage', []))
+            fan_count = len(sensor_data.get('fan_speed', []))
+            logger.debug(f"[监控采集] 传感器数据统计 - 温度: {temp_count}, 电压: {voltage_count}, 风扇: {fan_count}")
             
             collected_metrics = []
             errors = []
@@ -172,36 +196,26 @@ class MonitoringService:
             collected_metrics.extend(fan_metrics)
             errors.extend(fan_errors)
             
-            # 删除此服务器的所有旧数据
-            cleanup_start = time.time()
-            try:
-                # 使用异步删除方式
-                stmt = delete(MonitoringRecord).where(MonitoringRecord.server_id == server_id)
-                result = await self.db.execute(stmt)
-                deleted_count = result.rowcount
-                logger.info(f"成功删除服务器 {server_id} 的 {deleted_count} 条旧监控数据")
-            except Exception as e:
-                await self.db.rollback()
-                logger.error(f"删除旧监控数据失败 (server_id={server_id}): {e}")
-                return {
-                    "status": "error",
-                    "message": "删除旧监控数据失败",
-                    "timestamp": datetime.now().isoformat()
-                }
-            cleanup_time = time.time() - cleanup_start
-            logger.debug(f"[监控采集] 删除旧数据耗时: {cleanup_time:.3f}秒")
+            logger.info(f"[监控采集] 处理完成，共收集 {len(collected_metrics)} 个指标")
             
-            # 提交新数据到数据库（包括删除旧数据和插入新数据）
+            # 步骤 3: 提交新数据到数据库
             commit_start = time.time()
             try:
+                # 提交在步骤2中暂存到会话中的新数据
                 await self.db.commit()
-                logger.info(f"成功保存服务器 {server_id} 的 {len(collected_metrics)} 条监控记录到数据库")
+                logger.info(f"成功保存服务器 {server_id} 的 {len(collected_metrics)} 条新监控记录到数据库")
+                
+                # 添加验证步骤：查询刚保存的数据
+                stmt = select(MonitoringRecord).where(MonitoringRecord.server_id == server_id)
+                result = await self.db.execute(stmt)
+                saved_records = result.scalars().all()
+                logger.debug(f"验证步骤：服务器 {server_id} 数据库中现有记录数: {len(saved_records)}")
             except SQLAlchemyError as e:
                 await self.db.rollback()
-                logger.error(f"保存监控数据到数据库失败 (server_id={server_id}): {e}")
+                logger.error(f"保存新监控数据到数据库失败 (server_id={server_id}): {e}")
                 return {
                     "status": "error",
-                    "message": "保存监控数据到数据库失败",
+                    "message": "保存新监控数据到数据库失败",
                     "timestamp": datetime.now().isoformat()
                 }
             commit_time = time.time() - commit_start
