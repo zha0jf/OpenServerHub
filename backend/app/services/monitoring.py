@@ -1,24 +1,26 @@
 from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from sqlalchemy.exc import SQLAlchemyError
 import time
+import json
+import logging
+
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.monitoring import MonitoringRecord
 from app.models.server import Server
 from app.services.ipmi import IPMIService
 from app.core.exceptions import ValidationError
-import json
-import logging
 
 logger = logging.getLogger(__name__)
 
 class MonitoringService:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.ipmi_service = IPMIService()
 
-    def get_server_metrics(
+    async def get_server_metrics(
         self, 
         server_id: int, 
         metric_type: Optional[str] = None, 
@@ -26,15 +28,20 @@ class MonitoringService:
     ) -> List[MonitoringRecord]:
         """获取服务器监控指标"""
         try:
-            query = self.db.query(MonitoringRecord).filter(MonitoringRecord.server_id == server_id)
+            # 构建查询语句
+            stmt = select(MonitoringRecord).where(MonitoringRecord.server_id == server_id)
             
             if metric_type:
-                query = query.filter(MonitoringRecord.metric_type == metric_type)
+                stmt = stmt.where(MonitoringRecord.metric_type == metric_type)
             
             if since:
-                query = query.filter(MonitoringRecord.timestamp >= since)
+                stmt = stmt.where(MonitoringRecord.timestamp >= since)
             
-            return query.order_by(MonitoringRecord.timestamp.desc()).all()
+            stmt = stmt.order_by(MonitoringRecord.timestamp.desc())
+            
+            # 执行查询
+            result = await self.db.execute(stmt)
+            return result.scalars().all()
             
         except SQLAlchemyError as e:
             logger.error(f"数据库查询监控指标失败 (server_id={server_id}): {e}")
@@ -43,6 +50,74 @@ class MonitoringService:
             logger.error(f"获取服务器监控指标时发生未知错误 (server_id={server_id}): {e}")
             raise ValidationError("获取监控数据失败")
 
+    async def get_server_metrics_async(
+        self, 
+        server_id: int, 
+        metric_type: Optional[str] = None
+    ) -> List[MonitoringRecord]:
+        """异步获取服务器监控指标 - 不使用时间过滤"""
+        try:
+            # 构建查询语句
+            stmt = select(MonitoringRecord).where(MonitoringRecord.server_id == server_id)
+            
+            if metric_type:
+                stmt = stmt.where(MonitoringRecord.metric_type == metric_type)
+            
+            # 注意：根据规范，不添加时间过滤条件
+            stmt = stmt.order_by(MonitoringRecord.timestamp.desc())
+            
+            # 执行查询
+            result = await self.db.execute(stmt)
+            return result.scalars().all()
+            
+        except SQLAlchemyError as e:
+            logger.error(f"数据库查询监控指标失败 (server_id={server_id}): {e}")
+            raise ValidationError("查询监控数据失败")
+        except Exception as e:
+            logger.error(f"获取服务器监控指标时发生未知错误 (server_id={server_id}): {e}")
+            raise ValidationError("获取监控数据失败")
+
+    async def _process_sensor_data(self, server_id: int, sensor_list: List[Dict], metric_type: str, 
+                                   chinese_name: str) -> tuple[List[str], List[str], float]:
+        """
+        处理传感器数据的通用函数
+        
+        Args:
+            server_id: 服务器ID
+            sensor_list: 传感器数据列表
+            metric_type: 指标类型 (temperature, voltage, fan_speed)
+            chinese_name: 传感器类型的中文名称 (温度, 电压, 风扇)
+            
+        Returns:
+            tuple: (收集的指标列表, 错误列表, 处理耗时)
+        """
+        start_time = time.time()
+        collected_metrics = []
+        errors = []
+        
+        for sensor in sensor_list:
+            try:
+                record = MonitoringRecord(
+                    server_id=server_id,
+                    metric_type=metric_type,
+                    metric_name=sensor['name'],
+                    value=float(sensor['value']),
+                    unit=sensor['unit'],
+                    status=sensor['status'],
+                    raw_data=json.dumps(sensor)
+                )
+                self.db.add(record)
+                collected_metrics.append(f"{metric_type}:{sensor['name']}")
+            except Exception as e:
+                error_msg = f"处理{chinese_name}传感器 {sensor.get('name', 'unknown')} 失败: {e}"
+                logger.warning(error_msg)
+                errors.append(error_msg)
+        
+        processing_time = time.time() - start_time
+        logger.debug(f"[监控采集] 处理{chinese_name}传感器数据耗时: {processing_time:.3f}秒")
+        
+        return collected_metrics, errors, processing_time
+
     async def collect_server_metrics(self, server_id: int) -> Dict[str, Any]:
         """采集服务器指标数据并删除旧数据"""
         start_time = time.time()
@@ -50,7 +125,10 @@ class MonitoringService:
         
         # 获取服务器信息
         server_info_start = time.time()
-        server = self.db.query(Server).filter(Server.id == server_id).first()
+        # 使用异步查询方式
+        stmt = select(Server).where(Server.id == server_id)
+        result = await self.db.execute(stmt)
+        server = result.scalar_one_or_none()
         server_info_time = time.time() - server_info_start
         logger.debug(f"[监控采集] 获取服务器信息耗时: {server_info_time:.3f}秒")
         
@@ -74,80 +152,36 @@ class MonitoringService:
             errors = []
             
             # 处理温度传感器
-            temp_start = time.time()
-            for temp_sensor in sensor_data.get('temperature', []):
-                try:
-                    record = MonitoringRecord(
-                        server_id=server_id,
-                        metric_type='temperature',
-                        metric_name=temp_sensor['name'],
-                        value=float(temp_sensor['value']),
-                        unit=temp_sensor['unit'],
-                        status=temp_sensor['status'],
-                        raw_data=json.dumps(temp_sensor)
-                    )
-                    self.db.add(record)
-                    collected_metrics.append(f"temperature:{temp_sensor['name']}")
-                except Exception as e:
-                    error_msg = f"处理温度传感器 {temp_sensor.get('name', 'unknown')} 失败: {e}"
-                    logger.warning(error_msg)
-                    errors.append(error_msg)
-            temp_time = time.time() - temp_start
-            logger.debug(f"[监控采集] 处理温度传感器数据耗时: {temp_time:.3f}秒")
+            temp_metrics, temp_errors, temp_time = await self._process_sensor_data(
+                server_id, sensor_data.get('temperature', []), 'temperature', '温度'
+            )
+            collected_metrics.extend(temp_metrics)
+            errors.extend(temp_errors)
             
             # 处理电压传感器
-            voltage_start = time.time()
-            for voltage_sensor in sensor_data.get('voltage', []):
-                try:
-                    record = MonitoringRecord(
-                        server_id=server_id,
-                        metric_type='voltage',
-                        metric_name=voltage_sensor['name'],
-                        value=float(voltage_sensor['value']),
-                        unit=voltage_sensor['unit'],
-                        status=voltage_sensor['status'],
-                        raw_data=json.dumps(voltage_sensor)
-                    )
-                    self.db.add(record)
-                    collected_metrics.append(f"voltage:{voltage_sensor['name']}")
-                except Exception as e:
-                    error_msg = f"处理电压传感器 {voltage_sensor.get('name', 'unknown')} 失败: {e}"
-                    logger.warning(error_msg)
-                    errors.append(error_msg)
-            voltage_time = time.time() - voltage_start
-            logger.debug(f"[监控采集] 处理电压传感器数据耗时: {voltage_time:.3f}秒")
+            voltage_metrics, voltage_errors, voltage_time = await self._process_sensor_data(
+                server_id, sensor_data.get('voltage', []), 'voltage', '电压'
+            )
+            collected_metrics.extend(voltage_metrics)
+            errors.extend(voltage_errors)
             
             # 处理风扇转速传感器
-            fan_start = time.time()
-            for fan_sensor in sensor_data.get('fan_speed', []):
-                try:
-                    record = MonitoringRecord(
-                        server_id=server_id,
-                        metric_type='fan_speed',
-                        metric_name=fan_sensor['name'],
-                        value=float(fan_sensor['value']),
-                        unit=fan_sensor['unit'],
-                        status=fan_sensor['status'],
-                        raw_data=json.dumps(fan_sensor)
-                    )
-                    self.db.add(record)
-                    collected_metrics.append(f"fan_speed:{fan_sensor['name']}")
-                except Exception as e:
-                    error_msg = f"处理风扇传感器 {fan_sensor.get('name', 'unknown')} 失败: {e}"
-                    logger.warning(error_msg)
-                    errors.append(error_msg)
-            fan_time = time.time() - fan_start
-            logger.debug(f"[监控采集] 处理风扇传感器数据耗时: {fan_time:.3f}秒")
+            fan_metrics, fan_errors, fan_time = await self._process_sensor_data(
+                server_id, sensor_data.get('fan_speed', []), 'fan_speed', '风扇'
+            )
+            collected_metrics.extend(fan_metrics)
+            errors.extend(fan_errors)
             
             # 删除此服务器的所有旧数据
             cleanup_start = time.time()
             try:
-                deleted_count = self.db.query(MonitoringRecord).filter(
-                    MonitoringRecord.server_id == server_id
-                ).delete()
+                # 使用异步删除方式
+                stmt = delete(MonitoringRecord).where(MonitoringRecord.server_id == server_id)
+                result = await self.db.execute(stmt)
+                deleted_count = result.rowcount
                 logger.info(f"成功删除服务器 {server_id} 的 {deleted_count} 条旧监控数据")
             except Exception as e:
-                self.db.rollback()
+                await self.db.rollback()
                 logger.error(f"删除旧监控数据失败 (server_id={server_id}): {e}")
                 return {
                     "status": "error",
@@ -160,10 +194,10 @@ class MonitoringService:
             # 提交新数据到数据库（包括删除旧数据和插入新数据）
             commit_start = time.time()
             try:
-                self.db.commit()
+                await self.db.commit()
                 logger.info(f"成功保存服务器 {server_id} 的 {len(collected_metrics)} 条监控记录到数据库")
             except SQLAlchemyError as e:
-                self.db.rollback()
+                await self.db.rollback()
                 logger.error(f"保存监控数据到数据库失败 (server_id={server_id}): {e}")
                 return {
                     "status": "error",
@@ -206,7 +240,7 @@ class MonitoringService:
         except Exception as e:
             # 回滚数据库事务
             try:
-                self.db.rollback()
+                await self.db.rollback()
             except Exception as rollback_error:
                 logger.error(f"回滚数据库事务失败: {rollback_error}")
             

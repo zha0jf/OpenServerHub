@@ -34,12 +34,11 @@ export const monitoringService = {
   },
 
   // 获取服务器监控指标
-  getServerMetrics: async (serverId: number, metricType?: string, hours: number = 24): Promise<MonitoringRecord[]> => {
+  getServerMetrics: async (serverId: number, metricType?: string): Promise<MonitoringRecord[]> => {
     console.debug(`[前端监控] 开始获取服务器 ${serverId} 的监控指标`);
     const startTime = Date.now();
     const params = new URLSearchParams();
     if (metricType) params.append('metric_type', metricType);
-    params.append('hours', hours.toString());
     
     const response = await api.get<MonitoringRecord[]>(`/monitoring/servers/${serverId}/metrics?${params}`);
     const endTime = Date.now();

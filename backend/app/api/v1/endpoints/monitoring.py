@@ -5,8 +5,9 @@ from datetime import datetime, timedelta
 import httpx
 import logging
 import time
+from sqlalchemy import select
 
-from app.core.database import get_db
+from app.core.database import get_db, get_async_db
 from app.schemas.monitoring import MonitoringRecordResponse
 from app.services.monitoring import MonitoringService
 from app.services.server import ServerService
@@ -14,6 +15,7 @@ from app.services.auth import AuthService
 from app.services.server_monitoring import GrafanaService
 from app.core.config import settings
 from app.services import monitoring_scheduler
+from app.models.server import Server
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +64,7 @@ async def get_server_dashboard(
 async def get_server_metrics(
     server_id: int,
     metric_type: str = Query(None, description="指标类型：temperature, voltage, fan_speed"),
-    hours: int = Query(24, description="获取最近N小时的数据"),
-    db: Session = Depends(get_db),
+    db = Depends(get_async_db),  # 使用异步数据库依赖
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取服务器监控指标 - 显示当前数据"""
@@ -73,7 +74,7 @@ async def get_server_metrics(
         monitoring_service = MonitoringService(db)
         
         # 根据项目存储策略，数据库中只保留最新数据，无需时间过滤
-        metrics = monitoring_service.get_server_metrics(
+        metrics = await monitoring_service.get_server_metrics_async(
             server_id=server_id,
             metric_type=metric_type
         )
@@ -90,7 +91,7 @@ async def get_server_metrics(
 @router.post("/servers/{server_id}/collect")
 async def collect_server_metrics(
     server_id: int,
-    db: Session = Depends(get_db),
+    db = Depends(get_async_db),  # 使用异步数据库依赖
     current_user = Depends(AuthService.get_current_user)
 ):
     """手动采集服务器指标"""
@@ -100,7 +101,9 @@ async def collect_server_metrics(
     try:
         # 检查服务器是否存在
         server_service = ServerService(db)
-        server = server_service.get_server(server_id)
+        stmt = select(Server).where(Server.id == server_id)
+        result = await db.execute(stmt)
+        server = result.scalar_one_or_none()
         if not server:
             raise HTTPException(status_code=404, detail="服务器不存在")
         

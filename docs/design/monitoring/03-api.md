@@ -32,7 +32,6 @@
 |--------|------|------|------|
 | server_id | integer | 是 | 服务器ID |
 | metric_type | string | 否 | 指标类型 (temperature, voltage, fan_speed) |
-| hours | integer | 否 | 获取最近N小时的数据，默认24小时 |
 
 #### 响应格式
 ```json
@@ -54,7 +53,7 @@
 
 #### 示例请求
 ```bash
-curl -X GET "http://localhost:8000/api/v1/monitoring/servers/1/metrics?metric_type=temperature&hours=24" \
+curl -X GET "http://localhost:8000/api/v1/monitoring/servers/1/metrics?metric_type=temperature" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -466,10 +465,10 @@ class MonitoringAPIClient:
             "Content-Type": "application/json"
         }
     
-    def get_server_metrics(self, server_id, metric_type=None, hours=24):
+    def get_server_metrics(self, server_id, metric_type=None):
         """获取服务器监控指标"""
         url = f"{self.base_url}/api/v1/monitoring/servers/{server_id}/metrics"
-        params = {"hours": hours}
+        params = {}
         if metric_type:
             params["metric_type"] = metric_type
             
@@ -499,7 +498,7 @@ class MonitoringAPIClient:
 client = MonitoringAPIClient("http://localhost:8000", "your-jwt-token")
 
 # 获取服务器温度指标
-metrics = client.get_server_metrics(1, "temperature", 24)
+metrics = client.get_server_metrics(1, "temperature")
 print(json.dumps(metrics, indent=2))
 
 # 手动采集服务器指标
@@ -522,10 +521,8 @@ class MonitoringAPIClient {
     };
   }
   
-  async getServerMetrics(serverId, metricType = null, hours = 24) {
-    const params = new URLSearchParams({
-      hours: hours
-    });
+  async getServerMetrics(serverId, metricType = null) {
+    const params = new URLSearchParams();
     
     if (metricType) {
       params.append('metric_type', metricType);
@@ -591,7 +588,7 @@ class MonitoringAPIClient {
 const client = new MonitoringAPIClient('http://localhost:8000', 'your-jwt-token');
 
 // 获取服务器温度指标
-client.getServerMetrics(1, 'temperature', 24)
+client.getServerMetrics(1, 'temperature')
   .then(metrics => console.log(JSON.stringify(metrics, null, 2)))
   .catch(error => console.error('Error:', error));
 
@@ -618,7 +615,7 @@ client.queryPrometheus('ipmi_temperature_celsius')
 
 ```bash
 # 获取服务器监控指标
-curl -X GET "http://localhost:8000/api/v1/monitoring/servers/1/metrics?metric_type=temperature&hours=24" \
+curl -X GET "http://localhost:8000/api/v1/monitoring/servers/1/metrics?metric_type=temperature" \
   -H "Authorization: Bearer <your-token>"
 
 # 手动采集服务器指标
@@ -657,7 +654,6 @@ curl -X GET "http://localhost:8000/api/v1/monitoring/prometheus/query?query=ipmi
 async def get_server_metrics(
     server_id: int,
     metric_type: str = Query(None),
-    hours: int = Query(24),
     skip: int = Query(0),
     limit: int = Query(100)
 ):
@@ -707,3 +703,4 @@ async def collect_server_metrics(
     
     return {"status": "started", "message": "数据采集任务已启动"}
 ```
+

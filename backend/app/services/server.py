@@ -4,7 +4,7 @@ from datetime import datetime
 import asyncio
 from concurrent.futures import as_completed
 from collections import defaultdict
-from sqlalchemy import update
+from sqlalchemy import update, select
 
 from app.models.server import Server, ServerGroup, ServerStatus, PowerState
 from app.schemas.server import ServerCreate, ServerUpdate, ServerGroupCreate, BatchOperationResult
@@ -22,7 +22,9 @@ class ServerService:
     def __init__(self, db: Session):
         self.db = db
         self.ipmi_service = IPMIService()
-        self.monitoring_service = MonitoringService(db)
+        # 注意：这里传入的是同步会话，仅用于同步方法
+        # 异步方法需要创建新的异步监控服务实例
+        self.monitoring_service = MonitoringService(db) if hasattr(db, 'query') else None
         self.server_monitoring_service = ServerMonitoringService(db)
 
     def create_server(self, server_data: ServerCreate) -> Server:
