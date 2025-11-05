@@ -8,7 +8,7 @@ from apscheduler.jobstores.base import JobLookupError
 from ..core.config import settings
 from .monitoring import MonitoringService
 from ..core.database import async_engine
-from ..models.server import Server
+from ..models.server import Server, ServerStatus, PowerState
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy import select
 
@@ -84,20 +84,23 @@ class MonitoringSchedulerService:
             
         try:
             self._is_collecting = True
-            logger.info("开始定时采集所有启用监控的服务器数据")
+            logger.info("开始定时采集所有在线且开机的服务器数据")
             
             # 使用异步上下文管理器正确处理会话
             async with AsyncSessionLocal() as session:
-                # 获取所有启用监控的服务器
-                stmt = select(Server).where(Server.monitoring_enabled == True)
+                # 获取所有在线且开机状态的服务器（不考虑监控是否启用）
+                stmt = select(Server).where(
+                    Server.status == ServerStatus.ONLINE,
+                    Server.power_state == PowerState.ON
+                )
                 result = await session.execute(stmt)
                 servers = result.scalars().all()
                 
                 if not servers:
-                    logger.info("没有启用监控的服务器，跳过数据采集")
+                    logger.info("没有在线且开机的服务器，跳过数据采集")
                     return
                 
-                logger.info(f"找到 {len(servers)} 台启用监控的服务器，开始采集数据")
+                logger.info(f"找到 {len(servers)} 台在线且开机的服务器，开始采集数据")
                 
                 # 为每台服务器采集数据
                 for server in servers:
