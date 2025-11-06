@@ -15,7 +15,6 @@ from app.services.server import ServerService
 from app.services.auth import AuthService
 from app.services.server_monitoring import GrafanaService
 from app.core.config import settings
-from app.services import monitoring_scheduler
 from app.models.server import Server
 
 logger = logging.getLogger(__name__)

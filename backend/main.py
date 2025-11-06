@@ -12,7 +12,8 @@ from app.core.database import engine
 from app.core.logging import setup_logging
 from app.api.v1.api import api_router
 from app.models import Base
-from app.services import scheduler_service, monitoring_scheduler_service
+from app.services import scheduler_service
+from app.services.monitoring_scheduler import MonitoringSchedulerService  # 导入类本身
 from app.services.ipmi import ipmi_pool
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,9 @@ setup_logging()
 
 # 全局Housekeeper实例
 housekeeper = None
+
+# 导入监控调度服务模块（注意：不是实例）
+import app.services.monitoring_scheduler as monitoring_module
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,9 +56,10 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"启动电源状态定时任务服务失败: {e}")
     
-    # 启动监控数据采集定时任务服务
+    # 在安全的环境里实例化并启动监控数据采集定时任务服务
     try:
-        await monitoring_scheduler_service.start()
+        monitoring_module.monitoring_scheduler_service = MonitoringSchedulerService()
+        await monitoring_module.monitoring_scheduler_service.start()
         logger.info("监控数据采集定时任务服务已启动")
     except Exception as e:
         logger.error(f"启动监控数据采集定时任务服务失败: {e}")
@@ -70,7 +75,8 @@ async def lifespan(app: FastAPI):
     
     # 停止监控数据采集定时任务服务
     try:
-        await monitoring_scheduler_service.stop()
+        if monitoring_module.monitoring_scheduler_service:
+            await monitoring_module.monitoring_scheduler_service.stop()
         logger.info("监控数据采集定时任务服务已停止")
     except Exception as e:
         logger.error(f"停止监控数据采集定时任务服务失败: {e}")
@@ -130,7 +136,8 @@ async def get_scheduler_status():
     """获取定时任务状态"""
     try:
         power_status = scheduler_service.get_status()
-        monitoring_status = monitoring_scheduler_service.get_status()
+        # 使用模块中的实例
+        monitoring_status = monitoring_module.monitoring_scheduler_service.get_status() if monitoring_module.monitoring_scheduler_service else {}
         return {
             "success": True,
             "data": {

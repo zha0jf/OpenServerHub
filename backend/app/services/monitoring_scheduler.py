@@ -156,5 +156,6 @@ class MonitoringSchedulerService:
             }
 
 
-# 创建全局实例
-monitoring_scheduler_service = MonitoringSchedulerService()
+# 不再在模块导入时实例化服务
+# 只声明变量，将在main.py的lifespan中进行实例化
+monitoring_scheduler_service: Optional[MonitoringSchedulerService] = None
