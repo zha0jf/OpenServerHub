@@ -13,7 +13,7 @@ bcrypt==4.0.1
 python-multipart==0.0.6
 
 # IPMI库
-pyghmi==1.5.58
+pyghmi==1.6.6
 
 # 其他依赖
 pydantic==2.5.0
