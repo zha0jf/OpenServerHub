@@ -34,6 +34,7 @@ const { Option } = Select;
 
 const MonitoringDashboard: React.FC = () => {
   const [servers, setServers] = useState<Server[]>([]);
+  const [serverGroups, setServerGroups] = useState<any[]>([]);
   const [selectedServerId, setSelectedServerId] = useState<number | undefined>(undefined);
   const [metrics, setMetrics] = useState<MonitoringRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,6 +43,7 @@ const MonitoringDashboard: React.FC = () => {
 
   useEffect(() => {
     loadServers();
+    loadServerGroups();
   }, []);
 
   useEffect(() => {
@@ -66,6 +68,17 @@ const MonitoringDashboard: React.FC = () => {
       message.error('加载服务器列表失败');
     } finally {
       setServersLoading(false);
+    }
+  };
+
+  const loadServerGroups = async () => {
+    try {
+      console.debug('[前端监控仪表板] 开始加载服务器分组列表');
+      const data = await serverService.getServerGroups();
+      setServerGroups(data);
+      console.debug('[前端监控仪表板] 加载服务器分组列表完成');
+    } catch (error) {
+      console.error('加载服务器分组列表失败:', error);
     }
   };
 
@@ -155,6 +168,8 @@ const MonitoringDashboard: React.FC = () => {
       message.success('监控已启用');
       // 重新加载服务器列表以更新状态
       await loadServers();
+      // 重新加载服务器分组列表
+      await loadServerGroups();
       // 重新加载当前指标
       await loadMetrics();
       const endTime = Date.now();
@@ -185,6 +200,8 @@ const MonitoringDashboard: React.FC = () => {
       message.success('监控已禁用');
       // 重新加载服务器列表以更新状态
       await loadServers();
+      // 重新加载服务器分组列表
+      await loadServerGroups();
       // 重新加载当前指标
       await loadMetrics();
       const endTime = Date.now();
@@ -376,7 +393,7 @@ const MonitoringDashboard: React.FC = () => {
               <Descriptions.Item label="序列号">{selectedServer.serial_number || 'N/A'}</Descriptions.Item>
               <Descriptions.Item label="分组">
                 {selectedServer.group_id ? 
-                  (servers.find(s => s.id === selectedServer.group_id)?.name || '未知分组') : 
+                  (serverGroups.find(g => g.id === selectedServer.group_id)?.name || '未知分组') : 
                   '未分组'}
               </Descriptions.Item>
             </Descriptions>
