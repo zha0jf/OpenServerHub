@@ -706,6 +706,7 @@ class IPMIService:
                 - version: str, Redfish版本（如果支持）
                 - service_root: Dict, 服务根信息（如果支持）
                 - error: str, 错误信息（如果不支持或发生错误）
+                - check_success: bool, 检查是否成功执行（用于区分明确结果和检查失败）
         """
         start_time = time.time()
         try:
@@ -740,7 +741,8 @@ class IPMIService:
                             "supported": True,
                             "version": redfish_version,
                             "service_root": service_root,
-                            "error": None
+                            "error": None,
+                            "check_success": True  # 明确的成功结果
                         }
                     except json.JSONDecodeError as e:
                         logger.warning(f"[Redfish检查] JSON解析失败: {bmc_ip}, 错误: {e}")
@@ -748,7 +750,8 @@ class IPMIService:
                             "supported": False,
                             "version": None,
                             "service_root": None,
-                            "error": f"JSON解析失败: {str(e)}"
+                            "error": f"JSON解析失败: {str(e)}",
+                            "check_success": True  # 明确的失败结果（BMC返回了非JSON响应）
                         }
                 else:
                     logger.info(f"[Redfish检查] BMC不支持Redfish或访问被拒绝: {bmc_ip}, 状态码: {response.status_code}")
@@ -756,7 +759,8 @@ class IPMIService:
                         "supported": False,
                         "version": None,
                         "service_root": None,
-                        "error": f"HTTP状态码: {response.status_code}"
+                        "error": f"HTTP状态码: {response.status_code}",
+                        "check_success": True  # 明确的失败结果（BMC返回了明确的错误码）
                     }
                     
         except httpx.TimeoutException:
@@ -766,7 +770,8 @@ class IPMIService:
                 "supported": False,
                 "version": None,
                 "service_root": None,
-                "error": f"请求超时 ({timeout}秒)"
+                "error": f"请求超时 ({timeout}秒)",
+                "check_success": False  # 检查失败（网络问题）
             }
         except httpx.RequestError as e:
             execution_time = time.time() - start_time
@@ -775,7 +780,8 @@ class IPMIService:
                 "supported": False,
                 "version": None,
                 "service_root": None,
-                "error": f"请求错误: {str(e)}"
+                "error": f"请求错误: {str(e)}",
+                "check_success": False  # 检查失败（网络问题）
             }
         except Exception as e:
             execution_time = time.time() - start_time
@@ -784,7 +790,8 @@ class IPMIService:
                 "supported": False,
                 "version": None,
                 "service_root": None,
-                "error": f"未知错误: {str(e)}"
+                "error": f"未知错误: {str(e)}",
+                "check_success": False  # 检查失败（其他异常）
             }
     
     async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = 623) -> bool:

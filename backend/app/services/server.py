@@ -237,6 +237,7 @@ class ServerService:
             raise ValidationError("服务器不存在")
         
         try:
+            # 先进行IPMI检查
             # 获取电源状态
             power_state = await self.ipmi_service.get_power_state(
                 ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
@@ -253,18 +254,24 @@ class ServerService:
                 port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
             )
             
-            # 检查Redfish支持情况
+            # IPMI检查成功，继续检查Redfish支持情况
             redfish_info = await self.check_redfish_support(server_id)
             
-            # 更新服务器状态
+            # 准备更新数据库的值
             power_state_enum = PowerState.ON if power_state == 'on' else PowerState.OFF
-            stmt = update(Server).where(Server.id == server_id).values(
-                status=ServerStatus.ONLINE,
-                power_state=power_state_enum,
-                last_seen=datetime.now(),
-                redfish_supported=redfish_info.get("supported"),
-                redfish_version=redfish_info.get("version") if redfish_info.get("supported") else None
-            )
+            update_values = {
+                "status": ServerStatus.ONLINE,
+                "power_state": power_state_enum,
+                "last_seen": datetime.now()
+            }
+            
+            # 只有在Redfish检查成功获得明确结果时，才更新Redfish相关字段
+            if redfish_info.get("check_success", False):
+                update_values["redfish_supported"] = redfish_info.get("supported")
+                update_values["redfish_version"] = redfish_info.get("version") if redfish_info.get("supported") else None
+            
+            # 更新服务器状态
+            stmt = update(Server).where(Server.id == server_id).values(**update_values)
             self.db.execute(stmt)
             self.db.commit()
             
@@ -276,17 +283,25 @@ class ServerService:
             }
             
         except IPMIError as e:
-            # 更新服务器状态为离线或错误
+            # IPMI检查失败，更新服务器状态为离线或错误，不检查Redfish
             stmt = update(Server).where(Server.id == server_id).values(
                 status=ServerStatus.OFFLINE,
                 power_state=PowerState.UNKNOWN
+                # 不更新redfish相关字段
             )
             self.db.execute(stmt)
             self.db.commit()
             
             return {
                 "status": "error",
-                "message": str(e)
+                "message": str(e),
+                "redfish_info": {
+                    "supported": None,  # 未检查
+                    "version": None,
+                    "service_root": None,
+                    "error": "IPMI检查失败，未进行Redfish检查",
+                    "check_success": False
+                }
             }
 
     # 服务器分组管理
