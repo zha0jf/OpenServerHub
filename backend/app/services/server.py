@@ -253,12 +253,17 @@ class ServerService:
                 port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
             )
             
+            # 检查Redfish支持情况
+            redfish_info = await self.check_redfish_support(server_id)
+            
             # 更新服务器状态
             power_state_enum = PowerState.ON if power_state == 'on' else PowerState.OFF
             stmt = update(Server).where(Server.id == server_id).values(
                 status=ServerStatus.ONLINE,
                 power_state=power_state_enum,
-                last_seen=datetime.now()
+                last_seen=datetime.now(),
+                redfish_supported=redfish_info.get("supported"),
+                redfish_version=redfish_info.get("version") if redfish_info.get("supported") else None
             )
             self.db.execute(stmt)
             self.db.commit()
@@ -266,7 +271,8 @@ class ServerService:
             return {
                 "status": "success",
                 "power_state": power_state,
-                "system_info": system_info
+                "system_info": system_info,
+                "redfish_info": redfish_info
             }
             
         except IPMIError as e:
@@ -510,6 +516,28 @@ class ServerService:
                 message="失败",
                 error=f"内部错误: {str(e)}"
             )
+    
+    async def check_redfish_support(self, server_id: int) -> Dict[str, Any]:
+        """检查服务器BMC是否支持Redfish"""
+        db_server = self.get_server(server_id)
+        if not db_server:
+            raise ValidationError("服务器不存在")
+        
+        try:
+            # 调用IPMI服务检查Redfish支持
+            result = await self.ipmi_service.check_redfish_support(
+                bmc_ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
+                timeout=10
+            )
+            
+            return result
+            
+        except IPMIError as e:
+            logger.error(f"检查服务器 {server_id} Redfish支持失败: {str(e)}")
+            raise e
+        except Exception as e:
+            logger.error(f"检查服务器 {server_id} Redfish支持时发生未知错误: {str(e)}")
+            raise IPMIError(f"检查Redfish支持失败: {str(e)}")
     
     def get_cluster_statistics(self, group_id: Optional[int] = None) -> Dict[str, Any]:
         """获取集群统计信息"""

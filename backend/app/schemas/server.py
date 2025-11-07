@@ -55,6 +55,8 @@ class ServerResponse(ServerBase):
     status: ServerStatus
     power_state: PowerState
     last_seen: Optional[datetime] = None
+    redfish_supported: Optional[bool] = None
+    redfish_version: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

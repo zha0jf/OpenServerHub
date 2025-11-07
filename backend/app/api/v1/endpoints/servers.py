@@ -306,3 +306,32 @@ async def batch_update_monitoring(
     except Exception as e:
         logger.error(f"批量更新监控状态失败: {str(e)}")
         raise HTTPException(status_code=500, detail="批量更新监控状态失败，请稍后重试")
+
+# Redfish支持检查响应模型
+class RedfishSupportResponse(BaseModel):
+    """Redfish支持检查响应"""
+    supported: bool = Field(..., description="是否支持Redfish")
+    version: Optional[str] = Field(None, description="Redfish版本")
+    error: Optional[str] = Field(None, description="错误信息")
+    service_root: Optional[dict] = Field(None, description="Redfish服务根信息")
+
+@router.post("/{server_id}/redfish-check", response_model=RedfishSupportResponse)
+async def check_redfish_support(
+    server_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(AuthService.get_current_user)
+):
+    """检查服务器BMC是否支持Redfish"""
+    try:
+        server_service = ServerService(db)
+        result = await server_service.check_redfish_support(server_id)
+        return result
+    except ValidationError as e:
+        logger.warning(f"Redfish检查验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except IPMIError as e:
+        logger.error(f"Redfish检查失败: {e.message}")
+        raise HTTPException(status_code=500, detail=f"检查失败: {e.message}")
+    except Exception as e:
+        logger.error(f"Redfish检查失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="检查失败，请稍后重试")

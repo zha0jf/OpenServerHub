@@ -6,6 +6,8 @@ import functools
 import time
 import concurrent.futures
 from typing import Dict, Any, Optional, Generator, List
+
+import httpx
 from pyghmi.ipmi import command
 from pyghmi.exceptions import IpmiException
 from pyghmi.ipmi.sdr import SensorReading
@@ -689,6 +691,101 @@ class IPMIService:
         except Exception as e:
             logger.error(f"IPMI操作异常 {ip}: {e}")
             raise IPMIError(f"IPMI操作失败: {str(e)}")
+    
+    async def check_redfish_support(self, bmc_ip: str, timeout: int = 10) -> Dict[str, Any]:
+        """
+        检查服务器BMC是否支持Redfish功能
+        
+        Args:
+            bmc_ip: BMC的IP地址
+            timeout: 请求超时时间（秒），默认10秒
+            
+        Returns:
+            Dict[str, Any]: 包含Redfish支持状态和相关信息的字典
+                - supported: bool, 是否支持Redfish
+                - version: str, Redfish版本（如果支持）
+                - service_root: Dict, 服务根信息（如果支持）
+                - error: str, 错误信息（如果不支持或发生错误）
+        """
+        start_time = time.time()
+        try:
+            logger.debug(f"[Redfish检查] 开始检查Redfish支持: {bmc_ip}")
+            
+            # 构建Redfish服务根URL
+            redfish_url = f"https://{bmc_ip}/redfish/v1/"
+            
+            # 创建httpx异步客户端
+            async with httpx.AsyncClient(
+                verify=False,  # 忽略SSL证书验证（类似于curl -k参数）
+                timeout=timeout
+            ) as client:
+                # 发送GET请求到Redfish服务根端点
+                response = await client.get(redfish_url)
+                
+                execution_time = time.time() - start_time
+                logger.debug(f"[Redfish检查] 请求完成: {bmc_ip}, 状态码: {response.status_code}, 耗时: {execution_time:.3f}秒")
+                
+                # 检查响应状态码
+                if response.status_code == 200:
+                    try:
+                        # 解析JSON响应
+                        service_root = response.json()
+                        
+                        # 提取Redfish版本信息
+                        redfish_version = service_root.get("RedfishVersion", "Unknown")
+                        
+                        logger.info(f"[Redfish检查] BMC支持Redfish: {bmc_ip}, 版本: {redfish_version}")
+                        
+                        return {
+                            "supported": True,
+                            "version": redfish_version,
+                            "service_root": service_root,
+                            "error": None
+                        }
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"[Redfish检查] JSON解析失败: {bmc_ip}, 错误: {e}")
+                        return {
+                            "supported": False,
+                            "version": None,
+                            "service_root": None,
+                            "error": f"JSON解析失败: {str(e)}"
+                        }
+                else:
+                    logger.info(f"[Redfish检查] BMC不支持Redfish或访问被拒绝: {bmc_ip}, 状态码: {response.status_code}")
+                    return {
+                        "supported": False,
+                        "version": None,
+                        "service_root": None,
+                        "error": f"HTTP状态码: {response.status_code}"
+                    }
+                    
+        except httpx.TimeoutException:
+            execution_time = time.time() - start_time
+            logger.error(f"[Redfish检查] 请求超时: {bmc_ip}, 超时时间: {timeout}秒, 耗时: {execution_time:.3f}秒")
+            return {
+                "supported": False,
+                "version": None,
+                "service_root": None,
+                "error": f"请求超时 ({timeout}秒)"
+            }
+        except httpx.RequestError as e:
+            execution_time = time.time() - start_time
+            logger.error(f"[Redfish检查] 请求错误: {bmc_ip}, 错误: {e}, 耗时: {execution_time:.3f}秒")
+            return {
+                "supported": False,
+                "version": None,
+                "service_root": None,
+                "error": f"请求错误: {str(e)}"
+            }
+        except Exception as e:
+            execution_time = time.time() - start_time
+            logger.error(f"[Redfish检查] 未知错误: {bmc_ip}, 错误: {e}, 耗时: {execution_time:.3f}秒")
+            return {
+                "supported": False,
+                "version": None,
+                "service_root": None,
+                "error": f"未知错误: {str(e)}"
+            }
     
     async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = 623) -> bool:
         """确保openshub监控用户存在且配置正确，强制更新密码为新密码"""

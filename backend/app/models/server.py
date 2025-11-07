@@ -35,6 +35,10 @@ class Server(Base):
     model = Column(String(100), nullable=True)
     serial_number = Column(String(100), nullable=True)
     
+    # Redfish支持信息
+    redfish_supported = Column(Boolean, default=None, nullable=True)
+    redfish_version = Column(String(20), nullable=True)
+    
     # 状态信息
     status = Column(Enum(ServerStatus), default=ServerStatus.UNKNOWN, nullable=False)
     power_state = Column(Enum(PowerState), default=PowerState.UNKNOWN, nullable=False)
