@@ -6,20 +6,16 @@
 import asyncio
 import sys
 import os
+import argparse
 
 # 添加项目路径到Python路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app.services.ipmi import IPMIService
 
-async def test_redfish_led_control():
+async def test_redfish_led_control(bmc_ip, username, password):
     """测试Redfish LED控制功能"""
     ipmi_service = IPMIService()
-    
-    # 测试服务器信息（需要替换为实际的BMC信息）
-    bmc_ip = "192.168.1.100"  # 替换为实际的BMC IP地址
-    username = "admin"        # 替换为实际的用户名
-    password = "password"     # 替换为实际的密码
     
     print(f"正在测试服务器 {bmc_ip} 的Redfish LED控制功能...")
     
@@ -52,5 +48,15 @@ async def test_redfish_led_control():
     except Exception as e:
         print(f"测试过程中发生错误: {e}")
 
+def main():
+    parser = argparse.ArgumentParser(description='测试Redfish LED控制功能')
+    parser.add_argument('bmc_ip', help='BMC IP地址')
+    parser.add_argument('username', help='用户名')
+    parser.add_argument('password', help='密码')
+    
+    args = parser.parse_args()
+    
+    asyncio.run(test_redfish_led_control(args.bmc_ip, args.username, args.password))
+
 if __name__ == "__main__":
-    asyncio.run(test_redfish_led_control())
+    main()

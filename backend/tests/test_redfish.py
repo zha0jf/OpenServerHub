@@ -6,18 +6,16 @@
 import asyncio
 import sys
 import os
+import argparse
 
 # 添加项目路径到Python路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app.services.ipmi import IPMIService
 
-async def test_redfish_check():
+async def test_redfish_check(bmc_ip):
     """测试Redfish支持检查功能"""
     ipmi_service = IPMIService()
-    
-    # 测试一个已知支持Redfish的BMC IP（需要替换为实际的BMC IP）
-    bmc_ip = "192.168.1.100"  # 替换为实际的BMC IP地址
     
     print(f"正在检查BMC {bmc_ip} 是否支持Redfish...")
     
@@ -35,5 +33,13 @@ async def test_redfish_check():
     except Exception as e:
         print(f"检查过程中发生错误: {e}")
 
+def main():
+    parser = argparse.ArgumentParser(description='测试Redfish支持检查功能')
+    parser.add_argument('bmc_ip', help='BMC IP地址')
+    
+    args = parser.parse_args()
+    
+    asyncio.run(test_redfish_check(args.bmc_ip))
+
 if __name__ == "__main__":
-    asyncio.run(test_redfish_check())
+    main()
