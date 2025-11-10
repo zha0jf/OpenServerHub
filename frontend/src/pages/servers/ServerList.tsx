@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Table,
   Button,
@@ -74,6 +75,7 @@ const VALIDATION_RULES = {
 };
 
 const ServerList: React.FC = () => {
+  const navigate = useNavigate();
   const [servers, setServers] = useState<Server[]>([]);
   const [groups, setGroups] = useState<ServerGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -562,6 +564,11 @@ const ServerList: React.FC = () => {
       title: '服务器名称',
       dataIndex: 'name',
       key: 'name',
+      render: (text: string, record: Server) => (
+        <a onClick={() => navigate(`/servers/${record.id}`)} style={{ cursor: 'pointer' }}>
+          {text}
+        </a>
+      ),
     },
     {
       title: 'IPMI地址',
@@ -698,6 +705,16 @@ const ServerList: React.FC = () => {
       render: (_, server) => {
         return (
           <Space size="middle">
+            {/* 查看详情按钮对所有状态的服务器都显示 */}
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              type="primary"
+              onClick={() => navigate(`/servers/${server.id}`)}
+            >
+              查看详情
+            </Button>
+            
             {/* 编辑按钮对所有状态的服务器都显示 */}
             <Button
               size="small"

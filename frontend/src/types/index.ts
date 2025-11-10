@@ -55,6 +55,8 @@ export interface Server {
   group_id: number | null;
   description: string | null;
   tags: string | null;
+  redfish_supported: boolean | null;
+  redfish_version: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -250,4 +252,16 @@ export interface CSVImportResponse {
     ipmi_ip: string;
     error: string;
   }>;
+}
+
+export interface LEDStatusResponse {
+  supported: boolean;
+  led_state: string;
+  error: string | null;
+}
+
+export interface LEDControlResponse {
+  success: boolean;
+  message: string;
+  error: string | null;
 }

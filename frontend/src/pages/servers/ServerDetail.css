@@ -1,0 +1,196 @@
+/* 服务器详情容器 */
+.server-detail-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* 详情页头部 */
+.server-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  color: white;
+}
+
+.server-detail-header h2 {
+  color: white !important;
+  margin: 0 !important;
+}
+
+.server-detail-header button {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: white;
+  color: white;
+}
+
+.server-detail-header button:hover {
+  background-color: rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+}
+
+.server-detail-header .ant-space {
+  width: 100%;
+}
+
+/* 状态卡片 */
+.status-card {
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  text-align: center;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  height: 100%;
+}
+
+.status-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.status-card-icon {
+  font-size: 24px;
+  margin-bottom: 12px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-card-label {
+  display: block;
+  color: #666;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* 详情卡片 */
+.detail-card {
+  margin-bottom: 24px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f0f0f0;
+}
+
+.detail-card .ant-card-head {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-bottom: 1px solid #ddd;
+}
+
+.detail-card .ant-card-head-title {
+  color: white;
+  font-weight: 600;
+}
+
+/* 电源控制组 */
+.power-control-group {
+  padding: 16px 0;
+}
+
+.power-control-group .ant-space {
+  width: 100%;
+}
+
+.power-control-group button {
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.power-control-group button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 底部操作按钮 */
+.detail-action-footer {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+  margin-top: 32px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.detail-action-footer .ant-space {
+  width: 100%;
+  justify-content: center;
+}
+
+/* 描述文本 */
+.server-detail-container .ant-descriptions-item-content {
+  word-break: break-all;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .server-detail-container {
+    padding: 12px;
+  }
+
+  .server-detail-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .server-detail-header > div:first-child {
+    width: 100%;
+  }
+
+  .server-detail-header > div:last-child {
+    width: 100%;
+  }
+
+  .server-detail-header .ant-space {
+    justify-content: flex-start;
+  }
+
+  .server-detail-header .ant-space:last-child {
+    justify-content: flex-end;
+  }
+
+  .power-control-group button {
+    width: 100%;
+  }
+}
+
+/* 标签样式 */
+.server-detail-container .ant-tag {
+  margin: 4px;
+}
+
+/* 可复制文本 */
+.server-detail-container .ant-typography-copy {
+  cursor: pointer;
+}
+
+/* 卡片标题样式增强 */
+.detail-card .ant-card-head {
+  padding: 16px 24px;
+}
+
+.detail-card .ant-card-body {
+  padding: 24px;
+}
+
+/* 描述列表优化 */
+.server-detail-container .ant-descriptions-bordered .ant-descriptions-item-label {
+  background-color: #fafafa;
+  font-weight: 500;
+}
+
+.server-detail-container .ant-descriptions-bordered .ant-descriptions-item-content {
+  background-color: #fff;
+}
+
+/* 徽章样式 */
+.server-detail-container .ant-badge {
+  display: inline-block;
+}
+
+/* 附加信息卡片 */
+.server-detail-container .detail-card .ant-divider {
+  margin: 16px 0;
+}

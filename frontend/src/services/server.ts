@@ -12,6 +12,8 @@ import {
   BatchUpdateMonitoringRequest,
   BatchPowerResponse,
   ClusterStats,
+  LEDStatusResponse,
+  LEDControlResponse,
 } from '../types';
 
 // 导出类型以供其他模块使用
@@ -109,5 +111,24 @@ export const serverService = {
   // 删除分组
   async deleteServerGroup(id: number): Promise<void> {
     await api.delete(`/servers/groups/${id}`);
+  },
+
+  // Redfish相关方法
+  // 获取LED状态
+  async getLEDStatus(id: number): Promise<LEDStatusResponse> {
+    const response = await api.get<LEDStatusResponse>(`/servers/${id}/led-status`);
+    return response.data;
+  },
+
+  // 点亮LED
+  async turnOnLED(id: number): Promise<LEDControlResponse> {
+    const response = await api.post<LEDControlResponse>(`/servers/${id}/led-on`);
+    return response.data;
+  },
+
+  // 关闭LED
+  async turnOffLED(id: number): Promise<LEDControlResponse> {
+    const response = await api.post<LEDControlResponse>(`/servers/${id}/led-off`);
+    return response.data;
   },
 };

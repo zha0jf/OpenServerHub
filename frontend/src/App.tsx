@@ -5,6 +5,7 @@ import MainLayout from './components/layout/MainLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ServerList from './pages/servers/ServerList';
+import ServerDetail from './pages/servers/ServerDetail';
 import UserList from './pages/users/UserList';
 import MonitoringDashboard from './pages/monitoring/MonitoringDashboard';
 import ClusterManagement from './pages/clusters/ClusterManagement';
@@ -25,6 +26,7 @@ const App: React.FC = () => {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="servers" element={<ServerList />} />
+            <Route path="servers/:id" element={<ServerDetail />} />
             <Route path="clusters" element={<ClusterManagement />} />
             <Route path="discovery" element={<DeviceDiscovery />} />
             <Route path="users" element={<UserList />} />
