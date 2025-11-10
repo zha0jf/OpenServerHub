@@ -705,16 +705,6 @@ const ServerList: React.FC = () => {
       render: (_, server) => {
         return (
           <Space size="middle">
-            {/* 查看详情按钮对所有状态的服务器都显示 */}
-            <Button
-              size="small"
-              icon={<EyeOutlined />}
-              type="primary"
-              onClick={() => navigate(`/servers/${server.id}`)}
-            >
-              查看详情
-            </Button>
-            
             {/* 编辑按钮对所有状态的服务器都显示 */}
             <Button
               size="small"
