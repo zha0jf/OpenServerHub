@@ -246,7 +246,7 @@ const ServerDetail: React.FC = () => {
 
   const getLEDStatusClass = (ledStatus: { supported: boolean; led_state: string; error: string | null } | null) => {
     if (!ledStatus || !ledStatus.supported) return 'led-unknown';
-    if (ledStatus.led_state === 'On') return 'led-on';
+    if (ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit') return 'led-on';
     if (ledStatus.led_state === 'Off') return 'led-off';
     return 'led-unknown';
   };
@@ -256,7 +256,7 @@ const ServerDetail: React.FC = () => {
     
     try {
       setLedLoading(true);
-      if (ledStatus.led_state === 'On') {
+      if (ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit') {
         await serverService.turnOffLED(server.id);
         message.success('LED已关闭');
       } else {
@@ -265,7 +265,7 @@ const ServerDetail: React.FC = () => {
       }
       await loadLEDStatus();
     } catch (error) {
-      message.error(ledStatus.led_state === 'On' ? '关闭LED失败' : '开启LED失败');
+      message.error(ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? '关闭LED失败' : '开启LED失败');
     } finally {
       setLedLoading(false);
     }
@@ -401,7 +401,7 @@ const ServerDetail: React.FC = () => {
             </div>
             <Text className="status-card-label">
               {ledStatus ? (
-                ledStatus.led_state === 'On' ? 'LED已开启' : 
+                ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? 'LED已开启' : 
                 ledStatus.led_state === 'Off' ? 'LED已关闭' : 'LED未知'
               ) : 'LED状态未知'}
             </Text>
@@ -535,7 +535,7 @@ const ServerDetail: React.FC = () => {
           <Descriptions.Item label="LED状态">
             <Text>
               {ledStatus ? (
-                <Tag color={ledStatus.led_state === 'On' ? 'green' : ledStatus.led_state === 'Off' ? 'default' : 'orange'}>
+                <Tag color={ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? 'green' : ledStatus.led_state === 'Off' ? 'default' : 'orange'}>
                   {ledStatus.led_state}
                 </Tag>
               ) : (
@@ -630,7 +630,9 @@ const ServerDetail: React.FC = () => {
             ) : server.status !== 'online' ? (
               <Text type="warning">服务器离线，无法控制LED</Text>
             ) : (
-              <Text type="secondary">当前LED状态: {ledStatus.led_state}</Text>
+              <Text type="secondary">
+                当前LED状态: {ledStatus.led_state === 'Lit' ? 'On (Lit)' : ledStatus.led_state}
+              </Text>
             )}
           </div>
         </div>
