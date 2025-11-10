@@ -11,6 +11,7 @@ import httpx
 from pyghmi.ipmi import command
 from pyghmi.exceptions import IpmiException
 from pyghmi.ipmi.sdr import SensorReading
+import redfish
 
 from app.core.config import settings
 from app.core.exceptions import IPMIError
@@ -289,7 +290,7 @@ class IPMIService:
                     
                     # 检测是否为乱码（包含典型的UTF-8解码错误模式）
                     try:
-                        # 尝试检测是否为UTF-8编码的乱码
+                        # 尝试检测是否为UTF-8被错误解码为Latin-1的乱码
                         if 'å' in text or '¤' in text or 'æ' in text:
                             # 可能是UTF-8被错误解码为Latin-1的乱码
                             # 尝试重新编码为Latin-1，然后解码为UTF-8
@@ -810,100 +811,70 @@ class IPMIService:
                 - led_state: str, LED状态（"On", "Off" 或 "Unknown"）
                 - error: str, 错误信息（如果发生错误）
         """
+        loop = asyncio.get_running_loop()
+        
+        def _get_led_status_sync():
+            """同步函数，在线程池中执行Redfish操作"""
+            try:
+                # 创建Redfish客户端
+                redfish_client = redfish.redfish_client(
+                    base_url=f"https://{bmc_ip}",
+                    username=username,
+                    password=password,
+                    default_prefix='/redfish/v1'
+                )
+                
+                # 登录
+                redfish_client.login(auth="session")
+                
+                # 获取系统信息
+                systems_response = redfish_client.get("/redfish/v1/Systems")
+                systems_data = systems_response.dict
+                
+                # 获取第一个系统
+                if systems_data.get("Members"):
+                    system_url = systems_data["Members"][0]["@odata.id"]
+                    system_response = redfish_client.get(system_url)
+                    system_data = system_response.dict
+                    
+                    # 获取LED状态
+                    indicator_led = system_data.get("IndicatorLED", "Unknown")
+                    
+                    # 登出
+                    redfish_client.logout()
+                    
+                    return {
+                        "supported": True,
+                        "led_state": indicator_led,
+                        "error": None
+                    }
+                else:
+                    # 登出
+                    redfish_client.logout()
+                    
+                    return {
+                        "supported": False,
+                        "led_state": "Unknown",
+                        "error": "未找到系统信息"
+                    }
+                    
+            except Exception as e:
+                logger.error(f"[Redfish LED状态] 获取LED状态失败: {bmc_ip}, 错误: {e}")
+                return {
+                    "supported": False,
+                    "led_state": "Unknown",
+                    "error": str(e)
+                }
+        
         try:
             logger.debug(f"[Redfish LED状态] 开始获取LED状态: {bmc_ip}")
             
-            # 构建Redfish Chassis集合URL
-            chassis_url = f"https://{bmc_ip}/redfish/v1/Chassis"
+            # 在线程池中执行同步的Redfish操作
+            result = await loop.run_in_executor(None, _get_led_status_sync)
             
-            # 创建httpx异步客户端
-            async with httpx.AsyncClient(
-                verify=False,  # 忽略SSL证书验证
-                timeout=timeout
-            ) as client:
-                # 发送GET请求获取Chassis集合
-                response = await client.get(
-                    chassis_url,
-                    auth=(username, password)
-                )
-                
-                if response.status_code != 200:
-                    logger.warning(f"[Redfish LED状态] 获取Chassis集合失败: {bmc_ip}, 状态码: {response.status_code}")
-                    return {
-                        "supported": False,
-                        "led_state": "Unknown",
-                        "error": f"获取Chassis集合失败，状态码: {response.status_code}"
-                    }
-                
-                # 解析Chassis集合
-                chassis_collection = response.json()
-                
-                # 获取第一个Chassis的URL（通常只有一个）
-                chassis_members = chassis_collection.get("Members", [])
-                if not chassis_members:
-                    logger.warning(f"[Redfish LED状态] 未找到Chassis成员: {bmc_ip}")
-                    return {
-                        "supported": False,
-                        "led_state": "Unknown",
-                        "error": "未找到Chassis成员"
-                    }
-                
-                # 获取第一个Chassis的URL
-                first_chassis_url = chassis_members[0].get("@odata.id")
-                if not first_chassis_url:
-                    logger.warning(f"[Redfish LED状态] Chassis成员URL无效: {bmc_ip}")
-                    return {
-                        "supported": False,
-                        "led_state": "Unknown",
-                        "error": "Chassis成员URL无效"
-                    }
-                
-                # 构建完整的Chassis URL
-                if not first_chassis_url.startswith("http"):
-                    first_chassis_url = f"https://{bmc_ip}{first_chassis_url}"
-                
-                # 获取Chassis详细信息
-                chassis_response = await client.get(
-                    first_chassis_url,
-                    auth=(username, password)
-                )
-                
-                if chassis_response.status_code != 200:
-                    logger.warning(f"[Redfish LED状态] 获取Chassis详情失败: {bmc_ip}, 状态码: {chassis_response.status_code}")
-                    return {
-                        "supported": False,
-                        "led_state": "Unknown",
-                        "error": f"获取Chassis详情失败，状态码: {chassis_response.status_code}"
-                    }
-                
-                # 解析Chassis详情
-                chassis_details = chassis_response.json()
-                
-                # 获取LED状态
-                indicator_led = chassis_details.get("IndicatorLED", "Unknown")
-                
-                logger.info(f"[Redfish LED状态] 获取LED状态成功: {bmc_ip}, 状态: {indicator_led}")
-                
-                return {
-                    "supported": True,
-                    "led_state": indicator_led,
-                    "error": None
-                }
-                
-        except httpx.TimeoutException:
-            logger.error(f"[Redfish LED状态] 请求超时: {bmc_ip}")
-            return {
-                "supported": False,
-                "led_state": "Unknown",
-                "error": "请求超时"
-            }
-        except httpx.RequestError as e:
-            logger.error(f"[Redfish LED状态] 请求错误: {bmc_ip}, 错误: {e}")
-            return {
-                "supported": False,
-                "led_state": "Unknown",
-                "error": f"请求错误: {str(e)}"
-            }
+            logger.info(f"[Redfish LED状态] 获取LED状态完成: {bmc_ip}, 状态: {result.get('led_state')}")
+            return result
+            
         except Exception as e:
             logger.error(f"[Redfish LED状态] 未知错误: {bmc_ip}, 错误: {e}")
             return {
@@ -929,11 +900,76 @@ class IPMIService:
                 - message: str, 操作结果信息
                 - error: str, 错误信息（如果发生错误）
         """
+        # 定义不同厂商可能使用的LED状态命令，按优先级排序
+        LED_STATE_COMMANDS = {
+            "On": ["On", "Lit"],
+            "Off": ["Off"],
+            "Unknown": ["Unknown"]
+        }
+
+        loop = asyncio.get_running_loop()
+        
+        def _set_led_state_sync(led_command):
+            """同步函数，在线程池中执行Redfish操作"""
+            try:
+                # 创建Redfish客户端
+                redfish_client = redfish.redfish_client(
+                    base_url=f"https://{bmc_ip}",
+                    username=username,
+                    password=password,
+                    default_prefix='/redfish/v1'
+                )
+                
+                # 登录
+                redfish_client.login(auth="session")
+                
+                # 获取系统信息
+                systems_response = redfish_client.get("/redfish/v1/Systems")
+                systems_data = systems_response.dict
+                
+                # 获取第一个系统
+                if systems_data.get("Members"):
+                    system_url = systems_data["Members"][0]["@odata.id"]
+                    
+                    # 构建PATCH请求数据
+                    patch_data = {
+                        "IndicatorLED": led_command
+                    }
+                    
+                    # 发送PATCH请求设置LED状态
+                    response = redfish_client.patch(system_url, body=patch_data)
+                    
+                    # 登出
+                    redfish_client.logout()
+                    
+                    return {
+                        "success": response.status in [200, 204],
+                        "status_code": response.status,
+                        "error": None if response.status in [200, 204] else f"状态码: {response.status}"
+                    }
+                else:
+                    # 登出
+                    redfish_client.logout()
+                    
+                    return {
+                        "success": False,
+                        "status_code": None,
+                        "error": "未找到系统信息"
+                    }
+                    
+            except Exception as e:
+                logger.error(f"[Redfish LED控制] 设置LED状态失败: {bmc_ip}, 错误: {e}")
+                return {
+                    "success": False,
+                    "status_code": None,
+                    "error": str(e)
+                }
+        
         try:
             logger.debug(f"[Redfish LED控制] 开始设置LED状态: {bmc_ip}, 状态: {led_state}")
             
             # 验证LED状态参数
-            if led_state not in ["On", "Off"]:
+            if led_state not in LED_STATE_COMMANDS:
                 logger.warning(f"[Redfish LED控制] 无效的LED状态: {led_state}")
                 return {
                     "success": False,
@@ -941,97 +977,37 @@ class IPMIService:
                     "error": f"LED状态必须是 'On' 或 'Off'，当前值: {led_state}"
                 }
             
-            # 构建Redfish Chassis集合URL
-            chassis_url = f"https://{bmc_ip}/redfish/v1/Chassis"
+            # 按顺序尝试不同的LED状态命令
+            commands_to_try = LED_STATE_COMMANDS.get(led_state, [led_state])
+            last_error = None
             
-            # 创建httpx异步客户端
-            async with httpx.AsyncClient(
-                verify=False,  # 忽略SSL证书验证
-                timeout=timeout
-            ) as client:
-                # 发送GET请求获取Chassis集合
-                response = await client.get(
-                    chassis_url,
-                    auth=(username, password)
-                )
+            for cmd in commands_to_try:
+                logger.debug(f"[Redfish LED控制] 尝试使用命令 '{cmd}': {bmc_ip}")
                 
-                if response.status_code != 200:
-                    logger.warning(f"[Redfish LED控制] 获取Chassis集合失败: {bmc_ip}, 状态码: {response.status_code}")
+                # 在线程池中执行同步的Redfish操作
+                result = await loop.run_in_executor(None, _set_led_state_sync, cmd)
+                
+                # 如果成功（200或204），直接返回成功结果
+                if result.get("success"):
+                    logger.info(f"[Redfish LED控制] 设置LED状态成功: {bmc_ip}, 状态: {led_state} (使用命令: {cmd})")
                     return {
-                        "success": False,
-                        "message": "获取Chassis集合失败",
-                        "error": f"状态码: {response.status_code}"
+                        "success": True,
+                        "message": f"LED状态已设置为 {led_state}",
+                        "error": None
                     }
                 
-                # 解析Chassis集合
-                chassis_collection = response.json()
-                
-                # 获取第一个Chassis的URL（通常只有一个）
-                chassis_members = chassis_collection.get("Members", [])
-                if not chassis_members:
-                    logger.warning(f"[Redfish LED控制] 未找到Chassis成员: {bmc_ip}")
-                    return {
-                        "success": False,
-                        "message": "未找到Chassis成员",
-                        "error": "Chassis成员列表为空"
-                    }
-                
-                # 获取第一个Chassis的URL
-                first_chassis_url = chassis_members[0].get("@odata.id")
-                if not first_chassis_url:
-                    logger.warning(f"[Redfish LED控制] Chassis成员URL无效: {bmc_ip}")
-                    return {
-                        "success": False,
-                        "message": "Chassis成员URL无效",
-                        "error": "无法获取Chassis URL"
-                    }
-                
-                # 构建完整的Chassis URL
-                if not first_chassis_url.startswith("http"):
-                    first_chassis_url = f"https://{bmc_ip}{first_chassis_url}"
-                
-                # 构建PATCH请求数据
-                patch_data = {
-                    "IndicatorLED": led_state
-                }
-                
-                # 发送PATCH请求设置LED状态
-                patch_response = await client.patch(
-                    first_chassis_url,
-                    auth=(username, password),
-                    json=patch_data
-                )
-                
-                if patch_response.status_code not in [200, 204]:
-                    logger.warning(f"[Redfish LED控制] 设置LED状态失败: {bmc_ip}, 状态码: {patch_response.status_code}")
-                    return {
-                        "success": False,
-                        "message": "设置LED状态失败",
-                        "error": f"状态码: {patch_response.status_code}"
-                    }
-                
-                logger.info(f"[Redfish LED控制] 设置LED状态成功: {bmc_ip}, 状态: {led_state}")
-                
-                return {
-                    "success": True,
-                    "message": f"LED状态已设置为 {led_state}",
-                    "error": None
-                }
-                
-        except httpx.TimeoutException:
-            logger.error(f"[Redfish LED控制] 请求超时: {bmc_ip}")
+                # 记录错误信息，继续尝试下一个命令
+                last_error = result.get("error")
+                logger.debug(f"[Redfish LED控制] 使用命令 '{cmd}' 失败，错误: {last_error}")
+            
+            # 如果所有命令都失败了，返回最后一个错误
+            logger.warning(f"[Redfish LED控制] 设置LED状态失败: {bmc_ip}, 最后错误: {last_error}")
             return {
                 "success": False,
-                "message": "请求超时",
-                "error": "操作超时"
+                "message": "设置LED状态失败",
+                "error": last_error
             }
-        except httpx.RequestError as e:
-            logger.error(f"[Redfish LED控制] 请求错误: {bmc_ip}, 错误: {e}")
-            return {
-                "success": False,
-                "message": "请求错误",
-                "error": f"网络请求失败: {str(e)}"
-            }
+            
         except Exception as e:
             logger.error(f"[Redfish LED控制] 未知错误: {bmc_ip}, 错误: {e}")
             return {
