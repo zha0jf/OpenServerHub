@@ -554,6 +554,106 @@ class ServerService:
             logger.error(f"检查服务器 {server_id} Redfish支持时发生未知错误: {str(e)}")
             raise IPMIError(f"检查Redfish支持失败: {str(e)}")
     
+    async def get_server_led_status(self, server_id: int) -> Dict[str, Any]:
+        """
+        获取服务器LED状态
+        
+        Args:
+            server_id: 服务器ID
+            
+        Returns:
+            Dict[str, Any]: 包含LED状态信息的字典
+        """
+        db_server = self.get_server(server_id)
+        if not db_server:
+            raise ValidationError("服务器不存在")
+        
+        # 检查服务器是否在线
+        if db_server.status != ServerStatus.ONLINE:
+            return {
+                "supported": False,
+                "led_state": "Unknown",
+                "error": "服务器不在线，无法获取LED状态"
+            }
+        
+        # 检查服务器是否支持Redfish
+        if db_server.redfish_supported is not True:
+            return {
+                "supported": False,
+                "led_state": "Unknown",
+                "error": "服务器BMC不支持Redfish，无法获取LED状态"
+            }
+        
+        try:
+            # 调用IPMI服务获取LED状态
+            result = await self.ipmi_service.get_redfish_led_status(
+                bmc_ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
+                username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
+                password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
+                timeout=10
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取服务器 {server_id} LED状态失败: {str(e)}")
+            return {
+                "supported": False,
+                "led_state": "Unknown",
+                "error": f"获取LED状态失败: {str(e)}"
+            }
+    
+    async def set_server_led_state(self, server_id: int, led_state: str) -> Dict[str, Any]:
+        """
+        设置服务器LED状态
+        
+        Args:
+            server_id: 服务器ID
+            led_state: LED状态（"On" 或 "Off"）
+            
+        Returns:
+            Dict[str, Any]: 包含操作结果的字典
+        """
+        db_server = self.get_server(server_id)
+        if not db_server:
+            raise ValidationError("服务器不存在")
+        
+        # 检查服务器是否在线
+        if db_server.status != ServerStatus.ONLINE:
+            return {
+                "success": False,
+                "message": "操作失败",
+                "error": "服务器不在线，无法设置LED状态"
+            }
+        
+        # 检查服务器是否支持Redfish
+        if db_server.redfish_supported is not True:
+            return {
+                "success": False,
+                "message": "操作失败",
+                "error": "服务器BMC不支持Redfish，无法设置LED状态"
+            }
+        
+        try:
+            # 调用IPMI服务设置LED状态
+            result = await self.ipmi_service.set_redfish_led_state(
+                bmc_ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
+                username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
+                password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
+                led_state=led_state,
+                timeout=10
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"设置服务器 {server_id} LED状态失败: {str(e)}")
+            return {
+                "success": False,
+                "message": "操作失败",
+                "error": f"设置LED状态失败: {str(e)}"
+            }
+
     def get_cluster_statistics(self, group_id: Optional[int] = None) -> Dict[str, Any]:
         """获取集群统计信息"""
         # 基本查询

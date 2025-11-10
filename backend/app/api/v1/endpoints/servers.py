@@ -315,6 +315,20 @@ class RedfishSupportResponse(BaseModel):
     error: Optional[str] = Field(None, description="错误信息")
     service_root: Optional[dict] = Field(None, description="Redfish服务根信息")
 
+# LED状态响应模型
+class LEDStatusResponse(BaseModel):
+    """LED状态响应"""
+    supported: bool = Field(..., description="是否支持LED控制")
+    led_state: str = Field(..., description="LED状态（On, Off, Unknown）")
+    error: Optional[str] = Field(None, description="错误信息")
+
+# LED控制响应模型
+class LEDControlResponse(BaseModel):
+    """LED控制响应"""
+    success: bool = Field(..., description="操作是否成功")
+    message: str = Field(..., description="操作结果信息")
+    error: Optional[str] = Field(None, description="错误信息")
+
 @router.post("/{server_id}/redfish-check", response_model=RedfishSupportResponse)
 async def check_redfish_support(
     server_id: int,
@@ -335,3 +349,66 @@ async def check_redfish_support(
     except Exception as e:
         logger.error(f"Redfish检查失败: {str(e)}")
         raise HTTPException(status_code=500, detail="检查失败，请稍后重试")
+
+@router.get("/{server_id}/led-status", response_model=LEDStatusResponse)
+async def get_led_status(
+    server_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(AuthService.get_current_user)
+):
+    """获取服务器LED状态"""
+    try:
+        server_service = ServerService(db)
+        result = await server_service.get_server_led_status(server_id)
+        return result
+    except ValidationError as e:
+        logger.warning(f"LED状态查询验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except IPMIError as e:
+        logger.error(f"LED状态查询失败: {e.message}")
+        raise HTTPException(status_code=500, detail=f"查询失败: {e.message}")
+    except Exception as e:
+        logger.error(f"LED状态查询失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试")
+
+@router.post("/{server_id}/led-on", response_model=LEDControlResponse)
+async def turn_on_led(
+    server_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(AuthService.get_current_user)
+):
+    """点亮服务器LED"""
+    try:
+        server_service = ServerService(db)
+        result = await server_service.set_server_led_state(server_id, "On")
+        return result
+    except ValidationError as e:
+        logger.warning(f"LED点亮验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except IPMIError as e:
+        logger.error(f"LED点亮失败: {e.message}")
+        raise HTTPException(status_code=500, detail=f"操作失败: {e.message}")
+    except Exception as e:
+        logger.error(f"LED点亮失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="操作失败，请稍后重试")
+
+@router.post("/{server_id}/led-off", response_model=LEDControlResponse)
+async def turn_off_led(
+    server_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(AuthService.get_current_user)
+):
+    """关闭服务器LED"""
+    try:
+        server_service = ServerService(db)
+        result = await server_service.set_server_led_state(server_id, "Off")
+        return result
+    except ValidationError as e:
+        logger.warning(f"LED关闭验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except IPMIError as e:
+        logger.error(f"LED关闭失败: {e.message}")
+        raise HTTPException(status_code=500, detail=f"操作失败: {e.message}")
+    except Exception as e:
+        logger.error(f"LED关闭失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="操作失败，请稍后重试")
