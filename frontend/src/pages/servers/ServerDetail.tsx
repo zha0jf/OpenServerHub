@@ -29,7 +29,9 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   QuestionCircleOutlined,
-  ClockCircleOutlined
+  ClockCircleOutlined,
+  BulbOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
 import { Server, ServerGroup, PowerAction } from '../../types';
@@ -242,6 +244,33 @@ const ServerDetail: React.FC = () => {
     return group ? group.name : '未知分组';
   };
 
+  const getLEDStatusClass = (ledStatus: { supported: boolean; led_state: string; error: string | null } | null) => {
+    if (!ledStatus || !ledStatus.supported) return 'led-unknown';
+    if (ledStatus.led_state === 'On') return 'led-on';
+    if (ledStatus.led_state === 'Off') return 'led-off';
+    return 'led-unknown';
+  };
+
+  const handleLEDLightClick = async () => {
+    if (!ledStatus || !ledStatus.supported || !server || server.status !== 'online') return;
+    
+    try {
+      setLedLoading(true);
+      if (ledStatus.led_state === 'On') {
+        await serverService.turnOffLED(server.id);
+        message.success('LED已关闭');
+      } else {
+        await serverService.turnOnLED(server.id);
+        message.success('LED已开启');
+      }
+      await loadLEDStatus();
+    } catch (error) {
+      message.error(ledStatus.led_state === 'On' ? '关闭LED失败' : '开启LED失败');
+    } finally {
+      setLedLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -275,7 +304,7 @@ const ServerDetail: React.FC = () => {
             返回列表
           </Button>
           <div>
-            <Title level={2} style={{ margin: 0 }}>
+            <Title level={2}>
               {server.name}
             </Title>
           </div>
@@ -295,7 +324,7 @@ const ServerDetail: React.FC = () => {
       </div>
 
       {/* 主要状态卡片 */}
-      <Row gutter={16} style={{ marginBottom: '24px' }}>
+      <Row gutter={16} className="status-cards-row">
         {/* BMC状态卡片 */}
         <Col xs={24} sm={12} md={4}>
           <Card className="status-card" hoverable>
@@ -303,7 +332,7 @@ const ServerDetail: React.FC = () => {
               <Badge
                 color={getStatusColor(server.status)}
                 text={
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>
+                  <span className="status-card-text">
                     {getStatusIcon(server.status)} {getStatusText(server.status)}
                   </span>
                 }
@@ -317,7 +346,7 @@ const ServerDetail: React.FC = () => {
         <Col xs={24} sm={12} md={4}>
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
-              <PoweroffOutlined style={{ fontSize: '24px', marginRight: '8px' }} />
+              <PoweroffOutlined className="status-card-icon-inner" />
               <Tag color={getPowerStateColor(server.power_state)}>
                 {getPowerStateText(server.power_state)}
               </Tag>
@@ -338,27 +367,44 @@ const ServerDetail: React.FC = () => {
           </Card>
         </Col>
 
-        {/* Redfish支持卡片 */}
+        {/* Redfish状态卡片 */}
         <Col xs={24} sm={12} md={4}>
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
-              <Tag color={server.redfish_supported ? 'green' : server.redfish_supported === false ? 'red' : 'orange'}>
-                {server.redfish_supported ? '支持' : server.redfish_supported === false ? '不支持' : '未知'}
-              </Tag>
+              {server.redfish_supported ? (
+                <>
+                  <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '20px', marginRight: '8px' }} />
+                  <Text className="status-card-version">
+                    {server.redfish_version || 'N/A'}
+                  </Text>
+                </>
+              ) : (
+                <ExclamationCircleOutlined style={{ color: server.redfish_supported === false ? '#f5222d' : '#faad14', fontSize: '20px' }} />
+              )}
             </div>
-            <Text className="status-card-label">Redfish支持</Text>
+            <Text className="status-card-label">
+              {server.redfish_supported ? 'Redfish支持' : server.redfish_supported === false ? '不支持Redfish' : 'Redfish未知'}
+            </Text>
           </Card>
         </Col>
 
-        {/* Redfish版本卡片 */}
+        {/* LED状态卡片 */}
         <Col xs={24} sm={12} md={4}>
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
-              <Text style={{ fontSize: '12px' }}>
-                {server.redfish_version || 'N/A'}
-              </Text>
+              <div 
+                className={`led-light ${getLEDStatusClass(ledStatus)}`}
+                onClick={handleLEDLightClick}
+              >
+                <BulbOutlined />
+              </div>
             </div>
-            <Text className="status-card-label">Redfish版本</Text>
+            <Text className="status-card-label">
+              {ledStatus ? (
+                ledStatus.led_state === 'On' ? 'LED已开启' : 
+                ledStatus.led_state === 'Off' ? 'LED已关闭' : 'LED未知'
+              ) : 'LED状态未知'}
+            </Text>
           </Card>
         </Col>
 
@@ -451,7 +497,7 @@ const ServerDetail: React.FC = () => {
               强制重启
             </Button>
           </Space>
-          <div style={{ marginTop: '16px', color: '#999', fontSize: '12px' }}>
+          <div className="power-control-note">
             <Text type="secondary">
               {server.status !== 'online' ? '服务器离线或错误，无法进行电源控制操作' : '所有操作均可正常执行'}
             </Text>
@@ -523,9 +569,9 @@ const ServerDetail: React.FC = () => {
         <Card title="附加信息" className="detail-card">
           {server.description && (
             <>
-              <div style={{ marginBottom: '16px' }}>
+              <div className="additional-info-section">
                 <Text strong>描述：</Text>
-                <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+                <div className="additional-info-content">
                   <Text>{server.description}</Text>
                 </div>
               </div>
@@ -535,7 +581,7 @@ const ServerDetail: React.FC = () => {
           {server.tags && (
             <>
               <Text strong>标签：</Text>
-              <div style={{ marginTop: '8px' }}>
+              <div className="additional-info-tags">
                 <Space wrap>
                   {server.tags.split(',').map((tag, index) => (
                     <Tag key={index} color="blue">
@@ -551,7 +597,7 @@ const ServerDetail: React.FC = () => {
 
       {/* LED控制 */}
       <Card title="LED控制" className="detail-card">
-        <div style={{ textAlign: 'center', padding: '20px' }}>
+        <div className="led-control-group">
           <Space>
             <Button
               type="primary"
@@ -576,7 +622,7 @@ const ServerDetail: React.FC = () => {
               刷新LED状态
             </Button>
           </Space>
-          <div style={{ marginTop: '16px' }}>
+          <div className="led-control-status">
             {!ledStatus ? (
               <Text type="secondary">正在加载LED状态...</Text>
             ) : !ledStatus.supported ? (
