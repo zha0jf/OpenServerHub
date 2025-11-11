@@ -352,6 +352,46 @@ const ServerDetail: React.FC = () => {
               </Tag>
             </div>
             <Text className="status-card-label">电源状态</Text>
+            <div className="status-card-actions" style={{ marginTop: '12px' }}>
+              <Space size="middle" style={{ justifyContent: 'center' }}>
+                {/* 开机按钮 - 绿色 */}
+                <Tooltip title="开机">
+                  <Button
+                    className="power-button power-button-on"
+                    shape="circle"
+                    size="large"
+                    icon={<PoweroffOutlined />}
+                    onClick={() => handlePowerControl('on')}
+                    loading={powerLoading}
+                    disabled={server.status !== 'online'}
+                  />
+                </Tooltip>
+                {/* 关机按钮 - 红色 */}
+                <Tooltip title="关机">
+                  <Button
+                    className="power-button power-button-off"
+                    shape="circle"
+                    size="large"
+                    icon={<PoweroffOutlined />}
+                    onClick={() => handlePowerControl('off')}
+                    loading={powerLoading}
+                    disabled={server.status !== 'online'}
+                  />
+                </Tooltip>
+                {/* 重启按钮 - 蓝色 */}
+                <Tooltip title="重启">
+                  <Button
+                    className="power-button power-button-restart"
+                    shape="circle"
+                    size="large"
+                    icon={<SwapOutlined />}
+                    onClick={() => handlePowerControl('restart')}
+                    loading={powerLoading}
+                    disabled={server.status !== 'online'}
+                  />
+                </Tooltip>
+              </Space>
+            </div>
           </Card>
         </Col>
 
@@ -405,6 +445,16 @@ const ServerDetail: React.FC = () => {
                 ledStatus.led_state === 'Off' ? 'LED已关闭' : 'LED未知'
               ) : 'LED状态未知'}
             </Text>
+            <div className="status-card-actions" style={{ marginTop: '8px' }}>
+              <Tooltip title="刷新LED状态">
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={loadLEDStatus}
+                  loading={ledLoading}
+                />
+              </Tooltip>
+            </div>
           </Card>
         </Col>
 
@@ -449,100 +499,38 @@ const ServerDetail: React.FC = () => {
         </Descriptions>
       </Card>
 
-      {/* 电源控制 */}
-      <Card title="电源控制" className="detail-card">
-        <div className="power-control-group">
-          <Space wrap>
-            <Button
-              icon={<PoweroffOutlined />}
-              onClick={() => handlePowerControl('on')}
-              loading={powerLoading}
-              type="primary"
-              disabled={server.status !== 'online'}
-            >
-              开机
-            </Button>
-            <Button
-              icon={<PoweroffOutlined />}
-              onClick={() => handlePowerControl('off')}
-              loading={powerLoading}
-              disabled={server.status !== 'online'}
-            >
-              关机
-            </Button>
-            <Button
-              icon={<SwapOutlined />}
-              onClick={() => handlePowerControl('restart')}
-              loading={powerLoading}
-              disabled={server.status !== 'online'}
-            >
-              重启
-            </Button>
-            <Button
-              icon={<PoweroffOutlined />}
-              onClick={() => handlePowerControl('force_off')}
-              loading={powerLoading}
-              danger
-              disabled={server.status !== 'online'}
-            >
-              强制关机
-            </Button>
-            <Button
-              icon={<SwapOutlined />}
-              onClick={() => handlePowerControl('force_restart')}
-              loading={powerLoading}
-              danger
-              disabled={server.status !== 'online'}
-            >
-              强制重启
-            </Button>
-          </Space>
-          <div className="power-control-note">
-            <Text type="secondary">
-              {server.status !== 'online' ? '服务器离线或错误，无法进行电源控制操作' : '所有操作均可正常执行'}
-            </Text>
-          </div>
+      {/* 高级控制 */}
+      <Card title="高级控制" className="detail-card">
+        <Space wrap>
+          <Button
+            icon={<PoweroffOutlined />}
+            onClick={() => handlePowerControl('force_off')}
+            loading={powerLoading}
+            danger
+            disabled={server.status !== 'online'}
+          >
+            强制关机
+          </Button>
+          <Button
+            icon={<SwapOutlined />}
+            onClick={() => handlePowerControl('force_restart')}
+            loading={powerLoading}
+            danger
+            disabled={server.status !== 'online'}
+          >
+            强制重启
+          </Button>
+        </Space>
+        <div style={{ marginTop: '12px' }}>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            {server.status !== 'online' ? '服务器离线或错误，无法进行高级控制操作' : '强制操作可能导致数据丢失，请谨慎使用'}
+          </Text>
         </div>
       </Card>
 
-      {/* 状态和时间信息 */}
-      <Card title="状态信息" className="detail-card">
-        <Descriptions column={{ xxl: 2, xl: 2, lg: 2, md: 1, sm: 1, xs: 1 }} bordered>
-          <Descriptions.Item label="BMC状态">
-            <Badge
-              color={getStatusColor(server.status)}
-              text={getStatusText(server.status)}
-            />
-          </Descriptions.Item>
-          <Descriptions.Item label="电源状态">
-            <Tag color={getPowerStateColor(server.power_state)}>
-              {getPowerStateText(server.power_state)}
-            </Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="监控状态">
-            <Tag color={server.monitoring_enabled ? 'blue' : 'default'}>
-              {server.monitoring_enabled ? '已启用' : '未启用'}
-            </Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="Redfish支持">
-            <Tag color={server.redfish_supported ? 'green' : server.redfish_supported === false ? 'red' : 'orange'}>
-              {server.redfish_supported ? '支持' : server.redfish_supported === false ? '不支持' : '未知'}
-            </Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="Redfish版本">
-            <Text>{server.redfish_version || 'N/A'}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="LED状态">
-            <Text>
-              {ledStatus ? (
-                <Tag color={ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? 'green' : ledStatus.led_state === 'Off' ? 'default' : 'orange'}>
-                  {ledStatus.led_state}
-                </Tag>
-              ) : (
-                '未知'
-              )}
-            </Text>
-          </Descriptions.Item>
+      {/* 时间信息 */}
+      <Card title="时间信息" className="detail-card">
+        <Descriptions column={{ xxl: 3, xl: 3, lg: 2, md: 1, sm: 1, xs: 1 }} bordered>
           <Descriptions.Item label="最后更新">
             <Text>
               <ClockCircleOutlined style={{ marginRight: '4px' }} />
@@ -595,67 +583,7 @@ const ServerDetail: React.FC = () => {
         </Card>
       )}
 
-      {/* LED控制 */}
-      <Card title="LED控制" className="detail-card">
-        <div className="led-control-group">
-          <Space>
-            <Button
-              type="primary"
-              onClick={handleTurnOnLED}
-              loading={ledLoading}
-              disabled={!ledStatus || !ledStatus.supported || server.status !== 'online'}
-            >
-              点亮LED
-            </Button>
-            <Button
-              onClick={handleTurnOffLED}
-              loading={ledLoading}
-              disabled={!ledStatus || !ledStatus.supported || server.status !== 'online'}
-            >
-              关闭LED
-            </Button>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={loadLEDStatus}
-              loading={ledLoading}
-            >
-              刷新LED状态
-            </Button>
-          </Space>
-          <div className="led-control-status">
-            {!ledStatus ? (
-              <Text type="secondary">正在加载LED状态...</Text>
-            ) : !ledStatus.supported ? (
-              <Text type="warning">服务器不支持LED控制或BMC不支持Redfish</Text>
-            ) : server.status !== 'online' ? (
-              <Text type="warning">服务器离线，无法控制LED</Text>
-            ) : (
-              <Text type="secondary">
-                当前LED状态: {ledStatus.led_state === 'Lit' ? 'On (Lit)' : ledStatus.led_state}
-              </Text>
-            )}
-          </div>
-        </div>
-      </Card>
 
-      {/* 操作按钮 */}
-      <div className="detail-action-footer">
-        <Space>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={handleUpdateStatus}
-            loading={powerLoading}
-          >
-            刷新状态
-          </Button>
-          <Button type="primary" onClick={() => navigate(`/servers/${id}/edit`)}>
-            编辑信息
-          </Button>
-          <Button onClick={() => navigate('/servers')}>
-            返回列表
-          </Button>
-        </Space>
-      </div>
     </div>
   );
 };

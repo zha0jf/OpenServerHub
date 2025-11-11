@@ -74,6 +74,74 @@
   margin-top: 4px;
 }
 
+.status-card-actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* 电源控制的图形按钮样式 */
+.power-button {
+  border: 2px solid transparent !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.power-button:hover:not(:disabled) {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+  transform: scale(1.1);
+}
+
+/* 开机按钮 - 绿色 */
+.power-button-on {
+  background-color: #52c41a !important;
+  border-color: #52c41a !important;
+  color: white !important;
+}
+
+.power-button-on:hover:not(:disabled) {
+  background-color: #73d13d !important;
+  border-color: #73d13d !important;
+}
+
+.power-button-on:active:not(:disabled) {
+  background-color: #389e0d !important;
+  border-color: #389e0d !important;
+}
+
+/* 关机按钮 - 红色 */
+.power-button-off {
+  background-color: #ff7875 !important;
+  border-color: #ff7875 !important;
+  color: white !important;
+}
+
+.power-button-off:hover:not(:disabled) {
+  background-color: #ff9c6e !important;
+  border-color: #ff9c6e !important;
+}
+
+.power-button-off:active:not(:disabled) {
+  background-color: #d9363e !important;
+  border-color: #d9363e !important;
+}
+
+/* 重启按钮 - 蓝色 */
+.power-button-restart {
+  background-color: #1890ff !important;
+  border-color: #1890ff !important;
+  color: white !important;
+}
+
+.power-button-restart:hover:not(:disabled) {
+  background-color: #40a9ff !important;
+  border-color: #40a9ff !important;
+}
+
+.power-button-restart:active:not(:disabled) {
+  background-color: #0050b3 !important;
+  border-color: #0050b3 !important;
+}
+
 /* LED灯样式 */
 .led-light {
   width: 32px;
@@ -146,54 +214,20 @@
   font-size: 16px;
 }
 
-/* 电源控制组 */
-.power-control-group {
-  padding: 16px 0;
-}
-
-.power-control-group .ant-space {
-  width: 100%;
-}
-
-.power-control-group button {
-  border-radius: 4px;
-  transition: all 0.3s ease;
-}
-
-.power-control-note {
-  margin-top: 16px;
-  color: #999;
-  font-size: 12px;
-}
-
-/* LED控制组 */
-.led-control-group {
-  text-align: center;
-  padding: 20px 0;
-}
-
-.led-control-group .ant-space {
-  width: 100%;
-  justify-content: center;
-}
-
-.led-control-status {
-  margin-top: 16px;
-}
-
-/* 底部操作按钮 */
-.detail-action-footer {
-  display: flex;
-  justify-content: center;
-  padding: 24px 0;
+/* 设备控制部分 - 高级控制卡片 */
+.detail-card[title="高级控制"] {
   margin-top: 24px;
-  border-top: 1px solid #f0f0f0;
 }
 
-.detail-action-footer .ant-space {
-  width: 100%;
-  justify-content: center;
+/* 电源按钮移动设备特效 */
+@media (max-width: 768px) {
+  .power-button {
+    width: 50px !important;
+    height: 50px !important;
+  }
 }
+
+
 
 /* 描述文本 */
 .server-detail-container .ant-descriptions-item-content {
@@ -241,12 +275,6 @@
 
   .server-detail-header .ant-space:last-child {
     justify-content: flex-end;
-  }
-
-  .power-control-group button,
-  .led-control-group button {
-    width: 100%;
-    margin-bottom: 8px;
   }
 }
 
