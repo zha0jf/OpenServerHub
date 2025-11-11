@@ -680,12 +680,12 @@ const ServerDetail: React.FC = () => {
           </Descriptions.Item>
           <Descriptions.Item label="创建时间">
             <Text>
-              {new Date(server.created_at).toLocaleString('zh-CN')}
+              {new Date(server.created_at + 'Z').toLocaleString('zh-CN')}
             </Text>
           </Descriptions.Item>
           <Descriptions.Item label="更新时间">
             <Text>
-              {new Date(server.updated_at).toLocaleString('zh-CN')}
+              {new Date(server.updated_at + 'Z').toLocaleString('zh-CN')}
             </Text>
           </Descriptions.Item>
         </Descriptions>
