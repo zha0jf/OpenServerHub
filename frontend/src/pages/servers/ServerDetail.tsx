@@ -48,6 +48,9 @@ const ServerDetail: React.FC = () => {
   const [powerLoading, setPowerLoading] = useState(false);
   const [ledStatus, setLedStatus] = useState<{ supported: boolean; led_state: string; error: string | null } | null>(null);
   const [ledLoading, setLedLoading] = useState(false);
+  const [monitoringLoading, setMonitoringLoading] = useState(false);
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
 
   useEffect(() => {
     loadServerDetail();
@@ -238,6 +241,32 @@ const ServerDetail: React.FC = () => {
     return colorMap[powerState as keyof typeof colorMap] || 'default';
   };
 
+  const getPowerStateIcon = (powerState: string) => {
+    switch (powerState) {
+      case 'on':
+        return <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />;
+      case 'off':
+        return <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />;
+      case 'unknown':
+        return <QuestionCircleOutlined style={{ color: '#faad14', fontSize: '32px' }} />;
+      default:
+        return <PoweroffOutlined style={{ fontSize: '32px' }} />;
+    }
+  };
+
+  const getBMCStatusIcon = (status: string) => {
+    switch (status) {
+      case 'online':
+        return <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '40px' }} />;
+      case 'offline':
+        return <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '40px' }} />;
+      case 'unknown':
+        return <QuestionCircleOutlined style={{ color: '#faad14', fontSize: '40px' }} />;
+      default:
+        return <ExclamationCircleOutlined style={{ color: '#ff4d4f', fontSize: '40px' }} />;
+    }
+  };
+
   const getGroupName = (groupId: number | null) => {
     if (!groupId) return '未分组';
     const group = groups.find(g => g.id === groupId);
@@ -268,6 +297,39 @@ const ServerDetail: React.FC = () => {
       message.error(ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? '关闭LED失败' : '开启LED失败');
     } finally {
       setLedLoading(false);
+    }
+  };
+
+  const handleToggleMonitoring = async () => {
+    if (!server) return;
+    try {
+      setMonitoringLoading(true);
+      await serverService.updateServer(server.id, {
+        monitoring_enabled: !server.monitoring_enabled,
+      });
+      message.success(server.monitoring_enabled ? '已取消监控' : '已启用监控');
+      await loadServerDetail();
+    } catch (error) {
+      message.error('更新监控状态失败');
+    } finally {
+      setMonitoringLoading(false);
+    }
+  };
+
+  const handleChangeGroup = async () => {
+    if (!server || selectedGroup === null) return;
+    try {
+      setMonitoringLoading(true);
+      await serverService.updateServer(server.id, {
+        group_id: selectedGroup === 0 ? undefined : selectedGroup,
+      });
+      message.success('分组已更新');
+      setGroupModalVisible(false);
+      await loadServerDetail();
+    } catch (error) {
+      message.error('更新分组失败');
+    } finally {
+      setMonitoringLoading(false);
     }
   };
 
@@ -329,16 +391,10 @@ const ServerDetail: React.FC = () => {
         <Col xs={24} sm={12} md={4}>
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
-              <Badge
-                color={getStatusColor(server.status)}
-                text={
-                  <span className="status-card-text">
-                    {getStatusIcon(server.status)} {getStatusText(server.status)}
-                  </span>
-                }
-              />
+              {getBMCStatusIcon(server.status)}
             </div>
             <Text className="status-card-label">BMC状态</Text>
+            <Text className="status-card-value">{getStatusText(server.status)}</Text>
           </Card>
         </Col>
 
@@ -346,50 +402,54 @@ const ServerDetail: React.FC = () => {
         <Col xs={24} sm={12} md={4}>
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
-              <PoweroffOutlined className="status-card-icon-inner" />
-              <Tag color={getPowerStateColor(server.power_state)}>
-                {getPowerStateText(server.power_state)}
-              </Tag>
+              {getPowerStateIcon(server.power_state)}
             </div>
             <Text className="status-card-label">电源状态</Text>
+            <Text className="status-card-value">{getPowerStateText(server.power_state)}</Text>
             <div className="status-card-actions" style={{ marginTop: '12px' }}>
-              <Space size="middle" style={{ justifyContent: 'center' }}>
-                {/* 开机按钮 - 绿色 */}
-                <Tooltip title="开机">
-                  <Button
-                    className="power-button power-button-on"
-                    shape="circle"
-                    size="large"
-                    icon={<PoweroffOutlined />}
-                    onClick={() => handlePowerControl('on')}
-                    loading={powerLoading}
-                    disabled={server.status !== 'online'}
-                  />
-                </Tooltip>
-                {/* 关机按钮 - 红色 */}
-                <Tooltip title="关机">
-                  <Button
-                    className="power-button power-button-off"
-                    shape="circle"
-                    size="large"
-                    icon={<PoweroffOutlined />}
-                    onClick={() => handlePowerControl('off')}
-                    loading={powerLoading}
-                    disabled={server.status !== 'online'}
-                  />
-                </Tooltip>
-                {/* 重启按钮 - 蓝色 */}
-                <Tooltip title="重启">
-                  <Button
-                    className="power-button power-button-restart"
-                    shape="circle"
-                    size="large"
-                    icon={<SwapOutlined />}
-                    onClick={() => handlePowerControl('restart')}
-                    loading={powerLoading}
-                    disabled={server.status !== 'online'}
-                  />
-                </Tooltip>
+              <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
+                {/* 开机按钮 - 仅在关机时显示 */}
+                {server.power_state === 'off' && (
+                  <Tooltip title="开机">
+                    <Button
+                      className="power-button power-button-on"
+                      shape="circle"
+                      size="large"
+                      icon={<PoweroffOutlined />}
+                      onClick={() => handlePowerControl('on')}
+                      loading={powerLoading}
+                      disabled={server.status !== 'online'}
+                    />
+                  </Tooltip>
+                )}
+                {/* 关机按钮 - 仅在开机时显示 */}
+                {server.power_state === 'on' && (
+                  <Tooltip title="关机">
+                    <Button
+                      className="power-button power-button-off"
+                      shape="circle"
+                      size="large"
+                      icon={<PoweroffOutlined />}
+                      onClick={() => handlePowerControl('off')}
+                      loading={powerLoading}
+                      disabled={server.status !== 'online'}
+                    />
+                  </Tooltip>
+                )}
+                {/* 重启按钮 - 仅在开机时显示 */}
+                {server.power_state === 'on' && (
+                  <Tooltip title="重启">
+                    <Button
+                      className="power-button power-button-restart"
+                      shape="circle"
+                      size="large"
+                      icon={<SwapOutlined />}
+                      onClick={() => handlePowerControl('restart')}
+                      loading={powerLoading}
+                      disabled={server.status !== 'online'}
+                    />
+                  </Tooltip>
+                )}
               </Space>
             </div>
           </Card>
@@ -404,6 +464,18 @@ const ServerDetail: React.FC = () => {
               </Tag>
             </div>
             <Text className="status-card-label">监控状态</Text>
+            <div className="status-card-actions" style={{ marginTop: '12px' }}>
+              <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
+                <Button
+                  size="small"
+                  type={server.monitoring_enabled ? 'primary' : 'default'}
+                  onClick={handleToggleMonitoring}
+                  loading={monitoringLoading}
+                >
+                  {server.monitoring_enabled ? '取消监控' : '启用监控'}
+                </Button>
+              </Space>
+            </div>
           </Card>
         </Col>
 
@@ -465,6 +537,20 @@ const ServerDetail: React.FC = () => {
               <Tag color="blue">{getGroupName(server.group_id)}</Tag>
             </div>
             <Text className="status-card-label">服务器分组</Text>
+            <div className="status-card-actions" style={{ marginTop: '12px' }}>
+              <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setSelectedGroup(server.group_id);
+                    setGroupModalVisible(true);
+                  }}
+                  loading={monitoringLoading}
+                >
+                  切换分组
+                </Button>
+              </Space>
+            </div>
           </Card>
         </Col>
       </Row>
@@ -499,34 +585,48 @@ const ServerDetail: React.FC = () => {
         </Descriptions>
       </Card>
 
-      {/* 高级控制 */}
-      <Card title="高级控制" className="detail-card">
-        <Space wrap>
-          <Button
-            icon={<PoweroffOutlined />}
-            onClick={() => handlePowerControl('force_off')}
-            loading={powerLoading}
-            danger
-            disabled={server.status !== 'online'}
-          >
-            强制关机
-          </Button>
-          <Button
-            icon={<SwapOutlined />}
-            onClick={() => handlePowerControl('force_restart')}
-            loading={powerLoading}
-            danger
-            disabled={server.status !== 'online'}
-          >
-            强制重启
-          </Button>
-        </Space>
-        <div style={{ marginTop: '12px' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            {server.status !== 'online' ? '服务器离线或错误，无法进行高级控制操作' : '强制操作可能导致数据丢失，请谨慎使用'}
-          </Text>
-        </div>
-      </Card>
+      {/* 高级控制卡片 */}
+      <Row gutter={16} style={{ marginBottom: '24px' }}>
+        <Col xs={24} sm={12} md={8}>
+          <Card className="status-card" hoverable>
+            <div className="status-card-icon">
+              <ThunderboltOutlined style={{ color: '#faad14', fontSize: '32px' }} />
+            </div>
+            <Text className="status-card-label">高级控制</Text>
+            <div className="status-card-actions" style={{ marginTop: '12px' }}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Button
+                  icon={<PoweroffOutlined />}
+                  onClick={() => handlePowerControl('force_off')}
+                  loading={powerLoading}
+                  danger
+                  disabled={server.status !== 'online'}
+                  size="small"
+                  block
+                >
+                  强制关机
+                </Button>
+                <Button
+                  icon={<SwapOutlined />}
+                  onClick={() => handlePowerControl('force_restart')}
+                  loading={powerLoading}
+                  danger
+                  disabled={server.status !== 'online'}
+                  size="small"
+                  block
+                >
+                  强制重启
+                </Button>
+              </Space>
+            </div>
+            <div style={{ marginTop: '12px', textAlign: 'center' }}>
+              <Text type="secondary" style={{ fontSize: '11px' }}>
+                {server.status !== 'online' ? '服务器离线，不可操作' : '谨慎使用！'}
+              </Text>
+            </div>
+          </Card>
+        </Col>
+      </Row>
 
       {/* 时间信息 */}
       <Card title="时间信息" className="detail-card">
@@ -583,7 +683,39 @@ const ServerDetail: React.FC = () => {
         </Card>
       )}
 
-
+      {/* 分组选择模态框 */}
+      <Modal
+        title="切换分组"
+        open={groupModalVisible}
+        onOk={handleChangeGroup}
+        onCancel={() => setGroupModalVisible(false)}
+        okText="确定"
+        cancelText="取消"
+        confirmLoading={monitoringLoading}
+      >
+        <div style={{ marginBottom: '16px' }}>
+          <Text>选择新的分组：</Text>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <Tag
+            color={selectedGroup === 0 ? 'blue' : 'default'}
+            onClick={() => setSelectedGroup(0)}
+            style={{ cursor: 'pointer', padding: '8px', textAlign: 'center' }}
+          >
+            未分组
+          </Tag>
+          {groups.map(group => (
+            <Tag
+              key={group.id}
+              color={selectedGroup === group.id ? 'blue' : 'default'}
+              onClick={() => setSelectedGroup(group.id)}
+              style={{ cursor: 'pointer', padding: '8px', textAlign: 'center' }}
+            >
+              {group.name}
+            </Tag>
+          ))}
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -52,6 +52,15 @@
   justify-content: center;
 }
 
+.status-card-value {
+  display: block;
+  color: #1d1d1d;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
 .status-card-icon-inner {
   font-size: 20px;
   margin-right: 8px;
@@ -77,6 +86,7 @@
 .status-card-actions {
   display: flex;
   justify-content: center;
+  gap: 4px;
 }
 
 /* 电源控制的图形按钮样式 */
