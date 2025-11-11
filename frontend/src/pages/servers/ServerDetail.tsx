@@ -463,7 +463,7 @@ const ServerDetail: React.FC = () => {
                   </Tooltip>
                 )}
                 {/* 强制关机按钮 - 仅在在线时显示 */}
-                {server.status === 'online' && (
+                {server.power_state === 'on' && server.status === 'online' && (
                   <Tooltip title="强制关机">
                     <Button
                       className="power-icon-button power-button-force-off"
@@ -475,7 +475,7 @@ const ServerDetail: React.FC = () => {
                   </Tooltip>
                 )}
                 {/* 强制重启按钮 - 仅在在线时显示 */}
-                {server.status === 'online' && (
+                {server.power_state === 'on' && server.status === 'online' && (
                   <Tooltip title="强制重启">
                     <Button
                       className="power-icon-button power-button-force-restart"
