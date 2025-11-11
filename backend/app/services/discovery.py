@@ -320,11 +320,27 @@ class DiscoveryService:
             return None
     
     def _parse_network_range(self, network: str) -> List[str]:
-        """解析网络范围"""
+        """解析网络范围，支持多种格式
+        
+        支持的格式:
+        - CIDR: 192.168.1.0/24
+        - 范围: 192.168.1.1-192.168.1.100
+        - 单个IP: 192.168.1.1
+        - 逗号分隔多个IP: 192.168.1.1,192.168.1.2,192.168.1.3
+        """
         ip_list = []
         
         try:
-            if "/" in network:
+            # 检查是否包含逗号（多个IP地址）
+            if "," in network:
+                # 逗号分隔的多个IP地址
+                ip_addresses = [ip.strip() for ip in network.split(",")]
+                for ip in ip_addresses:
+                    if ip:  # 跳过空字符串
+                        # 验证每个IP地址格式
+                        ipaddress.IPv4Address(ip)
+                        ip_list.append(ip)
+            elif "/" in network:
                 # CIDR格式: 192.168.1.0/24
                 network_obj = ipaddress.IPv4Network(network, strict=False)
                 # 排除网络地址和广播地址

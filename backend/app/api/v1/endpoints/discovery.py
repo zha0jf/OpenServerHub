@@ -1,5 +1,5 @@
 import time
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
@@ -111,7 +111,7 @@ async def batch_import_servers(
 @router.post("/csv-import", response_model=CSVImportResponse)
 async def import_from_csv(
     csv_file: UploadFile = File(...),
-    group_id: int = None,
+    group_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
