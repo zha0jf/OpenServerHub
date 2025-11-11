@@ -281,6 +281,7 @@ const ServerDetail: React.FC = () => {
     if (!ledStatus || !ledStatus.supported) return 'led-unknown';
     if (ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit') return 'led-on';
     if (ledStatus.led_state === 'Off') return 'led-off';
+    if (ledStatus.led_state === 'Blinking') return 'led-blinking';
     return 'led-unknown';
   };
 
@@ -289,6 +290,7 @@ const ServerDetail: React.FC = () => {
     
     try {
       setLedLoading(true);
+      // On、Lit 状态下点击关闭，其他状态（Off、Blinking）下点击开启
       if (ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit') {
         await serverService.turnOffLED(server.id);
         message.success('LED已关闭');
@@ -568,14 +570,15 @@ const ServerDetail: React.FC = () => {
             <Text className="status-card-value">
               {ledStatus ? (
                 ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? '已开启' : 
-                ledStatus.led_state === 'Off' ? '已关闭' : '未知'
+                ledStatus.led_state === 'Off' ? '已关闭' :
+                ledStatus.led_state === 'Blinking' ? '闪烁' : '未知'
               ) : '状态未知'}
             </Text>
             <div className="status-card-actions-section" style={{ marginTop: '16px' }}>
               <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
                 {/* 定位灯控制按钮 - 仅在支持Redfish且在线时显示 */}
                 {ledStatus?.supported && server.status === 'online' && (
-                  ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? (
+                  (ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit') ? (
                     <Tooltip title="关闭定位灯">
                       <Button
                         className="status-icon-button led-button-on"
