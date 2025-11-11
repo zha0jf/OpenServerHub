@@ -174,7 +174,7 @@ const ClusterManagement: React.FC = () => {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (time: string) => new Date(time).toLocaleString(),
+      render: (time: string) => new Date(time + 'Z').toLocaleString(),
     },
     {
       title: '操作',
