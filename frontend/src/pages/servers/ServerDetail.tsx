@@ -399,6 +399,20 @@ const ServerDetail: React.FC = () => {
             </div>
             <Text className="status-card-label">BMC状态</Text>
             <Text className="status-card-value">{getStatusText(server.status)}</Text>
+            {/* BMC刷新按钮 - 始终显示 */}
+            <div className="status-card-actions-section" style={{ marginTop: '16px' }}>
+              <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
+                <Tooltip title="刷新BMC状态">
+                  <Button
+                    className="status-icon-button refresh-button"
+                    shape="circle"
+                    icon={<ReloadOutlined />}
+                    onClick={handleUpdateStatus}
+                    loading={powerLoading}
+                  />
+                </Tooltip>
+              </Space>
+            </div>
           </Card>
         </Col>
 
@@ -411,9 +425,9 @@ const ServerDetail: React.FC = () => {
             <Text className="status-card-label">电源状态</Text>
             <Text className="status-card-value">{getPowerStateText(server.power_state)}</Text>
             <div className="status-card-actions-section" style={{ marginTop: '16px' }}>
-              <Space style={{ justifyContent: 'center', width: '100%', flexWrap: 'wrap' }} size="small">
-                {/* 开机按钮 - 仅在关机时显示 */}
-                {server.power_state === 'off' && (
+              <Space style={{ justifyContent: 'center', width: '100%' }} size="small">
+                {/* 开机按钮 - 仅在关机且在线时显示 */}
+                {server.power_state === 'off' && server.status === 'online' && (
                   <Tooltip title="开机">
                     <Button
                       className="power-icon-button power-button-on"
@@ -421,12 +435,11 @@ const ServerDetail: React.FC = () => {
                       icon={<PoweroffOutlined />}
                       onClick={() => handlePowerControl('on')}
                       loading={powerLoading}
-                      disabled={server.status !== 'online'}
                     />
                   </Tooltip>
                 )}
-                {/* 关机按钮 - 仅在开机时显示 */}
-                {server.power_state === 'on' && (
+                {/* 关机按钮 - 仅在开机且在线时显示 */}
+                {server.power_state === 'on' && server.status === 'online' && (
                   <Tooltip title="关机">
                     <Button
                       className="power-icon-button power-button-off"
@@ -434,12 +447,11 @@ const ServerDetail: React.FC = () => {
                       icon={<PoweroffOutlined />}
                       onClick={() => handlePowerControl('off')}
                       loading={powerLoading}
-                      disabled={server.status !== 'online'}
                     />
                   </Tooltip>
                 )}
-                {/* 重启按钮 - 仅在开机时显示 */}
-                {server.power_state === 'on' && (
+                {/* 重启按钮 - 仅在开机且在线时显示 */}
+                {server.power_state === 'on' && server.status === 'online' && (
                   <Tooltip title="重启">
                     <Button
                       className="power-icon-button power-button-restart"
@@ -447,35 +459,43 @@ const ServerDetail: React.FC = () => {
                       icon={<SwapOutlined />}
                       onClick={() => handlePowerControl('restart')}
                       loading={powerLoading}
-                      disabled={server.status !== 'online'}
                     />
                   </Tooltip>
                 )}
-              </Space>
-            </div>
-            {/* 高级控制 */}
-            <div className="status-card-actions-section" style={{ marginTop: '12px' }}>
-              <Space style={{ justifyContent: 'center', width: '100%', flexWrap: 'wrap' }} size="small">
-                <Tooltip title="强制关机">
+                {/* 强制关机按钮 - 仅在在线时显示 */}
+                {server.status === 'online' && (
+                  <Tooltip title="强制关机">
+                    <Button
+                      className="power-icon-button power-button-force-off"
+                      shape="circle"
+                      icon={<ThunderboltOutlined />}
+                      onClick={() => handlePowerControl('force_off')}
+                      loading={powerLoading}
+                    />
+                  </Tooltip>
+                )}
+                {/* 强制重启按钮 - 仅在在线时显示 */}
+                {server.status === 'online' && (
+                  <Tooltip title="强制重启">
+                    <Button
+                      className="power-icon-button power-button-force-restart"
+                      shape="circle"
+                      icon={<ThunderboltOutlined />}
+                      onClick={() => handlePowerControl('force_restart')}
+                      loading={powerLoading}
+                    />
+                  </Tooltip>
+                )}
+                {/* 电源状态刷新按钮 - 始终显示 */}
+                <Tooltip title="刷新电源状态">
                   <Button
-                    className="power-icon-button power-button-force-off"
+                    className="status-icon-button refresh-button"
                     shape="circle"
-                    icon={<ThunderboltOutlined />}
-                    onClick={() => handlePowerControl('force_off')}
+                    icon={<ReloadOutlined />}
+                    onClick={handleUpdateStatus}
                     loading={powerLoading}
-                    disabled={server.status !== 'online'}
                   />
                 </Tooltip>
-                <Tooltip title="强制重启">
-                  <Button
-                    className="power-icon-button power-button-force-restart"
-                    shape="circle"
-                    icon={<ThunderboltOutlined />}
-                    onClick={() => handlePowerControl('force_restart')}
-                    loading={powerLoading}
-                    disabled={server.status !== 'online'}
-                  />
-                  </Tooltip>
               </Space>
             </div>
           </Card>
@@ -495,6 +515,7 @@ const ServerDetail: React.FC = () => {
             <Text className="status-card-value">{server.monitoring_enabled ? '已启用' : '未启用'}</Text>
             <div className="status-card-actions-section" style={{ marginTop: '16px' }}>
               <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
+                {/* 监控控制按钮 - 始终显示 */}
                 <Tooltip title={server.monitoring_enabled ? '取消监控' : '启用监控'}>
                   <Button
                     className={server.monitoring_enabled ? 'status-icon-button status-button-enabled' : 'status-icon-button status-button-disabled'}
@@ -525,6 +546,7 @@ const ServerDetail: React.FC = () => {
             {server.redfish_supported && (
               <Text className="status-card-value">{server.redfish_version || 'N/A'}</Text>
             )}
+            {/* Redfish状态卡片不包含刷新按钮 */}
           </Card>
         </Col>
 
@@ -551,35 +573,42 @@ const ServerDetail: React.FC = () => {
             </Text>
             <div className="status-card-actions-section" style={{ marginTop: '16px' }}>
               <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
-                <Tooltip title="开启定位灯">
-                  <Button
-                    className={ledStatus?.led_state === 'On' || ledStatus?.led_state === 'Lit' ? 'status-icon-button led-button-on' : 'status-icon-button led-button-off'}
-                    shape="circle"
-                    icon={<BulbFilled />}
-                    onClick={() => handleTurnOnLED()}
-                    loading={ledLoading}
-                    disabled={!ledStatus?.supported || server.status !== 'online'}
-                  />
-                </Tooltip>
-                <Tooltip title="关闭定位灯">
-                  <Button
-                    className="status-icon-button led-button-off"
-                    shape="circle"
-                    icon={<BulbOutlined />}
-                    onClick={() => handleTurnOffLED()}
-                    loading={ledLoading}
-                    disabled={!ledStatus?.supported || server.status !== 'online'}
-                  />
-                </Tooltip>
-                <Tooltip title="刷新状态">
-                  <Button
-                    className="status-icon-button"
-                    shape="circle"
-                    icon={<ReloadOutlined />}
-                    onClick={() => loadLEDStatus()}
-                    loading={ledLoading}
-                  />
-                </Tooltip>
+                {/* 定位灯控制按钮 - 仅在支持Redfish且在线时显示 */}
+                {ledStatus?.supported && server.status === 'online' && (
+                  ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? (
+                    <Tooltip title="关闭定位灯">
+                      <Button
+                        className="status-icon-button led-button-on"
+                        shape="circle"
+                        icon={<BulbFilled />}
+                        onClick={() => handleTurnOffLED()}
+                        loading={ledLoading}
+                      />
+                    </Tooltip>
+                  ) : (
+                    <Tooltip title="开启定位灯">
+                      <Button
+                        className="status-icon-button led-button-off"
+                        shape="circle"
+                        icon={<BulbOutlined />}
+                        onClick={() => handleTurnOnLED()}
+                        loading={ledLoading}
+                      />
+                    </Tooltip>
+                  )
+                )}
+                {/* 刷新按钮 - 仅在支持Redfish时显示 */}
+                {ledStatus?.supported && (
+                  <Tooltip title="刷新状态">
+                    <Button
+                      className="status-icon-button"
+                      shape="circle"
+                      icon={<ReloadOutlined />}
+                      onClick={() => loadLEDStatus()}
+                      loading={ledLoading}
+                    />
+                  </Tooltip>
+                )}
               </Space>
             </div>
           </Card>

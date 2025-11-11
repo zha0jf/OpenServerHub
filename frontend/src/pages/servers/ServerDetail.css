@@ -100,6 +100,10 @@
   flex-shrink: 0;
 }
 
+.status-card-actions-section .ant-space {
+  flex-wrap: nowrap !important;
+}
+
 .status-card .ant-divider {
   margin: 12px 0;
   display: none; /* 隐藏分段线，只保留空间对齐 */
@@ -222,6 +226,18 @@
 .status-icon-button:hover:not(:disabled) {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
   transform: scale(1.1);
+}
+
+/* 刷新按钮样式 */
+.refresh-button {
+  background-color: #1890ff !important;
+  border-color: #1890ff !important;
+  color: white !important;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background-color: #40a9ff !important;
+  border-color: #40a9ff !important;
 }
 
 /* 监控启用按钮 */
@@ -354,6 +370,11 @@
   .status-icon-button {
     width: 40px !important;
     height: 40px !important;
+  }
+  
+  /* 在小屏幕上允许换行 */
+  .status-card-actions-section .ant-space {
+    flex-wrap: wrap !important;
   }
 }
 
