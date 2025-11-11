@@ -270,6 +270,12 @@ const DeviceDiscovery: React.FC = () => {
 
   const handleCSVImport = async (values: any) => {
     try {
+      // 验证至少输入了CSV内容或上传了文件
+      if (!values.csv_content || values.csv_content.trim().length === 0) {
+        message.error('请输入CSV内容后提交，或使用文件上传功能');
+        return;
+      }
+      
       const result = await discoveryService.importFromCSVText({
         csv_content: values.csv_content,
         group_id: values.group_id,
@@ -336,6 +342,32 @@ const DeviceDiscovery: React.FC = () => {
         const result = await discoveryService.importFromCSVFile(file as File);
         message.success(`CSV文件导入完成！成功导入 ${result.success_count} 台服务器`);
         onSuccess?.(result);
+        
+        // 文件上传完成后关闭Modal
+        setCSVModalVisible(false);
+        csvForm.resetFields();
+        
+        // 处理失败项
+        if (result.failed_count > 0) {
+          setTimeout(() => {
+            Modal.warning({
+              title: '部分数据导入失败',
+              content: (
+                <div>
+                  <p>以下行导入失败：</p>
+                  <ul>
+                    {result.failed_details.map((detail, index) => (
+                      <li key={index}>
+                        第{detail.row}行 ({detail.name} - {detail.ipmi_ip}): {detail.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+              width: 700,
+            });
+          }, 500);
+        }
       } catch (error) {
         console.error('CSV文件导入失败:', error);
         onError?.(error as Error);
@@ -802,14 +834,23 @@ const DeviceDiscovery: React.FC = () => {
             />
           </Form.Item>
           
+          <Form.Item>
+            <Alert
+              message="提示"
+              description="请选择以下两种方式之一进行导入：手动输入CSV内容，或上传CSV文件"
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          </Form.Item>
+          
           <Form.Item
             name="csv_content"
             label="CSV内容"
-            rules={[{ required: true, message: '请输入CSV内容' }]}
           >
             <TextArea 
               rows={8} 
-              placeholder="粘贴CSV内容，或使用下方文件上传功能"
+              placeholder="粘贴CSV内容"
             />
           </Form.Item>
           
