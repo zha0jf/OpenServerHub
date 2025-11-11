@@ -12,8 +12,6 @@ import {
   Col,
   Descriptions,
   Divider,
-  Badge,
-  Table,
   Modal,
   Tooltip,
   BackTop
@@ -24,13 +22,11 @@ import {
   ReloadOutlined,
   EditOutlined,
   DeleteOutlined,
-  ThunderboltOutlined,
   SwapOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   QuestionCircleOutlined,
   ClockCircleOutlined,
-  BulbOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
@@ -257,13 +253,13 @@ const ServerDetail: React.FC = () => {
   const getBMCStatusIcon = (status: string) => {
     switch (status) {
       case 'online':
-        return <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '40px' }} />;
+        return <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />;
       case 'offline':
-        return <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '40px' }} />;
+        return <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />;
       case 'unknown':
-        return <QuestionCircleOutlined style={{ color: '#faad14', fontSize: '40px' }} />;
+        return <QuestionCircleOutlined style={{ color: '#faad14', fontSize: '32px' }} />;
       default:
-        return <ExclamationCircleOutlined style={{ color: '#ff4d4f', fontSize: '40px' }} />;
+        return <ExclamationCircleOutlined style={{ color: '#ff4d4f', fontSize: '32px' }} />;
     }
   };
 
@@ -399,15 +395,17 @@ const ServerDetail: React.FC = () => {
         </Col>
 
         {/* 电源状态卡片 */}
-        <Col xs={24} sm={12} md={4}>
+        <Col xs={24} sm={12} md={6}>
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
               {getPowerStateIcon(server.power_state)}
             </div>
             <Text className="status-card-label">电源状态</Text>
             <Text className="status-card-value">{getPowerStateText(server.power_state)}</Text>
-            <div className="status-card-actions" style={{ marginTop: '12px' }}>
-              <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
+            <Divider style={{ margin: '12px 0' }} />
+            <div className="status-card-actions-section">
+              <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>基础操作</div>
+              <Space style={{ justifyContent: 'center', width: '100%' }}>
                 {/* 开机按钮 - 仅在关机时显示 */}
                 {server.power_state === 'off' && (
                   <Tooltip title="开机">
@@ -452,6 +450,36 @@ const ServerDetail: React.FC = () => {
                 )}
               </Space>
             </div>
+            {/* 高级控制 */}
+            <div className="status-card-actions-section" style={{ marginTop: '8px' }}>
+              <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>高级操作</div>
+              <Space style={{ justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
+                <Tooltip title="强制关机">
+                  <Button
+                    size="small"
+                    type="primary"
+                    danger
+                    onClick={() => handlePowerControl('force_off')}
+                    loading={powerLoading}
+                    disabled={server.status !== 'online'}
+                  >
+                    强制关机
+                  </Button>
+                </Tooltip>
+                <Tooltip title="强制重启">
+                  <Button
+                    size="small"
+                    type="primary"
+                    danger
+                    onClick={() => handlePowerControl('force_restart')}
+                    loading={powerLoading}
+                    disabled={server.status !== 'online'}
+                  >
+                    强制重启
+                  </Button>
+                </Tooltip>
+              </Space>
+            </div>
           </Card>
         </Col>
 
@@ -459,11 +487,14 @@ const ServerDetail: React.FC = () => {
         <Col xs={24} sm={12} md={4}>
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
-              <Tag color={server.monitoring_enabled ? 'blue' : 'default'}>
-                {server.monitoring_enabled ? '已启用' : '未启用'}
-              </Tag>
+              {server.monitoring_enabled ? (
+                <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />
+              ) : (
+                <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />
+              )}
             </div>
             <Text className="status-card-label">监控状态</Text>
+            <Text className="status-card-value">{server.monitoring_enabled ? '已启用' : '未启用'}</Text>
             <div className="status-card-actions" style={{ marginTop: '12px' }}>
               <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
                 <Button
@@ -484,75 +515,72 @@ const ServerDetail: React.FC = () => {
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
               {server.redfish_supported ? (
-                <>
-                  <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '20px', marginRight: '8px' }} />
-                  <Text className="status-card-version">
-                    {server.redfish_version || 'N/A'}
-                  </Text>
-                </>
+                <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />
               ) : (
-                <ExclamationCircleOutlined style={{ color: server.redfish_supported === false ? '#f5222d' : '#faad14', fontSize: '20px' }} />
+                <ExclamationCircleOutlined style={{ color: server.redfish_supported === false ? '#f5222d' : '#faad14', fontSize: '32px' }} />
               )}
             </div>
             <Text className="status-card-label">
               {server.redfish_supported ? 'Redfish支持' : server.redfish_supported === false ? '不支持Redfish' : 'Redfish未知'}
             </Text>
+            {server.redfish_supported && (
+              <Text className="status-card-value">{server.redfish_version || 'N/A'}</Text>
+            )}
           </Card>
         </Col>
 
-        {/* LED状态卡片 */}
+        {/* 定位灯状态卡片 */}
         <Col xs={24} sm={12} md={4}>
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
-              <div 
-                className={`led-light ${getLEDStatusClass(ledStatus)}`}
-                onClick={handleLEDLightClick}
-              >
-                <BulbOutlined />
-              </div>
+              {ledStatus?.supported ? (
+                ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? (
+                  <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />
+                ) : (
+                  <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />
+                )
+              ) : (
+                <QuestionCircleOutlined style={{ color: '#faad14', fontSize: '32px' }} />
+              )}
             </div>
-            <Text className="status-card-label">
+            <Text className="status-card-label">定位灯</Text>
+            <Text className="status-card-value">
               {ledStatus ? (
-                ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? 'LED已开启' : 
-                ledStatus.led_state === 'Off' ? 'LED已关闭' : 'LED未知'
-              ) : 'LED状态未知'}
+                ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? '已开启' : 
+                ledStatus.led_state === 'Off' ? '已关闭' : '未知'
+              ) : '状态未知'}
             </Text>
-            <div className="status-card-actions" style={{ marginTop: '8px' }}>
-              <Tooltip title="刷新LED状态">
-                <Button
-                  size="small"
-                  icon={<ReloadOutlined />}
-                  onClick={loadLEDStatus}
-                  loading={ledLoading}
-                />
-              </Tooltip>
+            <div className="status-card-actions" style={{ marginTop: '12px' }}>
+              <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
+                <Tooltip title="开启定位灯">
+                  <Button
+                    size="small"
+                    type={ledStatus?.led_state === 'On' || ledStatus?.led_state === 'Lit' ? 'primary' : 'default'}
+                    onClick={() => handleTurnOnLED()}
+                    loading={ledLoading}
+                    disabled={!ledStatus?.supported || server.status !== 'online'}
+                  >
+                    开启
+                  </Button>
+                </Tooltip>
+                <Tooltip title="关闭定位灯">
+                  <Button
+                    size="small"
+                    type={ledStatus?.led_state === 'Off' ? 'primary' : 'default'}
+                    onClick={() => handleTurnOffLED()}
+                    loading={ledLoading}
+                    disabled={!ledStatus?.supported || server.status !== 'online'}
+                  >
+                    关闭
+                  </Button>
+                </Tooltip>
+              </Space>
             </div>
           </Card>
         </Col>
 
         {/* 分组卡片 */}
-        <Col xs={24} sm={12} md={4}>
-          <Card className="status-card" hoverable>
-            <div className="status-card-icon">
-              <Tag color="blue">{getGroupName(server.group_id)}</Tag>
-            </div>
-            <Text className="status-card-label">服务器分组</Text>
-            <div className="status-card-actions" style={{ marginTop: '12px' }}>
-              <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
-                <Button
-                  size="small"
-                  onClick={() => {
-                    setSelectedGroup(server.group_id);
-                    setGroupModalVisible(true);
-                  }}
-                  loading={monitoringLoading}
-                >
-                  切换分组
-                </Button>
-              </Space>
-            </div>
-          </Card>
-        </Col>
+        {/* 已删除 */}
       </Row>
 
       {/* 详细信息 */}
@@ -580,53 +608,26 @@ const ServerDetail: React.FC = () => {
             <Text copyable={!!server.serial_number}>{server.serial_number || '-'}</Text>
           </Descriptions.Item>
           <Descriptions.Item label="所属分组">
-            <Tag color="blue">{getGroupName(server.group_id)}</Tag>
+            <Space>
+              <Tag color="blue">{getGroupName(server.group_id)}</Tag>
+              <Tooltip title="切换分组">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    setSelectedGroup(server.group_id);
+                    setGroupModalVisible(true);
+                  }}
+                  loading={monitoringLoading}
+                />
+              </Tooltip>
+            </Space>
           </Descriptions.Item>
         </Descriptions>
       </Card>
 
-      {/* 高级控制卡片 */}
-      <Row gutter={16} style={{ marginBottom: '24px' }}>
-        <Col xs={24} sm={12} md={8}>
-          <Card className="status-card" hoverable>
-            <div className="status-card-icon">
-              <ThunderboltOutlined style={{ color: '#faad14', fontSize: '32px' }} />
-            </div>
-            <Text className="status-card-label">高级控制</Text>
-            <div className="status-card-actions" style={{ marginTop: '12px' }}>
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Button
-                  icon={<PoweroffOutlined />}
-                  onClick={() => handlePowerControl('force_off')}
-                  loading={powerLoading}
-                  danger
-                  disabled={server.status !== 'online'}
-                  size="small"
-                  block
-                >
-                  强制关机
-                </Button>
-                <Button
-                  icon={<SwapOutlined />}
-                  onClick={() => handlePowerControl('force_restart')}
-                  loading={powerLoading}
-                  danger
-                  disabled={server.status !== 'online'}
-                  size="small"
-                  block
-                >
-                  强制重启
-                </Button>
-              </Space>
-            </div>
-            <div style={{ marginTop: '12px', textAlign: 'center' }}>
-              <Text type="secondary" style={{ fontSize: '11px' }}>
-                {server.status !== 'online' ? '服务器离线，不可操作' : '谨慎使用！'}
-              </Text>
-            </div>
-          </Card>
-        </Col>
-      </Row>
+
 
       {/* 时间信息 */}
       <Card title="时间信息" className="detail-card">

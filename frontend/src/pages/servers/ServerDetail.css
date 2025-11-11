@@ -37,19 +37,29 @@
   background: #fff;
   height: 100%;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
 }
 
 .status-card:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.status-card .ant-card-body {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
 .status-card-icon {
   font-size: 20px;
-  margin-bottom: 8px;
-  min-height: 32px;
+  margin-bottom: 12px;
+  min-height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .status-card-value {
@@ -58,7 +68,7 @@
   font-size: 14px;
   font-weight: 600;
   margin-top: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .status-card-icon-inner {
@@ -80,13 +90,24 @@
   display: block;
   color: #666;
   font-size: 12px;
-  margin-top: 4px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
-.status-card-actions {
+.status-card-actions-section {
+  padding-top: 12px;
+  flex-shrink: 0;
+}
+
+.status-card .ant-divider {
+  margin: 12px 0;
+}
+
+.status-card .ant-space-item {
   display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 4px;
 }
 
 /* 电源控制的图形按钮样式 */
