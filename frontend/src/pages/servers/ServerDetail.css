@@ -96,12 +96,13 @@
 }
 
 .status-card-actions-section {
-  padding-top: 12px;
+  padding-top: 16px;
   flex-shrink: 0;
 }
 
 .status-card .ant-divider {
   margin: 12px 0;
+  display: none; /* 隐藏分段线，只保留空间对齐 */
 }
 
 .status-card .ant-space-item {
@@ -111,13 +112,15 @@
 }
 
 /* 电源控制的图形按钮样式 */
-.power-button {
+.power-icon-button {
   border: 2px solid transparent !important;
   transition: all 0.3s ease !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  width: 36px !important;
+  height: 36px !important;
 }
 
-.power-button:hover:not(:disabled) {
+.power-icon-button:hover:not(:disabled) {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
   transform: scale(1.1);
 }
@@ -171,6 +174,101 @@
 .power-button-restart:active:not(:disabled) {
   background-color: #0050b3 !important;
   border-color: #0050b3 !important;
+}
+
+/* 强制关机按钮 - 深红色 */
+.power-button-force-off {
+  background-color: #cf1322 !important;
+  border-color: #cf1322 !important;
+  color: white !important;
+}
+
+.power-button-force-off:hover:not(:disabled) {
+  background-color: #ff4d4f !important;
+  border-color: #ff4d4f !important;
+}
+
+.power-button-force-off:active:not(:disabled) {
+  background-color: #a8071a !important;
+  border-color: #a8071a !important;
+}
+
+/* 强制重启按钮 - 深橙色 */
+.power-button-force-restart {
+  background-color: #d46b08 !important;
+  border-color: #d46b08 !important;
+  color: white !important;
+}
+
+.power-button-force-restart:hover:not(:disabled) {
+  background-color: #fa8c16 !important;
+  border-color: #fa8c16 !important;
+}
+
+.power-button-force-restart:active:not(:disabled) {
+  background-color: #ad4e00 !important;
+  border-color: #ad4e00 !important;
+}
+
+/* 状态控制图标按钮 */
+.status-icon-button {
+  border: 2px solid transparent !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.status-icon-button:hover:not(:disabled) {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+  transform: scale(1.1);
+}
+
+/* 监控启用按钮 */
+.status-button-enabled {
+  background-color: #52c41a !important;
+  border-color: #52c41a !important;
+  color: white !important;
+}
+
+.status-button-enabled:hover:not(:disabled) {
+  background-color: #73d13d !important;
+  border-color: #73d13d !important;
+}
+
+/* 监控禁用按钮 */
+.status-button-disabled {
+  background-color: #bfbfbf !important;
+  border-color: #bfbfbf !important;
+  color: white !important;
+}
+
+.status-button-disabled:hover:not(:disabled) {
+  background-color: #d9d9d9 !important;
+  border-color: #d9d9d9 !important;
+}
+
+/* LED灯泡按钮 */
+.led-button-on {
+  background-color: #faad14 !important;
+  border-color: #faad14 !important;
+  color: white !important;
+}
+
+.led-button-on:hover:not(:disabled) {
+  background-color: #ffc53d !important;
+  border-color: #ffc53d !important;
+}
+
+.led-button-off {
+  background-color: #bfbfbf !important;
+  border-color: #bfbfbf !important;
+  color: white !important;
+}
+
+.led-button-off:hover:not(:disabled) {
+  background-color: #d9d9d9 !important;
+  border-color: #d9d9d9 !important;
 }
 
 /* LED灯样式 */
@@ -252,9 +350,10 @@
 
 /* 电源按钮移动设备特效 */
 @media (max-width: 768px) {
-  .power-button {
-    width: 50px !important;
-    height: 50px !important;
+  .power-icon-button,
+  .status-icon-button {
+    width: 40px !important;
+    height: 40px !important;
   }
 }
 

@@ -27,7 +27,15 @@ import {
   CloseCircleOutlined,
   QuestionCircleOutlined,
   ClockCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  BulbOutlined,
+  BulbFilled,
+  ThunderboltOutlined,
+  ApiOutlined,
+  DisconnectOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
+  CloudServerOutlined
 } from '@ant-design/icons';
 import { serverService } from '../../services/server';
 import { Server, ServerGroup, PowerAction } from '../../types';
@@ -240,9 +248,9 @@ const ServerDetail: React.FC = () => {
   const getPowerStateIcon = (powerState: string) => {
     switch (powerState) {
       case 'on':
-        return <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />;
+        return <PoweroffOutlined style={{ color: '#52c41a', fontSize: '32px' }} />;
       case 'off':
-        return <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />;
+        return <PoweroffOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />;
       case 'unknown':
         return <QuestionCircleOutlined style={{ color: '#faad14', fontSize: '32px' }} />;
       default:
@@ -253,9 +261,9 @@ const ServerDetail: React.FC = () => {
   const getBMCStatusIcon = (status: string) => {
     switch (status) {
       case 'online':
-        return <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />;
+        return <ApiOutlined style={{ color: '#52c41a', fontSize: '32px' }} />;
       case 'offline':
-        return <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />;
+        return <DisconnectOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />;
       case 'unknown':
         return <QuestionCircleOutlined style={{ color: '#faad14', fontSize: '32px' }} />;
       default:
@@ -402,17 +410,14 @@ const ServerDetail: React.FC = () => {
             </div>
             <Text className="status-card-label">电源状态</Text>
             <Text className="status-card-value">{getPowerStateText(server.power_state)}</Text>
-            <Divider style={{ margin: '12px 0' }} />
-            <div className="status-card-actions-section">
-              <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>基础操作</div>
-              <Space style={{ justifyContent: 'center', width: '100%' }}>
+            <div className="status-card-actions-section" style={{ marginTop: '16px' }}>
+              <Space style={{ justifyContent: 'center', width: '100%', flexWrap: 'wrap' }} size="small">
                 {/* 开机按钮 - 仅在关机时显示 */}
                 {server.power_state === 'off' && (
                   <Tooltip title="开机">
                     <Button
-                      className="power-button power-button-on"
+                      className="power-icon-button power-button-on"
                       shape="circle"
-                      size="large"
                       icon={<PoweroffOutlined />}
                       onClick={() => handlePowerControl('on')}
                       loading={powerLoading}
@@ -424,9 +429,8 @@ const ServerDetail: React.FC = () => {
                 {server.power_state === 'on' && (
                   <Tooltip title="关机">
                     <Button
-                      className="power-button power-button-off"
+                      className="power-icon-button power-button-off"
                       shape="circle"
-                      size="large"
                       icon={<PoweroffOutlined />}
                       onClick={() => handlePowerControl('off')}
                       loading={powerLoading}
@@ -438,9 +442,8 @@ const ServerDetail: React.FC = () => {
                 {server.power_state === 'on' && (
                   <Tooltip title="重启">
                     <Button
-                      className="power-button power-button-restart"
+                      className="power-icon-button power-button-restart"
                       shape="circle"
-                      size="large"
                       icon={<SwapOutlined />}
                       onClick={() => handlePowerControl('restart')}
                       loading={powerLoading}
@@ -451,33 +454,28 @@ const ServerDetail: React.FC = () => {
               </Space>
             </div>
             {/* 高级控制 */}
-            <div className="status-card-actions-section" style={{ marginTop: '8px' }}>
-              <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>高级操作</div>
-              <Space style={{ justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
+            <div className="status-card-actions-section" style={{ marginTop: '12px' }}>
+              <Space style={{ justifyContent: 'center', width: '100%', flexWrap: 'wrap' }} size="small">
                 <Tooltip title="强制关机">
                   <Button
-                    size="small"
-                    type="primary"
-                    danger
+                    className="power-icon-button power-button-force-off"
+                    shape="circle"
+                    icon={<ThunderboltOutlined />}
                     onClick={() => handlePowerControl('force_off')}
                     loading={powerLoading}
                     disabled={server.status !== 'online'}
-                  >
-                    强制关机
-                  </Button>
+                  />
                 </Tooltip>
                 <Tooltip title="强制重启">
                   <Button
-                    size="small"
-                    type="primary"
-                    danger
+                    className="power-icon-button power-button-force-restart"
+                    shape="circle"
+                    icon={<ThunderboltOutlined />}
                     onClick={() => handlePowerControl('force_restart')}
                     loading={powerLoading}
                     disabled={server.status !== 'online'}
-                  >
-                    强制重启
-                  </Button>
-                </Tooltip>
+                  />
+                  </Tooltip>
               </Space>
             </div>
           </Card>
@@ -488,23 +486,24 @@ const ServerDetail: React.FC = () => {
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
               {server.monitoring_enabled ? (
-                <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />
+                <EyeOutlined style={{ color: '#52c41a', fontSize: '32px' }} />
               ) : (
-                <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />
+                <EyeInvisibleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />
               )}
             </div>
             <Text className="status-card-label">监控状态</Text>
             <Text className="status-card-value">{server.monitoring_enabled ? '已启用' : '未启用'}</Text>
-            <div className="status-card-actions" style={{ marginTop: '12px' }}>
+            <div className="status-card-actions-section" style={{ marginTop: '16px' }}>
               <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
-                <Button
-                  size="small"
-                  type={server.monitoring_enabled ? 'primary' : 'default'}
-                  onClick={handleToggleMonitoring}
-                  loading={monitoringLoading}
-                >
-                  {server.monitoring_enabled ? '取消监控' : '启用监控'}
-                </Button>
+                <Tooltip title={server.monitoring_enabled ? '取消监控' : '启用监控'}>
+                  <Button
+                    className={server.monitoring_enabled ? 'status-icon-button status-button-enabled' : 'status-icon-button status-button-disabled'}
+                    shape="circle"
+                    icon={server.monitoring_enabled ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                    onClick={handleToggleMonitoring}
+                    loading={monitoringLoading}
+                  />
+                </Tooltip>
               </Space>
             </div>
           </Card>
@@ -515,9 +514,9 @@ const ServerDetail: React.FC = () => {
           <Card className="status-card" hoverable>
             <div className="status-card-icon">
               {server.redfish_supported ? (
-                <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />
+                <CloudServerOutlined style={{ color: '#52c41a', fontSize: '32px' }} />
               ) : (
-                <ExclamationCircleOutlined style={{ color: server.redfish_supported === false ? '#f5222d' : '#faad14', fontSize: '32px' }} />
+                <CloudServerOutlined style={{ color: server.redfish_supported === false ? '#f5222d' : '#faad14', fontSize: '32px' }} />
               )}
             </div>
             <Text className="status-card-label">
@@ -535,9 +534,9 @@ const ServerDetail: React.FC = () => {
             <div className="status-card-icon">
               {ledStatus?.supported ? (
                 ledStatus.led_state === 'On' || ledStatus.led_state === 'Lit' ? (
-                  <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '32px' }} />
+                  <BulbFilled style={{ color: '#faad14', fontSize: '32px' }} />
                 ) : (
-                  <CloseCircleOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />
+                  <BulbOutlined style={{ color: '#bfbfbf', fontSize: '32px' }} />
                 )
               ) : (
                 <QuestionCircleOutlined style={{ color: '#faad14', fontSize: '32px' }} />
@@ -550,29 +549,36 @@ const ServerDetail: React.FC = () => {
                 ledStatus.led_state === 'Off' ? '已关闭' : '未知'
               ) : '状态未知'}
             </Text>
-            <div className="status-card-actions" style={{ marginTop: '12px' }}>
+            <div className="status-card-actions-section" style={{ marginTop: '16px' }}>
               <Space size="small" style={{ justifyContent: 'center', width: '100%' }}>
                 <Tooltip title="开启定位灯">
                   <Button
-                    size="small"
-                    type={ledStatus?.led_state === 'On' || ledStatus?.led_state === 'Lit' ? 'primary' : 'default'}
+                    className={ledStatus?.led_state === 'On' || ledStatus?.led_state === 'Lit' ? 'status-icon-button led-button-on' : 'status-icon-button led-button-off'}
+                    shape="circle"
+                    icon={<BulbFilled />}
                     onClick={() => handleTurnOnLED()}
                     loading={ledLoading}
                     disabled={!ledStatus?.supported || server.status !== 'online'}
-                  >
-                    开启
-                  </Button>
+                  />
                 </Tooltip>
                 <Tooltip title="关闭定位灯">
                   <Button
-                    size="small"
-                    type={ledStatus?.led_state === 'Off' ? 'primary' : 'default'}
+                    className="status-icon-button led-button-off"
+                    shape="circle"
+                    icon={<BulbOutlined />}
                     onClick={() => handleTurnOffLED()}
                     loading={ledLoading}
                     disabled={!ledStatus?.supported || server.status !== 'online'}
-                  >
-                    关闭
-                  </Button>
+                  />
+                </Tooltip>
+                <Tooltip title="刷新状态">
+                  <Button
+                    className="status-icon-button"
+                    shape="circle"
+                    icon={<ReloadOutlined />}
+                    onClick={() => loadLEDStatus()}
+                    loading={ledLoading}
+                  />
                 </Tooltip>
               </Space>
             </div>
