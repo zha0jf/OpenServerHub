@@ -60,6 +60,8 @@ const DeviceDiscovery: React.FC = () => {
   const [groups, setGroups] = useState<ServerGroup[]>([]);
   const [networkExamples, setNetworkExamples] = useState<NetworkExamples | null>(null);
   const [csvModalVisible, setCSVModalVisible] = useState(false);
+  const [csvFileUploaded, setCSVFileUploaded] = useState(false);
+  const [csvFile, setCSVFile] = useState<File | null>(null);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [examplesModalVisible, setExamplesModalVisible] = useState(false);
   const [lastScanInfo, setLastScanInfo] = useState<{
@@ -270,39 +272,65 @@ const DeviceDiscovery: React.FC = () => {
 
   const handleCSVImport = async (values: any) => {
     try {
-      // 验证至少输入了CSV内容或上传了文件
-      if (!values.csv_content || values.csv_content.trim().length === 0) {
-        message.error('请输入CSV内容后提交，或使用文件上传功能');
-        return;
-      }
-      
-      const result = await discoveryService.importFromCSVText({
-        csv_content: values.csv_content,
-        group_id: values.group_id,
-      });
-
-      message.success(`CSV导入完成！成功导入 ${result.success_count} 台服务器`);
-      
-      if (result.failed_count > 0) {
-        Modal.warning({
-          title: '部分数据导入失败',
-          content: (
-            <div>
-              <p>以下行导入失败：</p>
-              <ul>
-                {result.failed_details.map((detail, index) => (
-                  <li key={index}>
-                    第{detail.row}行 ({detail.name} - {detail.ipmi_ip}): {detail.error}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ),
-          width: 700,
+      // 如果有上传文件，不提供CSV内容根据也配合
+      if (csvFile) {
+        // 使用文件上传API
+        const result = await discoveryService.importFromCSVFile(csvFile, values.group_id);
+        message.success(`CSV文件导入完成！成功导入 ${result.success_count} 台服务器`);
+        
+        if (result.failed_count > 0) {
+          Modal.warning({
+            title: '部分数据导入失败',
+            content: (
+              <div>
+                <p>以下行导入失败：</p>
+                <ul>
+                  {result.failed_details.map((detail, index) => (
+                    <li key={index}>
+                      第{detail.row}行 ({detail.name} - {detail.ipmi_ip}): {detail.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ),
+            width: 700,
+          });
+        }
+      } else if (values.csv_content && values.csv_content.trim().length > 0) {
+        // 使用文本导入API
+        const result = await discoveryService.importFromCSVText({
+          csv_content: values.csv_content,
+          group_id: values.group_id,
         });
+
+        message.success(`CSV导入完成！成功导入 ${result.success_count} 台服务器`);
+        
+        if (result.failed_count > 0) {
+          Modal.warning({
+            title: '部分数据导入失败',
+            content: (
+              <div>
+                <p>以下行导入失败：</p>
+                <ul>
+                  {result.failed_details.map((detail, index) => (
+                    <li key={index}>
+                      第{detail.row}行 ({detail.name} - {detail.ipmi_ip}): {detail.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ),
+            width: 700,
+          });
+        }
+      } else {
+        message.error('请输入CSV内容后提交，或上传CSV文件');
+        return;
       }
 
       setCSVModalVisible(false);
+      setCSVFileUploaded(false);
+      setCSVFile(null);
       csvForm.resetFields();
     } catch (error) {
       console.error('CSV导入失败:', error);
@@ -335,41 +363,17 @@ const DeviceDiscovery: React.FC = () => {
         message.error('请上传CSV格式的文件');
         return false;
       }
+      // 保存文件到状态中
+      setCSVFile(file);
       return false; // 阻止自动上传
     },
     customRequest: async ({ file, onSuccess, onError }) => {
       try {
-        const result = await discoveryService.importFromCSVFile(file as File);
-        message.success(`CSV文件导入完成！成功导入 ${result.success_count} 台服务器`);
-        onSuccess?.(result);
-        
-        // 文件上传完成后关闭Modal
-        setCSVModalVisible(false);
-        csvForm.resetFields();
-        
-        // 处理失败项
-        if (result.failed_count > 0) {
-          setTimeout(() => {
-            Modal.warning({
-              title: '部分数据导入失败',
-              content: (
-                <div>
-                  <p>以下行导入失败：</p>
-                  <ul>
-                    {result.failed_details.map((detail, index) => (
-                      <li key={index}>
-                        第{detail.row}行 ({detail.name} - {detail.ipmi_ip}): {detail.error}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ),
-              width: 700,
-            });
-          }, 500);
-        }
+        // 文件已选择，提示用户点击"导入数据"按钮。（不直接导入，而是提供给用户选择是有CSV内容还是文件）
+        message.success(`文件已选择：${(file as any).name}，请点击"导入数据"按钮`);
+        onSuccess?.({});
       } catch (error) {
-        console.error('CSV文件导入失败:', error);
+        console.error('文件选择失败:', error);
         onError?.(error as Error);
       }
     },
@@ -815,7 +819,11 @@ const DeviceDiscovery: React.FC = () => {
       <Modal
         title="CSV导入服务器"
         open={csvModalVisible}
-        onCancel={() => setCSVModalVisible(false)}
+        onCancel={() => {
+          setCSVModalVisible(false);
+          setCSVFileUploaded(false);
+          setCSVFile(null);
+        }}
         footer={null}
         width={800}
       >
@@ -846,16 +854,23 @@ const DeviceDiscovery: React.FC = () => {
           
           <Form.Item
             name="csv_content"
-            label="CSV内容"
+            label="CSV内容（可选）"
           >
             <TextArea 
               rows={8} 
-              placeholder="粘贴CSV内容"
+              placeholder="粘贴CSV内容（可选）"
             />
           </Form.Item>
           
           <Form.Item label="或上传CSV文件">
-            <Dragger {...uploadProps}>
+            <Dragger 
+              {...uploadProps}
+              onChange={(info) => {
+                if (info.fileList.length > 0) {
+                  setCSVFileUploaded(true);
+                }
+              }}
+            >
               <p className="ant-upload-drag-icon">
                 <UploadOutlined />
               </p>
@@ -877,7 +892,11 @@ const DeviceDiscovery: React.FC = () => {
               <Button type="primary" htmlType="submit">
                 导入数据
               </Button>
-              <Button onClick={() => setCSVModalVisible(false)}>
+              <Button onClick={() => {
+                setCSVModalVisible(false);
+                setCSVFileUploaded(false);
+                setCSVFile(null);
+              }}>
                 取消
               </Button>
               <Button icon={<DownloadOutlined />} onClick={handleDownloadTemplate}>
