@@ -11,7 +11,7 @@ from app.services.auth import AuthService
 from app.schemas.audit_log import AuditLogListResponse, AuditLog
 from app.services.audit_log import AuditLogService
 from app.models.user import UserRole
-from app.models.audit_log import AuditLog as AuditLogModel
+from app.models.audit_log import AuditLog as AuditLogModel, AuditAction, AuditStatus, AuditAction, AuditStatus
 
 try:
     from openpyxl import Workbook
@@ -21,7 +21,6 @@ except ImportError:
     HAS_OPENPYXL = False
 
 router = APIRouter()
-auth_service = AuthService()
 
 @router.get("/audit-logs", response_model=AuditLogListResponse)
 async def get_audit_logs(
@@ -33,7 +32,7 @@ async def get_audit_logs(
     resource_id: int = Query(None),
     start_date: str = Query(None),  # ISO格式日期
     end_date: str = Query(None),    # ISO格式日期
-    current_user = Depends(auth_service.get_current_admin_user),
+    current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -69,11 +68,14 @@ async def get_audit_logs(
             detail=f"无效的日期格式: {str(e)}"
         )
     
-    # 转换action为大写（枚举值）
+    # 转换action为枚举值
     audit_action = None
     if action:
-        action_upper = action.upper()
-        audit_action = action_upper
+        try:
+            audit_action = AuditAction(action.lower())
+        except ValueError:
+            # 如果action不是有效的枚举值，保持为None（不过滤）
+            audit_action = None
     
     logs, total = audit_service.get_logs(
         skip=skip,
@@ -98,7 +100,7 @@ async def get_audit_logs(
 @router.get("/audit-logs/{log_id}", response_model=AuditLog)
 async def get_audit_log(
     log_id: int,
-    current_user = Depends(auth_service.get_current_admin_user),
+    current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -121,7 +123,7 @@ async def get_audit_log(
 @router.get("/audit-logs/stats/summary")
 async def get_audit_stats_summary(
     days: int = Query(7, ge=1, le=90),
-    current_user = Depends(auth_service.get_current_admin_user),
+    current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -201,7 +203,7 @@ async def export_audit_logs_csv(
     resource_id: int = Query(None),
     start_date: str = Query(None),
     end_date: str = Query(None),
-    current_user = Depends(auth_service.get_current_admin_user),
+    current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -226,11 +228,14 @@ async def export_audit_logs_csv(
             detail=f"无效的日期格式: {str(e)}"
         )
     
-    # 转换action为大写
+    # 转换action为枚举值
     audit_action = None
     if action:
-        action_upper = action.upper()
-        audit_action = action_upper
+        try:
+            audit_action = AuditAction(action.lower())
+        except ValueError:
+            # 如果action不是有效的枚举值，保持为None（不过滤）
+            audit_action = None
     
     logs, total = audit_service.get_logs(
         skip=skip,
@@ -294,7 +299,7 @@ async def export_audit_logs_excel(
     resource_id: int = Query(None),
     start_date: str = Query(None),
     end_date: str = Query(None),
-    current_user = Depends(auth_service.get_current_admin_user),
+    current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -325,11 +330,14 @@ async def export_audit_logs_excel(
             detail=f"无效的日期格式: {str(e)}"
         )
     
-    # 转换action为大写
+    # 转换action为枚举值
     audit_action = None
     if action:
-        action_upper = action.upper()
-        audit_action = action_upper
+        try:
+            audit_action = AuditAction(action.lower())
+        except ValueError:
+            # 如果action不是有效的枚举值，保持为None（不过滤）
+            audit_action = None
     
     logs, total = audit_service.get_logs(
         skip=skip,
@@ -414,7 +422,7 @@ async def export_audit_logs_excel(
 @router.post("/cleanup")
 async def cleanup_old_audit_logs(
     days: int = Query(None),
-    current_user = Depends(auth_service.get_current_admin_user),
+    current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """
