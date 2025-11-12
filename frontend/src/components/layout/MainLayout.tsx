@@ -20,7 +20,6 @@ import {
   ClusterOutlined,
   LogoutOutlined,
   SearchOutlined,
-  InfoOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import Logo from '../logo/Logo';
@@ -80,6 +79,16 @@ const MainLayout: React.FC = () => {
     logout();
     navigate('/login');
   };
+
+  const [helpDropdownVisible, setHelpDropdownVisible] = useState(false);
+
+  const helpMenuItems = [
+    {
+      key: 'product-info',
+      label: '产品信息',
+      onClick: () => setAboutModalVisible(true),
+    },
+  ];
 
   const userMenuItems = [
     {
@@ -149,12 +158,17 @@ const MainLayout: React.FC = () => {
               }}
             />
             <Space>
-              <Button
-                type="text"
-                icon={<InfoOutlined />}
-                onClick={() => setAboutModalVisible(true)}
-                title="关于本项目"
-              />
+              <Dropdown 
+                menu={{ items: helpMenuItems }} 
+                placement="bottomRight"
+                trigger={['click']}
+                onOpenChange={setHelpDropdownVisible}
+                open={helpDropdownVisible}
+              >
+                <Button type="text">
+                  帮助
+                </Button>
+              </Dropdown>
               <span>欢迎, {user?.username}</span>
               <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
                 <Avatar 
