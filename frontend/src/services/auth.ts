@@ -33,9 +33,17 @@ export const authService = {
 
   // 用户登出
   async logout(): Promise<void> {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    await api.post('/auth/logout');
+    try {
+      // 先发送登出请求到后端（此时token还在）
+      await api.post('/auth/logout');
+    } catch (error) {
+      // 即使后端登出失败，也要清理本地状态
+      console.warn('后端登出请求失败:', error);
+    } finally {
+      // 清理本地存储的认证信息
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user');
+    }
   },
 
   // 获取当前用户信息
