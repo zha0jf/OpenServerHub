@@ -36,7 +36,7 @@ httpx==0.25.0
 aiofiles==23.2.1
 
 # 文件导出
-openpyxl==3.10.10
+openpyxl==3.1.5
 
 # 开发工具
 pytest==7.4.3
