@@ -203,6 +203,7 @@ async def export_audit_logs_csv(
     resource_id: int = Query(None),
     start_date: str = Query(None),
     end_date: str = Query(None),
+    http_request: Request = None,
     current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -211,6 +212,32 @@ async def export_audit_logs_csv(
     
     仅管理员用户可以访问。
     """
+    # ... 最乘的导出代码 ...
+    # 在返回之前记录导出操作
+    audit_service = AuditLogService(db)
+    audit_service.create_log(
+        action=AuditAction.AUDIT_LOG_EXPORT,
+        operator_id=current_user.id,
+        operator_username=current_user.username,
+        resource_type="audit_log",
+        action_details={
+            "export_format": "csv",
+            "skip": skip,
+            "limit": limit,
+            "filters": {
+                "action": action,
+                "operator_id": operator_id,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        },
+        result={"status": "success", "format": "csv"},
+        ip_address=http_request.client.host if http_request and http_request.client else "unknown",
+        user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
+        status=AuditStatus.SUCCESS,
+    )
     audit_service = AuditLogService(db)
     
     # 解析日期
@@ -299,6 +326,7 @@ async def export_audit_logs_excel(
     resource_id: int = Query(None),
     start_date: str = Query(None),
     end_date: str = Query(None),
+    http_request: Request = None,
     current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -312,6 +340,33 @@ async def export_audit_logs_excel(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Excel导出功能不可用，请安装openpyxl库"
         )
+    
+    # ... 最乘的导出代码 ...
+    # 在返回之前记录导出操作
+    audit_service = AuditLogService(db)
+    audit_service.create_log(
+        action=AuditAction.AUDIT_LOG_EXPORT,
+        operator_id=current_user.id,
+        operator_username=current_user.username,
+        resource_type="audit_log",
+        action_details={
+            "export_format": "excel",
+            "skip": skip,
+            "limit": limit,
+            "filters": {
+                "action": action,
+                "operator_id": operator_id,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        },
+        result={"status": "success", "format": "excel"},
+        ip_address=http_request.client.host if http_request and http_request.client else "unknown",
+        user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
+        status=AuditStatus.SUCCESS,
+    )
     
     audit_service = AuditLogService(db)
     
@@ -421,20 +476,23 @@ async def export_audit_logs_excel(
 
 @router.post("/cleanup")
 async def cleanup_old_audit_logs(
-    days: int = Query(None),
+    request_body: dict,
+    http_request: Request,
     current_user = Depends(AuthService.get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """
-    清理过期的审计日志
+    清理过旧的审计日志
     
     删除指定天数之前的日志记录。
     
-    查询参数:
+    请求体:
     - days: 要清理的天数（删除该天数之前的日志），必须大于0
     
     仅管理员用户可以访问。
     """
+    days = request_body.get('days') if isinstance(request_body, dict) else None
+    
     if days is None or days <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -452,12 +510,53 @@ async def cleanup_old_audit_logs(
         
         db.commit()
         
+        # 记录清理审计日志的操作
+        audit_service = AuditLogService(db)
+        audit_service.create_log(
+            action=AuditAction.AUDIT_LOG_CLEANUP,
+            operator_id=current_user.id,
+            operator_username=current_user.username,
+            resource_type="audit_log",
+            action_details={
+                "days": days,
+                "cutoff_date": cutoff_date.isoformat()
+            },
+            result={
+                "deleted_count": delete_count,
+                "message": f"成功删除{delete_count}条{cutoff_date.strftime('%Y-%m-%d')}之前的审计日志"
+            },
+            ip_address=http_request.client.host if http_request.client else "unknown",
+            user_agent=http_request.headers.get("user-agent", "unknown"),
+            status=AuditStatus.SUCCESS,
+        )
+        
         return {
             "deleted_count": delete_count,
             "message": f"成功删除{delete_count}条{cutoff_date.strftime('%Y-%m-%d')}之前的审计日志"
         }
     except Exception as e:
         db.rollback()
+        
+        # 记录清理失败的操作
+        try:
+            audit_service = AuditLogService(db)
+            audit_service.create_log(
+                action=AuditAction.AUDIT_LOG_CLEANUP,
+                operator_id=current_user.id,
+                operator_username=current_user.username,
+                resource_type="audit_log",
+                action_details={
+                    "days": days,
+                    "cutoff_date": cutoff_date.isoformat()
+                },
+                error_message=str(e),
+                ip_address=http_request.client.host if http_request.client else "unknown",
+                user_agent=http_request.headers.get("user-agent", "unknown"),
+                status=AuditStatus.FAILED,
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录清理审计日志失败操作失败: {str(audit_error)}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"清理审计日志失败: {str(e)}"

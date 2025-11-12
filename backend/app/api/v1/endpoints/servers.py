@@ -396,17 +396,67 @@ async def update_server_status(
 @router.post("/groups/", response_model=ServerGroupResponse)
 async def create_server_group(
     group_data: ServerGroupCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """创建服务器分组"""
     try:
         server_service = ServerService(db)
-        return server_service.create_server_group(group_data)
+        audit_service = AuditLogService(db)
+        group = server_service.create_server_group(group_data)
+        
+        # 记录成功的分组创建操作
+        audit_service.log_group_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.GROUP_CREATE,
+            group_id=group.id,
+            group_name=group.name,
+            action_details={"description": group.description},
+            result={"status": "success", "group_id": group.id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
+        return group
     except ValidationError as e:
+        # 记录失败的分组创建操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_group_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.GROUP_CREATE,
+                group_name=group_data.name,
+                success=False,
+                error_message=e.message,
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录分组创建失败操作失败: {str(audit_error)}")
+        
         logger.warning(f"服务器分组创建验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
     except Exception as e:
+        # 记录失败的分组创建操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_group_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.GROUP_CREATE,
+                group_name=group_data.name,
+                success=False,
+                error_message=str(e),
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录分组创建失败操作失败: {str(audit_error)}")
+        
         logger.error(f"服务器分组创建失败: {str(e)}")
         raise HTTPException(status_code=500, detail="服务器分组创建失败，请稍后重试")
 
@@ -436,46 +486,158 @@ async def get_server_group(
 async def update_server_group(
     group_id: int,
     group_data: ServerGroupCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """更新服务器分组"""
     try:
         server_service = ServerService(db)
+        audit_service = AuditLogService(db)
         group = server_service.update_server_group(group_id, group_data)
         if not group:
             raise HTTPException(status_code=404, detail="服务器分组不存在")
+        
+        # 记录成功的分组更新操作
+        audit_service.log_group_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.GROUP_UPDATE,
+            group_id=group.id,
+            group_name=group.name,
+            action_details={"name": group_data.name, "description": group_data.description},
+            result={"status": "success", "group_id": group.id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
         return group
     except ValidationError as e:
+        # 记录失败的分组更新操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_group_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.GROUP_UPDATE,
+                group_id=group_id,
+                success=False,
+                error_message=e.message,
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录分组更新失败操作失败: {str(audit_error)}")
+        
         logger.warning(f"服务器分组更新验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
     except Exception as e:
+        # 记录失败的分组更新操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_group_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.GROUP_UPDATE,
+                group_id=group_id,
+                success=False,
+                error_message=str(e),
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录分组更新失败操作失败: {str(audit_error)}")
+        
         logger.error(f"服务器分组更新失败: {str(e)}")
         raise HTTPException(status_code=500, detail="服务器分组更新失败，请稍后重试")
 
 @router.delete("/groups/{group_id}")
 async def delete_server_group(
     group_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """删除服务器分组"""
-    server_service = ServerService(db)
-    success = server_service.delete_server_group(group_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="服务器分组不存在")
-    return {"message": "服务器分组删除成功"}
+    try:
+        server_service = ServerService(db)
+        audit_service = AuditLogService(db)
+        
+        # 获取分组信息用于审计日志
+        group = server_service.get_server_group(group_id)
+        if not group:
+            raise HTTPException(status_code=404, detail="服务器分组不存在")
+        
+        group_name = group.name
+        success = server_service.delete_server_group(group_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="服务器分组不存在")
+        
+        # 记录成功的分组删除操作
+        audit_service.log_group_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.GROUP_DELETE,
+            group_id=group_id,
+            group_name=group_name,
+            result={"status": "success", "deleted_group_id": group_id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
+        return {"message": "服务器分组删除成功"}
+    except HTTPException:
+        # 记录失败的分组删除操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_group_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.GROUP_DELETE,
+                group_id=group_id,
+                success=False,
+                error_message="服务器分组不存在",
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录分组删除失败操作失败: {str(audit_error)}")
+        raise
+    except Exception as e:
+        # 记录失败的分组删除操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_group_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.GROUP_DELETE,
+                group_id=group_id,
+                success=False,
+                error_message=str(e),
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录分组删除失败操作失败: {str(audit_error)}")
+        
+        logger.error(f"服务器分组删除失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="服务器分组删除失败，请稍后重试")
 
 # 批量操作接口
 @router.post("/batch/power", response_model=BatchPowerResponse)
 async def batch_power_control(
     request: BatchPowerRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """批量电源控制"""
     try:
         server_service = ServerService(db)
+        audit_service = AuditLogService(db)
         results = await server_service.batch_power_control(
             server_ids=request.server_ids,
             action=request.action
@@ -487,6 +649,26 @@ async def batch_power_control(
         failed_count = total_count - success_count
         
         logger.info(f"批量电源操作完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
+        
+        # 记录批量电源操作
+        audit_service.log_batch_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.BATCH_POWER_CONTROL,
+            action_details={
+                "action": request.action,
+                "server_ids": request.server_ids,
+                "count": len(request.server_ids)
+            },
+            result={
+                "total_count": total_count,
+                "success_count": success_count,
+                "failed_count": failed_count
+            },
+            success=(failed_count == 0),
+            ip_address=get_client_ip(http_request),
+            user_agent=http_request.headers.get("user-agent", "unknown"),
+        )
         
         return BatchPowerResponse(
             total_count=total_count,
@@ -511,12 +693,14 @@ class BatchUpdateMonitoringRequest(BaseModel):
 @router.post("/batch/monitoring", response_model=BatchPowerResponse)
 async def batch_update_monitoring(
     request: BatchUpdateMonitoringRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """批量更新服务器监控状态"""
     try:
         server_service = ServerService(db)
+        audit_service = AuditLogService(db)
         results = await server_service.batch_update_monitoring(
             server_ids=request.server_ids,
             monitoring_enabled=request.monitoring_enabled
@@ -528,6 +712,26 @@ async def batch_update_monitoring(
         failed_count = total_count - success_count
         
         logger.info(f"批量更新监控状态完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
+        
+        # 记录批量监控操作
+        audit_service.log_batch_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.MONITORING_ENABLE if request.monitoring_enabled else AuditAction.MONITORING_DISABLE,
+            action_details={
+                "monitoring_enabled": request.monitoring_enabled,
+                "server_ids": request.server_ids,
+                "count": len(request.server_ids)
+            },
+            result={
+                "total_count": total_count,
+                "success_count": success_count,
+                "failed_count": failed_count
+            },
+            success=(failed_count == 0),
+            ip_address=get_client_ip(http_request),
+            user_agent=http_request.headers.get("user-agent", "unknown"),
+        )
         
         return BatchPowerResponse(
             total_count=total_count,
@@ -541,7 +745,7 @@ async def batch_update_monitoring(
         raise HTTPException(status_code=400, detail=e.message)
     except Exception as e:
         logger.error(f"批量更新监控状态失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="批量更新监控状态失败，请稍后重试")
+        raise HTTPException(status_code=500, detail="批量操作失败，请稍后重试")
 
 # Redfish支持检查响应模型
 class RedfishSupportResponse(BaseModel):

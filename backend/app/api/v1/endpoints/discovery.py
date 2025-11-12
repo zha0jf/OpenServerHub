@@ -1,6 +1,6 @@
 import time
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 import logging
@@ -13,15 +13,26 @@ from app.schemas.server import (
 )
 from app.services.discovery import DiscoveryService
 from app.services.auth import AuthService
+from app.services.audit_log import AuditLogService
+from app.models.audit_log import AuditAction
 from app.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+def get_client_ip(request: Request) -> str:
+    """获取客户端IP地址"""
+    if "x-forwarded-for" in request.headers:
+        return request.headers["x-forwarded-for"].split(",")[0].strip()
+    if "x-real-ip" in request.headers:
+        return request.headers["x-real-ip"]
+    return request.client.host if request.client else "unknown"
+
 @router.post("/network-scan", response_model=NetworkScanResponse)
 async def scan_network(
     request: NetworkScanRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
@@ -37,6 +48,7 @@ async def scan_network(
         logger.info(f"用户 {current_user.username} 发起网络扫描: {request.network}")
         
         discovery_service = DiscoveryService(db)
+        audit_service = AuditLogService(db)
         start_time = time.time()
         
         # 执行网络扫描
@@ -65,6 +77,28 @@ async def scan_network(
         )
         
         logger.info(f"网络扫描完成: 扫描{total_scanned}个IP，发现{len(devices)}个设备，耗时{scan_duration:.2f}秒")
+        
+        # 记录扫描操作
+        audit_service.log_discovery_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.DISCOVERY_START,
+            action_details={
+                "network": request.network,
+                "port": request.port,
+                "timeout": request.timeout,
+                "max_workers": request.max_workers
+            },
+            result={
+                "total_scanned": total_scanned,
+                "devices_found": len(devices),
+                "scan_duration": round(scan_duration, 2)
+            },
+            success=True,
+            ip_address=get_client_ip(http_request),
+            user_agent=http_request.headers.get("user-agent", "unknown"),
+        )
+        
         return response
         
     except ValidationError as e:
@@ -77,6 +111,7 @@ async def scan_network(
 @router.post("/batch-import", response_model=BatchImportResponse)
 async def batch_import_servers(
     request: BatchImportRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
@@ -87,6 +122,7 @@ async def batch_import_servers(
         logger.info(f"用户 {current_user.username} 发起批量导入: {len(request.devices)}台设备")
         
         discovery_service = DiscoveryService(db)
+        audit_service = AuditLogService(db)
         
         # 执行批量导入
         result = await discovery_service.batch_import_servers(
@@ -99,6 +135,26 @@ async def batch_import_servers(
         response = BatchImportResponse(**result)
         
         logger.info(f"批量导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
+        
+        # 记录批量导入操作
+        audit_service.log_discovery_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.DISCOVERY_COMPLETE,
+            action_details={
+                "devices_count": len(request.devices),
+                "group_id": request.group_id
+            },
+            result={
+                "total_count": result["total_count"],
+                "success_count": result["success_count"],
+                "failed_count": result["failed_count"]
+            },
+            success=(result["failed_count"] == 0),
+            ip_address=get_client_ip(http_request),
+            user_agent=http_request.headers.get("user-agent", "unknown"),
+        )
+        
         return response
         
     except ValidationError as e:
@@ -112,6 +168,7 @@ async def batch_import_servers(
 async def import_from_csv(
     csv_file: UploadFile = File(...),
     group_id: Optional[int] = None,
+    http_request: Request = None,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
@@ -133,6 +190,7 @@ async def import_from_csv(
         logger.info(f"用户 {current_user.username} 上传CSV文件: {csv_file.filename}")
         
         discovery_service = DiscoveryService(db)
+        audit_service = AuditLogService(db)
         
         # 执行CSV导入
         result = discovery_service.import_from_csv(
@@ -143,6 +201,27 @@ async def import_from_csv(
         response = CSVImportResponse(**result)
         
         logger.info(f"CSV导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
+        
+        # 记录CSV导入操作
+        if http_request:
+            audit_service.log_discovery_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.SERVER_IMPORT,
+                action_details={
+                    "filename": csv_file.filename,
+                    "import_type": "csv_file",
+                    "group_id": group_id
+                },
+                result={
+                    "success_count": result["success_count"],
+                    "failed_count": result["failed_count"]
+                },
+                success=(result["failed_count"] == 0),
+                ip_address=get_client_ip(http_request),
+                user_agent=http_request.headers.get("user-agent", "unknown"),
+            )
+        
         return response
         
     except ValidationError as e:
@@ -158,6 +237,7 @@ async def import_from_csv(
 @router.post("/csv-import-text", response_model=CSVImportResponse)
 async def import_from_csv_text(
     request: CSVImportRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
@@ -168,6 +248,7 @@ async def import_from_csv_text(
         logger.info(f"用户 {current_user.username} 通过文本导入CSV数据")
         
         discovery_service = DiscoveryService(db)
+        audit_service = AuditLogService(db)
         
         # 执行CSV导入
         result = discovery_service.import_from_csv(
@@ -178,6 +259,26 @@ async def import_from_csv_text(
         response = CSVImportResponse(**result)
         
         logger.info(f"CSV文本导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
+        
+        # 记录CSV文本导入操作
+        audit_service.log_discovery_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.SERVER_IMPORT,
+            action_details={
+                "import_type": "csv_text",
+                "group_id": request.group_id,
+                "lines": len(request.csv_content.splitlines())
+            },
+            result={
+                "success_count": result["success_count"],
+                "failed_count": result["failed_count"]
+            },
+            success=(result["failed_count"] == 0),
+            ip_address=get_client_ip(http_request),
+            user_agent=http_request.headers.get("user-agent", "unknown"),
+        )
+        
         return response
         
     except ValidationError as e:

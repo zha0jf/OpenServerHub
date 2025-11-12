@@ -268,3 +268,85 @@ class AuditLogService:
             user_agent=user_agent,
             status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
         )
+    
+    def log_group_operation(
+        self,
+        user_id: int,
+        username: str,
+        action: AuditAction,
+        group_id: Optional[int] = None,
+        group_name: Optional[str] = None,
+        action_details: Optional[Dict[str, Any]] = None,
+        result: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> AuditLog:
+        """记录服务器分组相关操作"""
+        return self.create_log(
+            action=action,
+            operator_id=user_id,
+            operator_username=username,
+            resource_type="group",
+            resource_id=group_id,
+            resource_name=group_name,
+            action_details=action_details,
+            result=result,
+            error_message=error_message,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
+        )
+    
+    def log_batch_operation(
+        self,
+        user_id: int,
+        username: str,
+        action: AuditAction,
+        action_details: Optional[Dict[str, Any]] = None,
+        result: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> AuditLog:
+        """记录批量操作相关审计日志"""
+        return self.create_log(
+            action=action,
+            operator_id=user_id,
+            operator_username=username,
+            resource_type="batch",
+            action_details=action_details,
+            result=result,
+            error_message=error_message,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
+        )
+    
+    def log_discovery_operation(
+        self,
+        user_id: int,
+        username: str,
+        action: AuditAction,
+        action_details: Optional[Dict[str, Any]] = None,
+        result: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> AuditLog:
+        """记录设备发现相关操作"""
+        return self.create_log(
+            action=action,
+            operator_id=user_id,
+            operator_username=username,
+            resource_type="discovery",
+            action_details=action_details,
+            result=result,
+            error_message=error_message,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
+        )

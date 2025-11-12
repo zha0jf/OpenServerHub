@@ -50,6 +50,11 @@ class AuditAction(str, enum.Enum):
     GROUP_CREATE = "group_create"
     GROUP_UPDATE = "group_update"
     GROUP_DELETE = "group_delete"
+    
+    # 审计日志相关
+    AUDIT_LOG_EXPORT = "audit_log_export"
+    AUDIT_LOG_CLEANUP = "audit_log_cleanup"
+    AUDIT_LOG_VIEW = "audit_log_view"
 
 class AuditStatus(str, enum.Enum):
     """审计操作状态"""
