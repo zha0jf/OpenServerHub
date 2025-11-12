@@ -40,8 +40,8 @@ RUN pip install --no-cache-dir --force-reinstall -r requirements.txt
 # 复制前端package.json和package-lock.json文件
 COPY frontend/package.json frontend/package-lock.json* /app/frontend/
 
-# 在构建阶段安装前端依赖
-RUN cd /app/frontend && npm ci
+# 在构建阶段安装前端依赖 - 使用npm install来处理跨平台兼容性
+RUN cd /app/frontend && npm install --ignore-scripts
 
 # 复制后端代码到子目录
 COPY backend/ /app/backend/
