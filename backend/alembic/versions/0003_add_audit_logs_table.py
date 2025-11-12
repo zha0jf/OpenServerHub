@@ -1,7 +1,7 @@
 """add audit logs table
 
 Revision ID: 0003
-Revises: 0002_add_redfish_support_fields
+Revises: 0002
 Create Date: 2025-01-01 00:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '0003'
-down_revision = '0002_add_redfish_support_fields'
+down_revision = '0002'
 branch_labels = None
 depends_on = None
 
