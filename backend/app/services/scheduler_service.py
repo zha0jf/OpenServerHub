@@ -189,7 +189,7 @@ class PowerStateSchedulerService:
                     stmt = update(Server).where(Server.id == server.id).values(
                         power_state=power_state_enum,
                         status=bmc_status,
-                        last_seen=datetime.now()
+                        last_seen=datetime.utcnow()
                     )
                     await session.execute(stmt)
                     await session.commit()

@@ -214,7 +214,7 @@ class ServerService:
             
             # 更新服务器最后操作时间
             stmt = update(Server).where(Server.id == server_id).values(
-                last_seen=datetime.now()
+                last_seen=datetime.utcnow()
             )
             self.db.execute(stmt)
             self.db.commit()
@@ -495,7 +495,7 @@ class ServerService:
             
             # 更新服务器最后操作时间
             stmt = update(Server).where(Server.id == server.id).values(
-                last_seen=datetime.now()
+                last_seen=datetime.utcnow()
             )
             self.db.execute(stmt)
             self.db.commit()

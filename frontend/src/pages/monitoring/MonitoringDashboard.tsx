@@ -290,7 +290,7 @@ const MonitoringDashboard: React.FC = () => {
       title: '采集时间',
       dataIndex: 'timestamp',
       key: 'timestamp',
-      render: (time: string) => new Date(time + 'Z').toLocaleString(),
+      render: (time: string) => new Date(time + 'Z').toLocaleString('zh-CN'),
     },
   ];
 

@@ -76,7 +76,7 @@ const AuditLogDetail: React.FC<AuditLogDetailProps> = ({ log }) => {
           {log.resource_name || '-'}
         </Descriptions.Item>
         <Descriptions.Item label="操作时间">
-          {dayjs(log.created_at).format('YYYY-MM-DD HH:mm:ss')}
+          {new Date(log.created_at + 'Z').toLocaleString('zh-CN')}
         </Descriptions.Item>
         <Descriptions.Item label="客户端IP">
           {log.ip_address || '-'}

@@ -674,7 +674,7 @@ const ServerDetail: React.FC = () => {
             <Text>
               <ClockCircleOutlined style={{ marginRight: '4px' }} />
               {server.last_seen
-                ? new Date(server.last_seen).toLocaleString('zh-CN')
+                ? new Date(server.last_seen + 'Z').toLocaleString('zh-CN')
                 : '暂无记录'}
             </Text>
           </Descriptions.Item>

@@ -165,13 +165,13 @@ const UserList: React.FC = () => {
       title: '最后登录',
       dataIndex: 'last_login_at',
       key: 'last_login_at',
-      render: (time: string) => time ? new Date(time).toLocaleString() : '从未登录',
+      render: (time: string) => time ? new Date(time + 'Z').toLocaleString('zh-CN') : '从未登录',
     },
     {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (time: string) => new Date(time + 'Z').toLocaleString(),
+      render: (time: string) => new Date(time + 'Z').toLocaleString('zh-CN'),
     },
     {
       title: '操作',

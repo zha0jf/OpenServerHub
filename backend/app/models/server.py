@@ -42,7 +42,7 @@ class Server(Base):
     # 状态信息
     status = Column(Enum(ServerStatus), default=ServerStatus.UNKNOWN, nullable=False)
     power_state = Column(Enum(PowerState), default=PowerState.UNKNOWN, nullable=False)
-    last_seen = Column(DateTime, nullable=True)
+    last_seen = Column(DateTime, default=func.now(), nullable=True)
     
     # 分组
     group_id = Column(Integer, ForeignKey("server_groups.id"), nullable=True)

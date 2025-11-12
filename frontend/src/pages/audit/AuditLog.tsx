@@ -274,7 +274,7 @@ const AuditLogPage: React.FC = () => {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
-      render: (text: string) => dayjs(text).format('YYYY-MM-DD HH:mm:ss'),
+      render: (text: string) => new Date(text + 'Z').toLocaleString('zh-CN'),
     },
     {
       title: '操作',

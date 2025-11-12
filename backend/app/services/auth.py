@@ -38,7 +38,7 @@ class AuthService:
             return None
         
         # 更新最后登录时间
-        user.last_login_at = datetime.now()
+        user.last_login_at = datetime.utcnow()
         self.db.commit()
         
         return user
