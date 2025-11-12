@@ -20,15 +20,18 @@ import {
   ClusterOutlined,
   LogoutOutlined,
   SearchOutlined,
+  InfoOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import Logo from '../logo/Logo';
+import AboutModal from '../about/About';
 
 const { Header, Sider, Content } = Layout;
 const { Title } = Typography;
 
 const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
+  const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -146,6 +149,12 @@ const MainLayout: React.FC = () => {
               }}
             />
             <Space>
+              <Button
+                type="text"
+                icon={<InfoOutlined />}
+                onClick={() => setAboutModalVisible(true)}
+                title="关于本项目"
+              />
               <span>欢迎, {user?.username}</span>
               <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
                 <Avatar 
@@ -168,6 +177,7 @@ const MainLayout: React.FC = () => {
           <Outlet />
         </Content>
       </Layout>
+      <AboutModal visible={aboutModalVisible} onClose={() => setAboutModalVisible(false)} />
     </Layout>
   );
 };

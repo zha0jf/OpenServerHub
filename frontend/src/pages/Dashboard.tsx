@@ -232,24 +232,6 @@ const Dashboard: React.FC = () => {
           </Col>
         </Row>
       )}
-
-      <Row gutter={[16, 16]} style={{ marginTop: '24px' }}>
-        <Col span={24}>
-          <Card title="系统概览">
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <div>
-                <strong>OpenServerHub 服务器管理平台</strong>
-              </div>
-              <div>
-                版本: 1.0.0
-              </div>
-              <div>
-                功能: 服务器管理、IPMI控制、监控告警
-              </div>
-            </Space>
-          </Card>
-        </Col>
-      </Row>
     </div>
   );
 };

@@ -16,8 +16,9 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "update-version": "node scripts/update-version.js",
+    "start": "npm run update-version && react-scripts start",
+    "build": "npm run update-version && react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -41,7 +42,8 @@
   },
   "devDependencies": {
     "@svgr/webpack": "^8.1.0",
-    "@types/jest": "^27.5.2"
+    "@types/jest": "^27.5.2",
+    "@types/node": "^20.0.0"
   },
   "proxy": "http://localhost:8000"
 }
