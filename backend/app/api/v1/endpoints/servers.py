@@ -28,17 +28,71 @@ def get_client_ip(request: Request) -> str:
 @router.post("/", response_model=ServerResponse)
 async def create_server(
     server_data: ServerCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """添加服务器"""
     try:
         server_service = ServerService(db)
-        return server_service.create_server(server_data)
+        audit_service = AuditLogService(db)
+        server = server_service.create_server(server_data)
+        
+        # 记录成功的服务器创建操作
+        audit_service.log_server_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.SERVER_CREATE,
+            server_id=server.id,
+            server_name=server.name,
+            action_details={
+                "ipmi_ip": str(server.ipmi_ip),
+                "manufacturer": server.manufacturer,
+                "model": server.model
+            },
+            result={"status": "success", "server_id": server.id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
+        return server
     except ValidationError as e:
+        # 记录失败的服务器创建操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_server_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.SERVER_CREATE,
+                action_details={"name": server_data.name},
+                success=False,
+                error_message=e.message,
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录服务器创建失败操作失败: {str(audit_error)}")
+        
         logger.warning(f"服务器创建验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
     except Exception as e:
+        # 记录失败的服务器创建操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_server_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.SERVER_CREATE,
+                action_details={"name": server_data.name},
+                success=False,
+                error_message=str(e),
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录服务器创建失败操作失败: {str(audit_error)}")
+        
         logger.error(f"服务器创建失败: {str(e)}")
         raise HTTPException(status_code=500, detail="服务器创建失败，请稍后重试")
 
@@ -89,37 +143,147 @@ async def get_server(
 async def update_server(
     server_id: int,
     server_data: ServerUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """更新服务器信息"""
     try:
         server_service = ServerService(db)
+        audit_service = AuditLogService(db)
         server = server_service.update_server(server_id, server_data)
         if not server:
             raise HTTPException(status_code=404, detail="服务器不存在")
+        
+        # 记录成功的服务器更新操作
+        audit_service.log_server_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.SERVER_UPDATE,
+            server_id=server.id,
+            server_name=server.name,
+            action_details=server_data.model_dump(exclude_unset=True),
+            result={"status": "success", "server_id": server.id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
         return server
     except ValidationError as e:
+        # 记录失败的服务器更新操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_server_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.SERVER_UPDATE,
+                server_id=server_id,
+                success=False,
+                error_message=e.message,
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录服务器更新失败操作失败: {str(audit_error)}")
+        
         logger.warning(f"服务器更新验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
     except HTTPException:
-        raise  # 重新抛出HTTPException
+        raise
     except Exception as e:
+        # 记录失败的服务器更新操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_server_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.SERVER_UPDATE,
+                server_id=server_id,
+                success=False,
+                error_message=str(e),
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录服务器更新失败操作失败: {str(audit_error)}")
+        
         logger.error(f"服务器更新失败: {str(e)}")
         raise HTTPException(status_code=500, detail="服务器更新失败，请稍后重试")
 
 @router.delete("/{server_id}")
 async def delete_server(
     server_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """删除服务器"""
-    server_service = ServerService(db)
-    success = server_service.delete_server(server_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="服务器不存在")
-    return {"message": "服务器删除成功"}
+    try:
+        server_service = ServerService(db)
+        audit_service = AuditLogService(db)
+        
+        # 获取服务器信息用于审计日志
+        server = server_service.get_server(server_id)
+        if not server:
+            raise HTTPException(status_code=404, detail="服务器不存在")
+        
+        server_name = server.name
+        success = server_service.delete_server(server_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="服务器不存在")
+        
+        # 记录成功的服务器删除操作
+        audit_service.log_server_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.SERVER_DELETE,
+            server_id=server_id,
+            server_name=server_name,
+            result={"status": "success", "deleted_server_id": server_id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
+        return {"message": "服务器删除成功"}
+    except HTTPException:
+        # 记录失败的服务器删除操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_server_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.SERVER_DELETE,
+                server_id=server_id,
+                success=False,
+                error_message="服务器不存在",
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录服务器删除失败操作失败: {str(audit_error)}")
+        raise
+    except Exception as e:
+        # 记录失败的服务器删除操作
+        try:
+            audit_service_local = AuditLogService(db)
+            audit_service_local.log_server_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.SERVER_DELETE,
+                server_id=server_id,
+                success=False,
+                error_message=str(e),
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录服务器删除失败操作失败: {str(audit_error)}")
+        
+        logger.error(f"服务器删除失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="服务器删除失败，请稍后重试")
 
 # 电源控制
 @router.post("/{server_id}/power/{action}")
