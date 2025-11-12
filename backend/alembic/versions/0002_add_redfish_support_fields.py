@@ -26,7 +26,7 @@ def upgrade() -> None:
         op.execute("UPDATE servers SET redfish_supported = NULL WHERE redfish_supported IS NULL")
     except Exception as e:
         # 如果列已经存在，打印信息并继续
-        if "duplicate column name" in str(e):
+        if "duplicate column name" in str(e) or "duplicate" in str(e).lower():
             print("Redfish columns already exist, skipping addition.")
         else:
             # 如果是其他错误，重新抛出

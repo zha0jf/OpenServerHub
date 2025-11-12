@@ -25,7 +25,7 @@ def upgrade() -> None:
         op.execute("UPDATE servers SET monitoring_enabled = false WHERE monitoring_enabled IS NULL")
     except Exception as e:
         # 如果列已经存在，打印信息并继续
-        if "duplicate column name" in str(e):
+        if "duplicate column name" in str(e) or "duplicate" in str(e).lower():
             print("Column 'monitoring_enabled' already exists, skipping addition.")
         else:
             # 如果是其他错误，重新抛出
