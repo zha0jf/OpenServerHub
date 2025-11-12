@@ -86,6 +86,11 @@ const MainLayout: React.FC = () => {
     navigate('/login');
   };
 
+  const handleProfile = () => {
+    // 导航到个人信息页面
+    navigate('/profile');
+  };
+
   const [helpDropdownVisible, setHelpDropdownVisible] = useState(false);
 
   const helpMenuItems = [
@@ -101,6 +106,7 @@ const MainLayout: React.FC = () => {
       key: 'profile',
       icon: <UserOutlined />,
       label: '个人信息',
+      onClick: handleProfile,
     },
     {
       type: 'divider' as const,
