@@ -265,3 +265,54 @@ export interface LEDControlResponse {
   message: string;
   error: string | null;
 }
+
+// 审计日志相关类型
+export interface AuditLog {
+  id: number;
+  action: string;
+  status: 'success' | 'failed' | 'partial';
+  operator_id: number | null;
+  operator_username: string | null;
+  resource_type: string | null;
+  resource_id: number | null;
+  resource_name: string | null;
+  action_details: string | null;
+  result: string | null;
+  error_message: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLog[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface AuditLogStats {
+  period_days: number;
+  start_date: string;
+  end_date: string;
+  total_operations: number;
+  failed_operations: number;
+  success_rate: number;
+  actions_breakdown: Array<{
+    action: string;
+    count: number;
+  }>;
+  top_operators: Array<{
+    username: string;
+    count: number;
+  }>;
+}
+
+export interface CleanupLogsRequest {
+  days: number;
+}
+
+export interface CleanupLogsResponse {
+  deleted_count: number;
+  message: string;
+}

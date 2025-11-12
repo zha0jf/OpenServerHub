@@ -35,6 +35,9 @@ httpx==0.25.0
 # 异步文件操作
 aiofiles==23.2.1
 
+# 文件导出
+openpyxl==3.10.10
+
 # 开发工具
 pytest==7.4.3
 pytest-asyncio==0.21.1

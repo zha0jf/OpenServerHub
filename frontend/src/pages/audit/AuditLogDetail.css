@@ -1,0 +1,37 @@
+.audit-log-detail {
+  padding: 16px;
+}
+
+.user-agent-text {
+  word-break: break-all;
+  white-space: normal;
+  font-size: 12px;
+  color: #666;
+}
+
+.json-display {
+  background-color: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+  max-height: 400px;
+  border: 1px solid #e8e8e8;
+}
+
+.json-display::-webkit-scrollbar {
+  height: 6px;
+}
+
+.json-display::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.json-display::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.json-display::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

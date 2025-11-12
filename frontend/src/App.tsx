@@ -10,7 +10,9 @@ import UserList from './pages/users/UserList';
 import MonitoringDashboard from './pages/monitoring/MonitoringDashboard';
 import ClusterManagement from './pages/clusters/ClusterManagement';
 import DeviceDiscovery from './pages/discovery/DeviceDiscovery';
+import AuditLog from './pages/audit/AuditLog';
 import PrivateRoute from './components/auth/PrivateRoute';
+import AdminRoute from './components/auth/AdminRoute';
 
 const App: React.FC = () => {
   return (
@@ -31,6 +33,11 @@ const App: React.FC = () => {
             <Route path="discovery" element={<DeviceDiscovery />} />
             <Route path="users" element={<UserList />} />
             <Route path="monitoring" element={<MonitoringDashboard />} />
+            <Route path="audit" element={
+              <AdminRoute>
+                <AuditLog />
+              </AdminRoute>
+            } />
           </Route>
         </Routes>
       </Router>

@@ -20,6 +20,7 @@ import {
   ClusterOutlined,
   LogoutOutlined,
   SearchOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import Logo from '../logo/Logo';
@@ -68,6 +69,11 @@ const MainLayout: React.FC = () => {
       key: '/users',
       icon: <UserOutlined />,
       label: '用户管理',
+    },
+    {
+      key: '/audit',
+      icon: <FileTextOutlined />,
+      label: '审计日志',
     },
   ];
 

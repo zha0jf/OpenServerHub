@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 import logging
 
@@ -7,12 +7,22 @@ from app.core.database import get_db
 from app.schemas.server import ServerCreate, ServerUpdate, ServerResponse, ServerGroupCreate, ServerGroupResponse, BatchPowerRequest, BatchPowerResponse, ClusterStatsResponse
 from app.services.server import ServerService
 from app.services.auth import AuthService
+from app.services.audit_log import AuditLogService
+from app.models.audit_log import AuditAction
 from app.core.exceptions import ValidationError, IPMIError, NotFoundError
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+def get_client_ip(request: Request) -> str:
+    """获取客户端IP地址"""
+    if "x-forwarded-for" in request.headers:
+        return request.headers["x-forwarded-for"].split(",")[0].strip()
+    if "x-real-ip" in request.headers:
+        return request.headers["x-real-ip"]
+    return request.client.host if request.client else "unknown"
 
 # 服务器管理
 @router.post("/", response_model=ServerResponse)
@@ -116,22 +126,84 @@ async def delete_server(
 async def power_control(
     server_id: int,
     action: str,  # on, off, restart, force_off
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """服务器电源控制"""
     try:
         server_service = ServerService(db)
+        audit_service = AuditLogService(db)
+        
+        # 获取服务器信息
+        server = server_service.get_server(server_id)
+        if not server:
+            raise HTTPException(status_code=404, detail="服务器不存在")
+        
+        client_ip = get_client_ip(request)
+        user_agent = request.headers.get("user-agent", "unknown")
+        
         result = await server_service.power_control(server_id, action)
+        
+        # 记录成功的电源控制操作
+        audit_service.log_power_control(
+            user_id=current_user.id,
+            username=current_user.username,
+            server_id=server_id,
+            server_name=server.name,
+            action_type=action,
+            success=True,
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+        
         return result
     except ValidationError as e:
         logger.warning(f"电源控制验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
     except IPMIError as e:
         logger.error(f"IPMI电源控制失败: {e.message}")
+        
+        # 记录失败的电源控制操作
+        try:
+            audit_service_local = AuditLogService(db)
+            server = server_service.get_server(server_id)
+            audit_service_local.log_power_control(
+                user_id=current_user.id,
+                username=current_user.username,
+                server_id=server_id,
+                server_name=server.name if server else "Unknown",
+                action_type=action,
+                success=False,
+                error_message=e.message,
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录失败操作失败: {str(audit_error)}")
+        
         raise HTTPException(status_code=500, detail=f"IPMI操作失败: {e.message}")
     except Exception as e:
         logger.error(f"电源控制失败: {str(e)}")
+        
+        # 记录失败的电源控制操作
+        try:
+            audit_service_local = AuditLogService(db)
+            server = server_service.get_server(server_id)
+            audit_service_local.log_power_control(
+                user_id=current_user.id,
+                username=current_user.username,
+                server_id=server_id,
+                server_name=server.name if server else "Unknown",
+                action_type=action,
+                success=False,
+                error_message=str(e),
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录失败操作失败: {str(audit_error)}")
+        
         raise HTTPException(status_code=500, detail="电源控制失败，请稍后重试")
 
 # 服务器状态更新
