@@ -212,32 +212,6 @@ async def export_audit_logs_csv(
     
     仅管理员用户可以访问。
     """
-    # ... 最乘的导出代码 ...
-    # 在返回之前记录导出操作
-    audit_service = AuditLogService(db)
-    audit_service.create_log(
-        action=AuditAction.AUDIT_LOG_EXPORT,
-        operator_id=current_user.id,
-        operator_username=current_user.username,
-        resource_type="audit_log",
-        action_details={
-            "export_format": "csv",
-            "skip": skip,
-            "limit": limit,
-            "filters": {
-                "action": action,
-                "operator_id": operator_id,
-                "resource_type": resource_type,
-                "resource_id": resource_id,
-                "start_date": start_date,
-                "end_date": end_date
-            }
-        },
-        result={"status": "success", "format": "csv"},
-        ip_address=http_request.client.host if http_request and http_request.client else "unknown",
-        user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
-        status=AuditStatus.SUCCESS,
-    )
     audit_service = AuditLogService(db)
     
     # 解析日期
@@ -306,6 +280,31 @@ async def export_audit_logs_csv(
             log.created_at,
         ])
     
+    # 在返回之前记录导出操作
+    audit_service.create_log(
+        action=AuditAction.AUDIT_LOG_EXPORT,
+        operator_id=current_user.id,
+        operator_username=current_user.username,
+        resource_type="audit_log",
+        action_details={
+            "export_format": "csv",
+            "skip": skip,
+            "limit": limit,
+            "filters": {
+                "action": action,
+                "operator_id": operator_id,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        },
+        result={"status": "success", "format": "csv"},
+        ip_address=http_request.client.host if http_request and http_request.client else "unknown",
+        user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
+        status=AuditStatus.SUCCESS,
+    )
+    
     # 返回CSV文件流
     output.seek(0)
     return StreamingResponse(
@@ -340,33 +339,6 @@ async def export_audit_logs_excel(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Excel导出功能不可用，请安装openpyxl库"
         )
-    
-    # ... 最乘的导出代码 ...
-    # 在返回之前记录导出操作
-    audit_service = AuditLogService(db)
-    audit_service.create_log(
-        action=AuditAction.AUDIT_LOG_EXPORT,
-        operator_id=current_user.id,
-        operator_username=current_user.username,
-        resource_type="audit_log",
-        action_details={
-            "export_format": "excel",
-            "skip": skip,
-            "limit": limit,
-            "filters": {
-                "action": action,
-                "operator_id": operator_id,
-                "resource_type": resource_type,
-                "resource_id": resource_id,
-                "start_date": start_date,
-                "end_date": end_date
-            }
-        },
-        result={"status": "success", "format": "excel"},
-        ip_address=http_request.client.host if http_request and http_request.client else "unknown",
-        user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
-        status=AuditStatus.SUCCESS,
-    )
     
     audit_service = AuditLogService(db)
     
@@ -418,15 +390,22 @@ async def export_audit_logs_excel(
     ]
     
     # 设置表头样式
-    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF")
+    if HAS_OPENPYXL:
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    else:
+        header_fill = None
+        header_font = None
+        alignment = None
     
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col_idx)
         cell.value = header
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        if HAS_OPENPYXL:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = alignment
     
     # 设置列宽
     ws.column_dimensions['A'].width = 8  # ID
@@ -460,6 +439,31 @@ async def export_audit_logs_excel(
         ws.cell(row=row_idx, column=12).value = log.ip_address
         ws.cell(row=row_idx, column=13).value = log.user_agent
         ws.cell(row=row_idx, column=14).value = str(log.created_at) if log.created_at else ""
+    
+    # 在返回之前记录导出操作
+    audit_service.create_log(
+        action=AuditAction.AUDIT_LOG_EXPORT,
+        operator_id=current_user.id,
+        operator_username=current_user.username,
+        resource_type="audit_log",
+        action_details={
+            "export_format": "excel",
+            "skip": skip,
+            "limit": limit,
+            "filters": {
+                "action": action,
+                "operator_id": operator_id,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        },
+        result={"status": "success", "format": "excel"},
+        ip_address=http_request.client.host if http_request and http_request.client else "unknown",
+        user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
+        status=AuditStatus.SUCCESS,
+    )
     
     # 保存到BytesIO
     output = BytesIO()
