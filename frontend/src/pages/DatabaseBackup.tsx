@@ -149,7 +149,7 @@ const DatabaseBackup: React.FC = () => {
       dataIndex: 'created_at',
       key: 'created_at',
       render: (created_at: string) => {
-        const date = new Date(created_at + 'Z');
+        const date = new Date(created_at);
         return date.toLocaleString('zh-CN');
       },
       width: 200,
