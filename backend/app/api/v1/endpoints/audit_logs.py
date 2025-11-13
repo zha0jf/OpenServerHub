@@ -22,7 +22,7 @@ except ImportError:
 
 router = APIRouter()
 
-@router.get("/audit-logs", response_model=AuditLogListResponse)
+@router.get("/", response_model=AuditLogListResponse)
 async def get_audit_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -97,7 +97,7 @@ async def get_audit_logs(
         limit=limit,
     )
 
-@router.get("/audit-logs/{log_id}", response_model=AuditLog)
+@router.get("/{log_id}", response_model=AuditLog)
 async def get_audit_log(
     log_id: int,
     current_user = Depends(AuthService.get_current_admin_user),
@@ -120,7 +120,7 @@ async def get_audit_log(
     
     return AuditLog.model_validate(log)
 
-@router.get("/audit-logs/stats/summary")
+@router.get("/stats/summary")
 async def get_audit_stats_summary(
     days: int = Query(7, ge=1, le=90),
     current_user = Depends(AuthService.get_current_admin_user),
@@ -553,13 +553,17 @@ async def cleanup_old_audit_logs(
                     "days": days,
                     "cutoff_date": cutoff_date.isoformat()
                 },
+                result={
+                    "deleted_count": 0,
+                    "message": f"清理审计日志失败: {str(e)}"
+                },
                 error_message=str(e),
                 ip_address=http_request.client.host if http_request.client else "unknown",
                 user_agent=http_request.headers.get("user-agent", "unknown"),
                 status=AuditStatus.FAILED,
             )
-        except Exception as audit_error:
-            logger.warning(f"记录清理审计日志失败操作失败: {str(audit_error)}")
+        except Exception:
+            pass  # 忽略记录日志时的错误
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
