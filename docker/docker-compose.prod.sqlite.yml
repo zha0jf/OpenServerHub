@@ -19,8 +19,8 @@ services:
       DEBUG: "false"
       TZ: Asia/Shanghai
       
-      # CORS配置
-      CORS_ORIGINS: ""
+      # CORS配置 - 使用SERVER_IP变量动态设置
+      CORS_ORIGINS: "http://${SERVER_IP}:3000,http://localhost:3000,http://127.0.0.1:3000"
       
       # IPMI配置
       IPMI_TIMEOUT: "30"
@@ -34,7 +34,7 @@ services:
       SCHEDULER_ENABLED: "true"
       SCHEDULER_TIMEZONE: Asia/Shanghai
       
-      # 安全配置
+      # 安全配置 - 生产环境应使用强密钥
       SECRET_KEY: "your-secret-key-here-change-in-production"
     ports:
       - "8000:8000"
@@ -90,8 +90,8 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SECURITY_ADMIN_USER=admin
       - GF_AUTH_ANONYMOUS_ENABLED=false
-      - GF_SERVER_DOMAIN=localhost
-      - GF_SERVER_ROOT_URL=http://localhost:3001
+      - GF_SERVER_DOMAIN=${SERVER_IP}
+      - GF_SERVER_ROOT_URL=http://${SERVER_IP}:3001
       - TZ=Asia/Shanghai
     restart: unless-stopped
     networks:

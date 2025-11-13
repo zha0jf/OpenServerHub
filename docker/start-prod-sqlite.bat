@@ -29,6 +29,16 @@ if not exist .env.prod (
     pause
 )
 
+REM 读取环境变量
+set SERVER_IP=localhost
+for /f "usebackq tokens=1,* delims==" %%a in (".env.prod") do (
+    if "%%a"=="SERVER_IP" set "SERVER_IP=%%b"
+)
+
+REM 检查服务器IP配置
+if "%SERVER_IP%"=="" set SERVER_IP=localhost
+if "%SERVER_IP%"=="127.0.0.1" set SERVER_IP=localhost
+
 echo 请选择操作：
 echo 1) 启动生产环境
 echo 2) 停止生产环境
@@ -44,9 +54,15 @@ if "%choice%"=="1" (
     echo 🏭 正在启动生产环境...
     docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod up -d
     echo ✅ 生产环境已启动！
-    echo 🌐 应用地址: http://localhost:8000
-    echo 🔧 API文档: http://localhost:8000/docs
-    echo 📊 监控面板: http://localhost:3001
+    if NOT "%SERVER_IP%"=="localhost" (
+        echo 🌐 应用地址: http://%SERVER_IP%:8000
+        echo 🔧 API文档: http://%SERVER_IP%:8000/docs
+        echo 📊 监控面板: http://%SERVER_IP%:3001
+    ) else (
+        echo 🌐 应用地址: http://localhost:8000
+        echo 🔧 API文档: http://localhost:8000/docs
+        echo 📊 监控面板: http://localhost:3001
+    )
 ) else if "%choice%"=="2" (
     echo 🛑 正在停止生产环境...
     docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod down
@@ -57,9 +73,15 @@ if "%choice%"=="1" (
     timeout /t 3 /nobreak >nul
     docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod up -d
     echo ✅ 生产环境已重启！
-    echo 🌐 应用地址: http://localhost:8000
-    echo 🔧 API文档: http://localhost:8000/docs
-    echo 📊 监控面板: http://localhost:3001
+    if NOT "%SERVER_IP%"=="localhost" (
+        echo 🌐 应用地址: http://%SERVER_IP%:8000
+        echo 🔧 API文档: http://%SERVER_IP%:8000/docs
+        echo 📊 监控面板: http://%SERVER_IP%:3001
+    ) else (
+        echo 🌐 应用地址: http://localhost:8000
+        echo 🔧 API文档: http://localhost:8000/docs
+        echo 📊 监控面板: http://localhost:3001
+    )
 ) else if "%choice%"=="4" (
     echo 📋 服务状态：
     docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod ps
