@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from io import StringIO, BytesIO
 import csv
 import json
+import logging
 
 from app.core.database import get_db
 from app.services.auth import AuthService
@@ -19,6 +20,8 @@ try:
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -37,6 +40,7 @@ async def get_audit_stats_summary(
     
     仅管理员用户可以访问。
     """
+    logger.debug(f"用户 {current_user.username} 请求审计日志统计摘要，周期={days}天")
     from sqlalchemy import func
     
     start_date = datetime.now() - timedelta(days=days)
@@ -72,6 +76,7 @@ async def get_audit_stats_summary(
         AuditLogModel.created_at >= start_date
     ).scalar()
     
+    logger.info(f"审计日志统计摘要查询完成，周期={days}天，总操作数={total_count}")
     return {
         "period_days": days,
         "start_date": start_date.isoformat(),
@@ -114,6 +119,7 @@ async def export_audit_logs_csv(
     
     仅管理员用户可以访问。
     """
+    logger.debug(f"用户 {current_user.username} 请求导出审计日志为CSV，skip={skip}, limit={limit}")
     audit_service = AuditLogService(db)
     
     # 解析日期
@@ -236,6 +242,7 @@ async def export_audit_logs_excel(
     
     仅管理员用户可以访问。
     """
+    logger.debug(f"用户 {current_user.username} 请求导出审计日志为Excel，skip={skip}, limit={limit}")
     if not HAS_OPENPYXL:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -500,6 +507,7 @@ async def get_audit_log(
     return AuditLog.model_validate(log)
 
 @router.get("/", response_model=AuditLogListResponse)
+@router.get("", response_model=AuditLogListResponse)
 async def get_audit_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -527,7 +535,7 @@ async def get_audit_logs(
     - start_date: 开始日期 (ISO格式, 如2025-01-01, 可选)
     - end_date: 结束日期 (ISO格式, 如2025-01-31, 可选)
     """
-    
+    logger.debug(f"用户 {current_user.username} 请求审计日志列表，skip={skip}, limit={limit}")
     audit_service = AuditLogService(db)
     
     # 解析日期
@@ -565,6 +573,7 @@ async def get_audit_logs(
         end_date=end_datetime,
     )
     
+    logger.info(f"审计日志列表查询完成，用户={current_user.username}，返回记录数={len(logs)}，总记录数={total}")
     return AuditLogListResponse(
         items=[
             AuditLog.model_validate(log) for log in logs
