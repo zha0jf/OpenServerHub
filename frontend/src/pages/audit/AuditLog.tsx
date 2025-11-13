@@ -72,16 +72,54 @@ const AuditLogPage: React.FC = () => {
       console.error('加载审计类型失败:', error);
       // 失败时使用默认选项
       setActionTypeOptions([
+        // 用户认证相关
         { label: 'login', value: 'login' },
         { label: 'logout', value: 'logout' },
+        { label: 'login_failed', value: 'login_failed' },
+        // 用户管理相关
+        { label: 'user_create', value: 'user_create' },
+        { label: 'user_update', value: 'user_update' },
+        { label: 'user_delete', value: 'user_delete' },
+        { label: 'user_role_change', value: 'user_role_change' },
+        // 服务器管理相关
+        { label: 'server_create', value: 'server_create' },
+        { label: 'server_update', value: 'server_update' },
+        { label: 'server_delete', value: 'server_delete' },
+        { label: 'server_import', value: 'server_import' },
+        // 电源控制相关
         { label: 'power_on', value: 'power_on' },
         { label: 'power_off', value: 'power_off' },
         { label: 'power_restart', value: 'power_restart' },
+        { label: 'power_force_off', value: 'power_force_off' },
+        { label: 'power_force_restart', value: 'power_force_restart' },
+        // LED/定位灯控制
+        { label: 'led_on', value: 'led_on' },
+        { label: 'led_off', value: 'led_off' },
+        // 批量操作
+        { label: 'batch_power_control', value: 'batch_power_control' },
+        { label: 'batch_group_change', value: 'batch_group_change' },
+        // 监控相关
+        { label: 'monitoring_enable', value: 'monitoring_enable' },
+        { label: 'monitoring_disable', value: 'monitoring_disable' },
+        // 服务器发现相关
+        { label: 'discovery_start', value: 'discovery_start' },
+        { label: 'discovery_complete', value: 'discovery_complete' },
+        // 组管理相关
+        { label: 'group_create', value: 'group_create' },
+        { label: 'group_update', value: 'group_update' },
+        { label: 'group_delete', value: 'group_delete' },
+        // 审计日志相关
+        { label: 'audit_log_export', value: 'audit_log_export' },
+        { label: 'audit_log_cleanup', value: 'audit_log_cleanup' },
+        { label: 'audit_log_view', value: 'audit_log_view' },
       ]);
       setResourceTypeOptions([
         { label: 'user', value: 'user' },
         { label: 'server', value: 'server' },
         { label: 'group', value: 'group' },
+        { label: 'discovery', value: 'discovery' },
+        { label: 'audit_log', value: 'audit_log' },
+        { label: 'monitoring', value: 'monitoring' },
       ]);
     }
   };

@@ -12,7 +12,7 @@ from app.services.auth import AuthService
 from app.schemas.audit_log import AuditLogListResponse, AuditLog
 from app.services.audit_log import AuditLogService
 from app.models.user import UserRole
-from app.models.audit_log import AuditLog as AuditLogModel, AuditAction, AuditStatus
+from app.models.audit_log import AuditLog as AuditLogModel, AuditAction, AuditStatus, AuditResourceType
 
 try:
     from openpyxl import Workbook
@@ -42,10 +42,8 @@ async def get_audit_types(
     # 从AuditAction枚举获取所有操作类型
     action_types = [{"action": action.value} for action in AuditAction]
     
-    # 从数据库中获取所有唯一的资源类型
-    resource_types = db.query(AuditLogModel.resource_type).distinct().all()
-    # 过滤掉None值并转换为列表
-    resource_types = [{"resource_type": rt[0]} for rt in resource_types if rt[0] is not None]
+    # 从AuditResourceType枚举获取所有资源类型
+    resource_types = [{"resource_type": resource_type.value} for resource_type in AuditResourceType]
     
     result = {
         "action_types": action_types,

@@ -56,6 +56,15 @@ class AuditAction(str, enum.Enum):
     AUDIT_LOG_CLEANUP = "audit_log_cleanup"
     AUDIT_LOG_VIEW = "audit_log_view"
 
+class AuditResourceType(str, enum.Enum):
+    """审计资源类型"""
+    USER = "user"
+    SERVER = "server"
+    GROUP = "group"
+    DISCOVERY = "discovery"
+    AUDIT_LOG = "audit_log"
+    MONITORING = "monitoring"
+
 class AuditStatus(str, enum.Enum):
     """审计操作状态"""
     SUCCESS = "success"
