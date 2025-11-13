@@ -1,5 +1,5 @@
 import api from './api';
-import { AuditLog, AuditLogListResponse, AuditLogStats, CleanupLogsResponse } from '../types';
+import { AuditLog, AuditLogListResponse, AuditLogStats, CleanupLogsResponse, SelectOption } from '../types';
 
 const BASE_URL = '/audit-logs';
 
@@ -12,6 +12,12 @@ interface QueryParams {
   resource_id?: number;
   start_date?: string;
   end_date?: string;
+}
+
+// 审计类型响应
+interface AuditTypesResponse {
+  action_types: Array<{ action: string }>;
+  resource_types: Array<{ resource_type: string }>;
 }
 
 export const auditLogService = {
@@ -100,6 +106,27 @@ export const auditLogService = {
       return response.data;
     } catch (error) {
       console.error('导出审计日志失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 获取操作类型和资源类型列表
+   */
+  async getAuditTypes(): Promise<{ actionTypes: SelectOption[], resourceTypes: SelectOption[] }> {
+    try {
+      const response = await api.get<AuditTypesResponse>(`${BASE_URL}/types`);
+      const actionTypes = response.data.action_types.map(item => ({
+        label: item.action,
+        value: item.action
+      }));
+      const resourceTypes = response.data.resource_types.map(item => ({
+        label: item.resource_type,
+        value: item.resource_type
+      }));
+      return { actionTypes, resourceTypes };
+    } catch (error) {
+      console.error('获取审计类型列表失败:', error);
       throw error;
     }
   },

@@ -27,6 +27,34 @@ router = APIRouter()
 
 # 更具体的路由定义在前面（优先匹配）
 
+@router.get("/types")
+async def get_audit_types(
+    current_user = Depends(AuthService.get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    获取审计操作类型和资源类型
+    
+    仅管理员用户可以访问。
+    """
+    logger.debug(f"用户 {current_user.username} 请求审计操作类型和资源类型列表")
+    
+    # 从AuditAction枚举获取所有操作类型
+    action_types = [{"action": action.value} for action in AuditAction]
+    
+    # 从数据库中获取所有唯一的资源类型
+    resource_types = db.query(AuditLogModel.resource_type).distinct().all()
+    # 过滤掉None值并转换为列表
+    resource_types = [{"resource_type": rt[0]} for rt in resource_types if rt[0] is not None]
+    
+    result = {
+        "action_types": action_types,
+        "resource_types": resource_types
+    }
+    
+    logger.info(f"审计类型列表查询完成，用户={current_user.username}，操作类型数={len(action_types)}，资源类型数={len(resource_types)}")
+    return result
+
 @router.get("/stats/summary")
 async def get_audit_stats_summary(
     days: int = Query(7, ge=1, le=90),
@@ -120,6 +148,7 @@ async def export_audit_logs_csv(
     仅管理员用户可以访问。
     """
     logger.debug(f"用户 {current_user.username} 请求导出审计日志为CSV，skip={skip}, limit={limit}")
+    
     audit_service = AuditLogService(db)
     
     # 解析日期
@@ -173,19 +202,19 @@ async def export_audit_logs_csv(
     for log in logs:
         writer.writerow([
             log.id,
-            log.action,
+            str(log.action) if log.action else '',
             log.status,
             log.operator_id,
-            log.operator_username,
-            log.resource_type,
+            log.operator_username or '',
+            log.resource_type or '',
             log.resource_id,
-            log.resource_name,
-            log.action_details,
-            log.result,
-            log.error_message,
-            log.ip_address,
-            log.user_agent,
-            log.created_at,
+            log.resource_name or '',
+            log.action_details or '',
+            log.result or '',
+            log.error_message or '',
+            log.ip_address or '',
+            log.user_agent or '',
+            log.created_at.isoformat() if log.created_at else '',
         ])
     
     # 在返回之前记录导出操作
@@ -310,55 +339,51 @@ async def export_audit_logs_excel(
     ]
     
     # 设置表头样式
-    if HAS_OPENPYXL:
+    if HAS_OPENPYXL and ws is not None:
         header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF")
-        alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    else:
-        header_fill = None
-        header_font = None
-        alignment = None
-    
-    for col_idx, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.value = header
-        if HAS_OPENPYXL:
+        header_font = Font(color="FFFFFF", bold=True)
+        center_alignment = Alignment(horizontal="center", vertical="center")
+        
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=header)
             cell.fill = header_fill
             cell.font = header_font
-            cell.alignment = alignment
+            cell.alignment = center_alignment
     
     # 设置列宽
-    ws.column_dimensions['A'].width = 8  # ID
-    ws.column_dimensions['B'].width = 15  # 操作类型
-    ws.column_dimensions['C'].width = 10  # 状态
-    ws.column_dimensions['D'].width = 10  # 操作者ID
-    ws.column_dimensions['E'].width = 15  # 操作者用户名
-    ws.column_dimensions['F'].width = 12  # 资源类型
-    ws.column_dimensions['G'].width = 10  # 资源ID
-    ws.column_dimensions['H'].width = 15  # 资源名称
-    ws.column_dimensions['I'].width = 20  # 操作详情
-    ws.column_dimensions['J'].width = 20  # 操作结果
-    ws.column_dimensions['K'].width = 20  # 错误消息
-    ws.column_dimensions['L'].width = 15  # IP地址
-    ws.column_dimensions['M'].width = 20  # User Agent
-    ws.column_dimensions['N'].width = 20  # 创建时间
+    if ws is not None:
+        ws.column_dimensions['A'].width = 10   # ID
+        ws.column_dimensions['B'].width = 20   # 操作类型
+        ws.column_dimensions['C'].width = 10   # 状态
+        ws.column_dimensions['D'].width = 12   # 操作者ID
+        ws.column_dimensions['E'].width = 15   # 操作者用户名
+        ws.column_dimensions['F'].width = 15   # 资源类型
+        ws.column_dimensions['G'].width = 12   # 资源ID
+        ws.column_dimensions['H'].width = 20   # 资源名称
+        ws.column_dimensions['I'].width = 25   # 操作详情
+        ws.column_dimensions['J'].width = 25   # 操作结果
+        ws.column_dimensions['K'].width = 20   # 错误消息
+        ws.column_dimensions['L'].width = 15   # IP地址
+        ws.column_dimensions['M'].width = 20   # User Agent
+        ws.column_dimensions['N'].width = 20   # 创建时间
     
     # 写入数据
-    for row_idx, log in enumerate(logs, 2):
-        ws.cell(row=row_idx, column=1).value = log.id
-        ws.cell(row=row_idx, column=2).value = str(log.action)
-        ws.cell(row=row_idx, column=3).value = log.status
-        ws.cell(row=row_idx, column=4).value = log.operator_id
-        ws.cell(row=row_idx, column=5).value = log.operator_username
-        ws.cell(row=row_idx, column=6).value = log.resource_type
-        ws.cell(row=row_idx, column=7).value = log.resource_id
-        ws.cell(row=row_idx, column=8).value = log.resource_name
-        ws.cell(row=row_idx, column=9).value = log.action_details
-        ws.cell(row=row_idx, column=10).value = log.result
-        ws.cell(row=row_idx, column=11).value = log.error_message
-        ws.cell(row=row_idx, column=12).value = log.ip_address
-        ws.cell(row=row_idx, column=13).value = log.user_agent
-        ws.cell(row=row_idx, column=14).value = str(log.created_at) if log.created_at else ""
+    if ws is not None:
+        for row_idx, log in enumerate(logs, 2):
+            ws.cell(row=row_idx, column=1, value=log.id)
+            ws.cell(row=row_idx, column=2, value=str(log.action) if log.action else '')
+            ws.cell(row=row_idx, column=3, value=log.status)
+            ws.cell(row=row_idx, column=4, value=log.operator_id)
+            ws.cell(row=row_idx, column=5, value=log.operator_username or '')
+            ws.cell(row=row_idx, column=6, value=log.resource_type or '')
+            ws.cell(row=row_idx, column=7, value=log.resource_id)
+            ws.cell(row=row_idx, column=8, value=log.resource_name or '')
+            ws.cell(row=row_idx, column=9, value=log.action_details or '')
+            ws.cell(row=row_idx, column=10, value=log.result or '')
+            ws.cell(row=row_idx, column=11, value=log.error_message or '')
+            ws.cell(row=row_idx, column=12, value=log.ip_address or '')
+            ws.cell(row=row_idx, column=13, value=log.user_agent or '')
+            ws.cell(row=row_idx, column=14, value=log.created_at.isoformat() if log.created_at else '')
     
     # 在返回之前记录导出操作
     audit_service.create_log(
@@ -406,36 +431,32 @@ async def cleanup_old_audit_logs(
     db: Session = Depends(get_db),
 ):
     """
-    清理过旧的审计日志
-    
-    删除指定天数之前的日志记录。
-    
-    请求体:
-    - days: 要清理的天数（删除该天数之前的日志），必须大于0
+    清理过期审计日志
     
     仅管理员用户可以访问。
     """
-    days = request_body.get('days') if isinstance(request_body, dict) else None
+    logger.debug(f"用户 {current_user.username} 请求清理过期审计日志")
     
-    if days is None or days <= 0:
+    days = request_body.get("days")
+    if not days or not isinstance(days, int) or days < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="days参数必须为正整数"
+            detail="参数'days'必须是大于0的整数"
         )
     
-    # 计算清理的截断日期
+    # 计算截止日期
     cutoff_date = datetime.now() - timedelta(days=days)
     
+    audit_service = AuditLogService(db)
+    
     try:
-        # 查询要删除的日志数量
+        # 删除过期的日志
         delete_count = db.query(AuditLogModel).filter(
             AuditLogModel.created_at < cutoff_date
         ).delete()
-        
         db.commit()
         
-        # 记录清理审计日志的操作
-        audit_service = AuditLogService(db)
+        # 记录清理操作
         audit_service.create_log(
             action=AuditAction.AUDIT_LOG_CLEANUP,
             operator_id=current_user.id,

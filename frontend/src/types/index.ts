@@ -316,3 +316,9 @@ export interface CleanupLogsResponse {
   deleted_count: number;
   message: string;
 }
+
+// 操作类型选项
+export interface SelectOption {
+  label: string;
+  value: string;
+}

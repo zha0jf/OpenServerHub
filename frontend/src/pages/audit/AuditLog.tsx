@@ -25,7 +25,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { auditLogService } from '../../services/auditLog';
-import { AuditLog, AuditLogStats } from '../../types';
+import { AuditLog, AuditLogStats, SelectOption } from '../../types';
 import AuditLogDetail from './AuditLogDetail';
 import AuditLogStatsComponent from './AuditLogStats';
 
@@ -56,6 +56,35 @@ const AuditLogPage: React.FC = () => {
 
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  
+  // 操作类型选项
+  const [actionTypeOptions, setActionTypeOptions] = useState<SelectOption[]>([]);
+  // 资源类型选项
+  const [resourceTypeOptions, setResourceTypeOptions] = useState<SelectOption[]>([]);
+  
+  // 加载操作类型和资源类型选项
+  const loadAuditTypes = async () => {
+    try {
+      const { actionTypes, resourceTypes } = await auditLogService.getAuditTypes();
+      setActionTypeOptions(actionTypes);
+      setResourceTypeOptions(resourceTypes);
+    } catch (error) {
+      console.error('加载审计类型失败:', error);
+      // 失败时使用默认选项
+      setActionTypeOptions([
+        { label: 'login', value: 'login' },
+        { label: 'logout', value: 'logout' },
+        { label: 'power_on', value: 'power_on' },
+        { label: 'power_off', value: 'power_off' },
+        { label: 'power_restart', value: 'power_restart' },
+      ]);
+      setResourceTypeOptions([
+        { label: 'user', value: 'user' },
+        { label: 'server', value: 'server' },
+        { label: 'group', value: 'group' },
+      ]);
+    }
+  };
 
   // 获取审计日志列表
   const fetchAuditLogs = async (params: QueryParams) => {
@@ -95,6 +124,7 @@ const AuditLogPage: React.FC = () => {
   useEffect(() => {
     fetchAuditLogs(queryParams);
     fetchStats();
+    loadAuditTypes();
   }, []);
 
   // 处理日期范围变化
@@ -137,6 +167,7 @@ const AuditLogPage: React.FC = () => {
   const handleRefresh = () => {
     fetchAuditLogs(queryParams);
     fetchStats();
+    loadAuditTypes();
     message.success('已刷新');
   };
 
@@ -351,13 +382,7 @@ const AuditLogPage: React.FC = () => {
                 style={{ width: '100%' }}
                 onChange={handleActionChange}
                 allowClear
-                options={[
-                  { label: 'LOGIN', value: 'LOGIN' },
-                  { label: 'LOGOUT', value: 'LOGOUT' },
-                  { label: 'POWER_ON', value: 'POWER_ON' },
-                  { label: 'POWER_OFF', value: 'POWER_OFF' },
-                  { label: 'POWER_RESTART', value: 'POWER_RESTART' },
-                ]}
+                options={actionTypeOptions}
               />
             </Col>
             <Col xs={24} sm={12} lg={6}>
@@ -366,11 +391,7 @@ const AuditLogPage: React.FC = () => {
                 style={{ width: '100%' }}
                 onChange={handleResourceTypeChange}
                 allowClear
-                options={[
-                  { label: 'user', value: 'user' },
-                  { label: 'server', value: 'server' },
-                  { label: 'group', value: 'group' },
-                ]}
+                options={resourceTypeOptions}
               />
             </Col>
             <Col xs={24} sm={12} lg={6}>
