@@ -63,6 +63,14 @@ class BackupService {
     });
     return response.data;
   }
+
+  /**
+   * 下载备份文件
+   */
+  downloadBackup(filename: string): void {
+    // 通过新窗口打开下载链接
+    window.open(`/api/v1/backup/download/${filename}`, '_blank');
+  }
 }
 
 export const backupService = new BackupService();

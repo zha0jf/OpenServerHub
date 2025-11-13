@@ -165,10 +165,7 @@ const DatabaseBackup: React.FC = () => {
               type="default"
               size="small"
               icon={<DownloadOutlined />}
-              onClick={() => {
-                // 下载备份文件
-                window.open(`/api/v1/backup/download/${record.filename}`, '_blank');
-              }}
+              onClick={() => backupService.downloadBackup(record.filename)}
             >
               下载
             </Button>
@@ -211,7 +208,7 @@ const DatabaseBackup: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div>
       <h1>数据库备份</h1>
 
       {/* 操作按钮栏 */}
