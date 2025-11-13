@@ -52,7 +52,11 @@ async def create_backup(
                 resource_type=AuditResourceType.BACKUP,
                 resource_name=filename,
                 action_details={"filename": filename},
-                result=backup_info,
+                result={
+                    "filename": backup_info["filename"],
+                    "size": backup_info["size"],
+                    "file_path": backup_info["file_path"]
+                },
                 ip_address=get_client_ip(request),
                 user_agent=request.headers.get("user-agent", "unknown"),
                 status=AuditStatus.SUCCESS
