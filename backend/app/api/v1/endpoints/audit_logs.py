@@ -215,8 +215,15 @@ async def export_audit_logs_csv(
     
     # 返回CSV文件流
     output.seek(0)
+    csv_content = output.getvalue()
+    
+    # 使用 UTF-8 with BOM 编码，获得跨平台最佳兼容性
+    # Windows Excel 识别 BOM 后能正确打开，Linux/Mac 原生支持 UTF-8
+    csv_bytes = csv_content.encode('utf-8-sig')
+    
+    logger.info(f"审计日志CSV导出完成，用户={current_user.username}，导出记录数={len(logs)}")
     return StreamingResponse(
-        iter([output.getvalue()]),
+        iter([csv_bytes]),
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": "attachment; filename=audit_logs.csv"
