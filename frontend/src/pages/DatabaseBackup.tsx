@@ -17,7 +17,7 @@ import {
   SafetyOutlined,
   RollbackOutlined,
 } from '@ant-design/icons';
-import { backupService, BackupFile } from '../../services/backup';
+import { backupService, BackupFile } from '../services/backup';
 import type { ColumnType } from 'antd/es/table';
 
 const DatabaseBackup: React.FC = () => {
