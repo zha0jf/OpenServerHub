@@ -11,6 +11,7 @@ import MonitoringDashboard from './pages/monitoring/MonitoringDashboard';
 import ClusterManagement from './pages/clusters/ClusterManagement';
 import DeviceDiscovery from './pages/discovery/DeviceDiscovery';
 import AuditLog from './pages/audit/AuditLog';
+import DatabaseBackup from './pages/DatabaseBackup';
 import Profile from './pages/Profile';
 import PrivateRoute from './components/auth/PrivateRoute';
 import AdminRoute from './components/auth/AdminRoute';
@@ -38,6 +39,11 @@ const App: React.FC = () => {
             <Route path="audit" element={
               <AdminRoute>
                 <AuditLog />
+              </AdminRoute>
+            } />
+            <Route path="backup" element={
+              <AdminRoute>
+                <DatabaseBackup />
               </AdminRoute>
             } />
           </Route>

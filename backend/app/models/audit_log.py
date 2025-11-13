@@ -55,6 +55,13 @@ class AuditAction(str, enum.Enum):
     AUDIT_LOG_EXPORT = "audit_log_export"
     AUDIT_LOG_CLEANUP = "audit_log_cleanup"
     AUDIT_LOG_VIEW = "audit_log_view"
+    
+    # 数据库备份相关
+    BACKUP_CREATE = "backup_create"
+    BACKUP_DELETE = "backup_delete"
+    BACKUP_RESTORE = "backup_restore"
+    BACKUP_VERIFY = "backup_verify"
+    BACKUP_DOWNLOAD = "backup_download"
 
 class AuditResourceType(str, enum.Enum):
     """审计资源类型"""
@@ -64,6 +71,7 @@ class AuditResourceType(str, enum.Enum):
     DISCOVERY = "discovery"
     AUDIT_LOG = "audit_log"
     MONITORING = "monitoring"
+    BACKUP = "backup"
 
 class AuditStatus(str, enum.Enum):
     """审计操作状态"""

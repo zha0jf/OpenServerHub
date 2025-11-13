@@ -41,6 +41,8 @@ services:
     volumes:
       # SQLite数据持久化
       - backend_prod_data:/app/data
+      # 备份目录映射
+      - ../backups:/app/backups
       # 日志持久化
       - backend_prod_logs:/app/logs
       # 共享Prometheus目标配置目录

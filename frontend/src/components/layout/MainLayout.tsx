@@ -21,6 +21,7 @@ import {
   LogoutOutlined,
   SearchOutlined,
   FileTextOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import Logo from '../logo/Logo';
@@ -74,6 +75,11 @@ const MainLayout: React.FC = () => {
       key: '/audit',
       icon: <FileTextOutlined />,
       label: '审计日志',
+    },
+    {
+      key: '/backup',
+      icon: <DatabaseOutlined />,
+      label: '数据库备份',
     },
   ];
 

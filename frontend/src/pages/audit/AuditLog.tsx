@@ -112,6 +112,12 @@ const AuditLogPage: React.FC = () => {
         { label: 'audit_log_export', value: 'audit_log_export' },
         { label: 'audit_log_cleanup', value: 'audit_log_cleanup' },
         { label: 'audit_log_view', value: 'audit_log_view' },
+        // 数据库备份相关
+        { label: 'backup_create', value: 'backup_create' },
+        { label: 'backup_delete', value: 'backup_delete' },
+        { label: 'backup_restore', value: 'backup_restore' },
+        { label: 'backup_verify', value: 'backup_verify' },
+        { label: 'backup_download', value: 'backup_download' },
       ]);
       setResourceTypeOptions([
         { label: 'user', value: 'user' },
@@ -120,6 +126,7 @@ const AuditLogPage: React.FC = () => {
         { label: 'discovery', value: 'discovery' },
         { label: 'audit_log', value: 'audit_log' },
         { label: 'monitoring', value: 'monitoring' },
+        { label: 'backup', value: 'backup' },
       ]);
     }
   };
