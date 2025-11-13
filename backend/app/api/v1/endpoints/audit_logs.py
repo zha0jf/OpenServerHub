@@ -11,7 +11,7 @@ from app.services.auth import AuthService
 from app.schemas.audit_log import AuditLogListResponse, AuditLog
 from app.services.audit_log import AuditLogService
 from app.models.user import UserRole
-from app.models.audit_log import AuditLog as AuditLogModel, AuditAction, AuditStatus, AuditAction, AuditStatus
+from app.models.audit_log import AuditLog as AuditLogModel, AuditAction, AuditStatus
 
 try:
     from openpyxl import Workbook
@@ -22,103 +22,7 @@ except ImportError:
 
 router = APIRouter()
 
-@router.get("/", response_model=AuditLogListResponse)
-async def get_audit_logs(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    action: str = Query(None),
-    operator_id: int = Query(None),
-    resource_type: str = Query(None),
-    resource_id: int = Query(None),
-    start_date: str = Query(None),  # ISO格式日期
-    end_date: str = Query(None),    # ISO格式日期
-    current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
-):
-    """
-    获取审计日志列表
-    
-    仅管理员用户可以访问。
-    
-    查询参数:
-    - skip: 跳过的记录数 (默认0)
-    - limit: 返回的记录数 (默认100, 最大1000)
-    - action: 操作类型过滤 (可选)
-    - operator_id: 操作者ID过滤 (可选)
-    - resource_type: 资源类型过滤 (可选)
-    - resource_id: 资源ID过滤 (可选)
-    - start_date: 开始日期 (ISO格式, 如2025-01-01, 可选)
-    - end_date: 结束日期 (ISO格式, 如2025-01-31, 可选)
-    """
-    
-    audit_service = AuditLogService(db)
-    
-    # 解析日期
-    start_datetime = None
-    end_datetime = None
-    
-    try:
-        if start_date:
-            start_datetime = datetime.fromisoformat(start_date)
-        if end_date:
-            end_datetime = datetime.fromisoformat(end_date)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的日期格式: {str(e)}"
-        )
-    
-    # 转换action为枚举值
-    audit_action = None
-    if action:
-        try:
-            audit_action = AuditAction(action.lower())
-        except ValueError:
-            # 如果action不是有效的枚举值，保持为None（不过滤）
-            audit_action = None
-    
-    logs, total = audit_service.get_logs(
-        skip=skip,
-        limit=limit,
-        action=audit_action,
-        operator_id=operator_id,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        start_date=start_datetime,
-        end_date=end_datetime,
-    )
-    
-    return AuditLogListResponse(
-        items=[
-            AuditLog.model_validate(log) for log in logs
-        ],
-        total=total,
-        skip=skip,
-        limit=limit,
-    )
-
-@router.get("/{log_id}", response_model=AuditLog)
-async def get_audit_log(
-    log_id: int,
-    current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
-):
-    """
-    获取指定ID的审计日志详情
-    
-    仅管理员用户可以访问。
-    """
-    
-    audit_service = AuditLogService(db)
-    log = audit_service.get_log_by_id(log_id)
-    
-    if not log:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="审计日志不存在"
-        )
-    
-    return AuditLog.model_validate(log)
+# 更具体的路由定义在前面（优先匹配）
 
 @router.get("/stats/summary")
 async def get_audit_stats_summary(
@@ -133,41 +37,39 @@ async def get_audit_stats_summary(
     
     仅管理员用户可以访问。
     """
-    from datetime import datetime, timedelta
     from sqlalchemy import func
-    from app.models.audit_log import AuditLog
     
     start_date = datetime.now() - timedelta(days=days)
     
     # 统计各操作类型的数量
     action_stats = db.query(
-        AuditLog.action,
-        func.count(AuditLog.id).label('count')
+        AuditLogModel.action,
+        func.count(AuditLogModel.id).label('count')
     ).filter(
-        AuditLog.created_at >= start_date
+        AuditLogModel.created_at >= start_date
     ).group_by(
-        AuditLog.action
+        AuditLogModel.action
     ).all()
     
     # 统计各操作者的活动
     operator_stats = db.query(
-        AuditLog.operator_username,
-        func.count(AuditLog.id).label('count')
+        AuditLogModel.operator_username,
+        func.count(AuditLogModel.id).label('count')
     ).filter(
-        AuditLog.created_at >= start_date
+        AuditLogModel.created_at >= start_date
     ).group_by(
-        AuditLog.operator_username
+        AuditLogModel.operator_username
     ).all()
     
     # 统计失败操作
-    failed_count = db.query(func.count(AuditLog.id)).filter(
-        AuditLog.created_at >= start_date,
-        AuditLog.status == 'failed'
+    failed_count = db.query(func.count(AuditLogModel.id)).filter(
+        AuditLogModel.created_at >= start_date,
+        AuditLogModel.status == 'failed'
     ).scalar()
     
     # 总操作数
-    total_count = db.query(func.count(AuditLog.id)).filter(
-        AuditLog.created_at >= start_date
+    total_count = db.query(func.count(AuditLogModel.id)).filter(
+        AuditLogModel.created_at >= start_date
     ).scalar()
     
     return {
@@ -340,6 +242,9 @@ async def export_audit_logs_excel(
             detail="Excel导出功能不可用，请安装openpyxl库"
         )
     
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    
     audit_service = AuditLogService(db)
     
     # 解析日期
@@ -380,7 +285,8 @@ async def export_audit_logs_excel(
     # 生成Excel
     wb = Workbook()
     ws = wb.active
-    ws.title = "审计日志"
+    if ws is not None:
+        ws.title = "审计日志"
     
     # 设置表头
     headers = [
@@ -569,3 +475,101 @@ async def cleanup_old_audit_logs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"清理审计日志失败: {str(e)}"
         )
+
+@router.get("/{log_id}", response_model=AuditLog)
+async def get_audit_log(
+    log_id: int,
+    current_user = Depends(AuthService.get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    获取指定ID的审计日志详情
+    
+    仅管理员用户可以访问。
+    """
+    
+    audit_service = AuditLogService(db)
+    log = audit_service.get_log_by_id(log_id)
+    
+    if not log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="审计日志不存在"
+        )
+    
+    return AuditLog.model_validate(log)
+
+@router.get("/", response_model=AuditLogListResponse)
+async def get_audit_logs(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    action: str = Query(None),
+    operator_id: int = Query(None),
+    resource_type: str = Query(None),
+    resource_id: int = Query(None),
+    start_date: str = Query(None),  # ISO格式日期
+    end_date: str = Query(None),    # ISO格式日期
+    current_user = Depends(AuthService.get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    获取审计日志列表
+    
+    仅管理员用户可以访问。
+    
+    查询参数:
+    - skip: 跳过的记录数 (默认0)
+    - limit: 返回的记录数 (默认100, 最大1000)
+    - action: 操作类型过滤 (可选)
+    - operator_id: 操作者ID过滤 (可选)
+    - resource_type: 资源类型过滤 (可选)
+    - resource_id: 资源ID过滤 (可选)
+    - start_date: 开始日期 (ISO格式, 如2025-01-01, 可选)
+    - end_date: 结束日期 (ISO格式, 如2025-01-31, 可选)
+    """
+    
+    audit_service = AuditLogService(db)
+    
+    # 解析日期
+    start_datetime = None
+    end_datetime = None
+    
+    try:
+        if start_date:
+            start_datetime = datetime.fromisoformat(start_date)
+        if end_date:
+            end_datetime = datetime.fromisoformat(end_date)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的日期格式: {str(e)}"
+        )
+    
+    # 转换action为枚举值
+    audit_action = None
+    if action:
+        try:
+            audit_action = AuditAction(action.lower())
+        except ValueError:
+            # 如果action不是有效的枚举值，保持为None（不过滤）
+            audit_action = None
+    
+    logs, total = audit_service.get_logs(
+        skip=skip,
+        limit=limit,
+        action=audit_action,
+        operator_id=operator_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        start_date=start_datetime,
+        end_date=end_datetime,
+    )
+    
+    return AuditLogListResponse(
+        items=[
+            AuditLog.model_validate(log) for log in logs
+        ],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
