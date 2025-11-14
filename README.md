@@ -87,7 +87,7 @@ cd backend
 pip install -r requirements.txt
 
 # 复制环境配置
-cp .env.example .env
+cp scripts/env.example .env
 
 # 初始化数据库（会创建默认管理员和测试数据）
 python init_db.py
@@ -233,6 +233,10 @@ OpenServerHub/
 │   ├── management/         # 项目管理文档
 │   ├── troubleshooting/    # 故障排除文档
 │   └── user/               # 用户文档
+├── scripts/                # 启动脚本和环境配置
+│   ├── start.bat          # Windows启动脚本
+│   ├── start.sh           # Linux/macOS启动脚本
+│   └── env.example        # 环境配置示例文件
 └── docker-compose.monitoring.yml  # 监控系统Docker编排
 ```
 

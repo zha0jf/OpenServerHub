@@ -11,7 +11,7 @@ powershell -Command "[System.Threading.Thread]::CurrentThread.Priority = 'Highes
 
 echo.
 echo 1. 启动后端服务...
-cd /d "%~dp0backend"
+cd /d "%~dp0..\backend"
 
 :: 检查是否已安装依赖
 if not exist "venv" (
@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 :: 复制环境配置
 if not exist ".env" (
-    copy ..\backend\.env.example .env
+    copy env.example .env
     echo 已创建环境配置文件，请根据需要修改 backend/.env
 )
 
@@ -42,7 +42,7 @@ start "OpenServerHub Backend" cmd /k "uvicorn main:app --reload --host 0.0.0.0 -
 
 echo.
 echo 2. 启动前端服务...
-cd /d "%~dp0frontend"
+cd /d "%~dp0..\frontend"
 
 :: 安装前端依赖
 echo 安装前端依赖...

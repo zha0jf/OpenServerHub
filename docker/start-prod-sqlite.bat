@@ -23,7 +23,7 @@ if %errorlevel% neq 0 (
 REM 检查环境文件
 if not exist .env.prod (
     echo ⚠️  未找到生产环境的 .env.prod 文件，正在创建...
-    copy .env.example .env.prod >nul
+    copy .env.prod.example .env.prod >nul
     echo 📝 请编辑 .env.prod 文件以配置您的生产环境
     echo    特别注意修改 SECRET_KEY 等安全配置
     pause

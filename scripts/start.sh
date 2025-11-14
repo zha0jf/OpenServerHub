@@ -9,7 +9,7 @@ echo "===================================="
 
 echo ""
 echo "1. 启动后端服务..."
-cd "$(dirname "$0")/backend"
+cd "$(dirname "$0")/../backend"
 
 # 检查是否已安装依赖
 if [ ! -d "venv" ]; then
@@ -26,7 +26,7 @@ pip install -r requirements.txt
 
 # 复制环境配置
 if [ ! -f ".env" ]; then
-    cp ../backend/.env.example .env
+    cp .env.example .env
     echo "已创建环境配置文件，请根据需要修改 backend/.env"
 fi
 
@@ -40,7 +40,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000 &
 
 echo ""
 echo "2. 启动前端服务..."
-cd "../frontend"
+cd "$(dirname "$0")/../frontend"
 
 # 安装前端依赖
 echo "安装前端依赖..."

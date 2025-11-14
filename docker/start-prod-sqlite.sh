@@ -24,7 +24,7 @@ check_env_file() {
     # 检查服务器IP地址
     if [ ! -f "$ENV_FILE" ]; then
         echo -e "${YELLOW}⚠️  未找到生产环境的 .env.prod 文件，正在创建...${NC}"
-        cp .env.example .env.prod
+        cp .env.prod.example .env.prod
         echo -e "${BLUE}📝 请编辑 .env.prod 文件以配置您的生产环境${NC}"
         echo -e "${BLUE}   特别注意修改 SECRET_KEY 等安全配置${NC}"
         read -p "按回车键继续..."

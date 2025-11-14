@@ -10,30 +10,77 @@
 
 ### 2. 配置环境变量
 
-```bash
-cd docker
-cp .env.example .env
-# 编辑 .env 文件，修改必要的配置
-```
-
-### 3. 启动服务
+根据您要启动的环境类型，需要配置相应的环境变量文件：
 
 #### 生产环境
 ```bash
-docker-compose up -d
+cd docker
+cp .env.prod.example .env.prod
+# 编辑 .env.prod 文件，修改必要的配置，特别是 SECRET_KEY
 ```
 
 #### 开发环境
 ```bash
-docker-compose -f docker-compose.dev.single.yml up -d
+cd docker
+cp .env.dev.example .env.dev
+# 编辑 .env.dev 文件，修改必要的配置
 ```
 
-#### 开发监控环境（集成在单容器版本中）
+### 3. 启动服务
+
+您可以选择直接使用Docker Compose命令启动服务，也可以使用我们提供的启动脚本来启动服务。
+
+#### 方法一：使用启动脚本（推荐）
+
+##### 生产环境
 ```bash
-docker-compose -f docker-compose.dev.single.yml up -d
+# Windows
+start-prod-sqlite.bat
+
+# Linux/macOS
+./start-prod-sqlite.sh
 ```
 
-开发监控环境已集成到单容器开发环境配置中，包含了后端服务、前端服务以及完整的监控组件（Prometheus、Grafana、AlertManager和IPMI Exporter）。这个环境特别适合在开发过程中进行监控功能的测试和调试。
+##### 开发环境
+```bash
+# Windows
+start-dev-single.bat
+
+# Linux/macOS
+./start-dev-single.sh
+```
+
+#### 方法二：使用Docker Compose命令
+
+##### 生产环境
+```bash
+# 1. 复制环境配置文件
+# Linux/macOS
+cp .env.prod.example .env.prod
+# Windows
+copy .env.prod.example .env.prod
+
+# 2. 编辑 .env.prod 文件，修改必要的配置，特别是 SECRET_KEY
+
+# 3. 启动服务
+docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod up -d
+```
+
+##### 开发环境
+```bash
+# 1. 复制环境配置文件
+# Linux/macOS
+cp .env.dev.example .env.dev
+# Windows
+copy .env.dev.example .env.dev
+
+# 2. 编辑 .env.dev 文件，修改必要的配置
+
+# 3. 启动服务
+docker-compose -f docker-compose.dev.single.yml --env-file .env.dev up -d
+```
+
+开发环境已集成到单容器配置中，包含了后端服务、前端服务以及完整的监控组件（Prometheus、Grafana、AlertManager和IPMI Exporter）。这个环境特别适合在开发过程中进行监控功能的测试和调试。
 
 #### 监控环境
 ```bash
@@ -41,29 +88,37 @@ docker-compose -f docker-compose.monitoring.yml up -d
 ```
 
 ### 4. 访问服务
-- 前端: http://localhost:3000
+
+根据您启动的环境类型，服务访问地址会有所不同：
+
+#### 生产环境
 - 后端API: http://localhost:8000
 - API文档: http://localhost:8000/docs
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3001
 - AlertManager: http://localhost:9093
 
+#### 开发环境
+- 前端: http://localhost:3000
+- 后端API: http://localhost:8000
+- API文档: http://localhost:8000/docs
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3001
+- AlertManager: http://localhost:9093
+- IPMI Exporter: http://localhost:9290
+
 ## 服务说明
 
 ### 包含的服务
 
 #### 生产环境
-- **SQLite**: 主数据库
-- **Redis**: 缓存和会话存储
-- **Backend**: FastAPI后端服务
-- **Frontend**: React前端应用
-- **Nginx**: 反向代理和静态文件服务
+- **Backend**: FastAPI后端服务（使用SQLite数据库）
+- **Prometheus**: 监控数据收集和存储
+- **Grafana**: 监控数据可视化
+- **AlertManager**: 告警管理
+- **IPMI Exporter**: 硬件监控数据采集
 
 #### 开发环境
-- **Backend**: FastAPI后端服务（使用SQLite数据库）
-- **Frontend**: React前端应用
-
-#### 开发环境（集成监控组件）
 - **Backend**: FastAPI后端服务（使用SQLite数据库）
 - **Frontend**: React前端应用
 - **Prometheus**: 监控数据收集和存储
@@ -78,10 +133,17 @@ docker-compose -f docker-compose.monitoring.yml up -d
 - **IPMI Exporter**: 硬件监控数据采集
 
 ### 端口映射
+
+#### 生产环境
+- 8000: 后端API
+- 9090: Prometheus
+- 3001: Grafana
+- 9093: AlertManager
+- 9290: IPMI Exporter
+
+#### 开发环境
 - 3000: 前端开发服务器
 - 8000: 后端API
-- 6379: Redis（仅生产环境）
-- 80: Nginx（仅生产环境）
 - 9090: Prometheus
 - 3001: Grafana
 - 9093: AlertManager
@@ -117,21 +179,56 @@ docker cp openserverhub-backend-prod:/app/data/backup.db ./backup.db
 docker cp ./backup.db openserverhub-backend-prod:/app/data/openserverhub.db
 ```
 
+### 使用启动脚本进行备份和恢复
+您也可以使用启动脚本来进行备份和恢复操作。启动脚本提供了更友好的交互界面和更多的选项。
+
+```bash
+# Windows
+start-prod-sqlite.bat
+
+# Linux/macOS
+./start-prod-sqlite.sh
+```
+
 ## 配置说明
 
 ### 环境变量
+
+#### 通用配置
 - `DATABASE_URL`: 数据库连接字符串
-- `REDIS_URL`: Redis连接字符串
-- `SECRET_KEY`: JWT密钥
+- `SECRET_KEY`: JWT密钥（生产环境必须修改为强密钥）
 - `ENVIRONMENT`: 运行环境
 - `DEBUG`: 调试模式
 - `LOG_LEVEL`: 日志级别
 - `CORS_ORIGINS`: CORS允许的源
 
+#### IPMI配置
+- `IPMI_CONNECTION_POOL_SIZE`: IPMI连接池大小
+- `IPMI_TIMEOUT`: IPMI超时时间
+- `IPMI_RETRY_COUNT`: IPMI重试次数
+
+#### 监控配置
+- `MONITORING_ENABLED`: 是否启用监控
+- `MONITORING_INTERVAL`: 监控间隔（秒）
+- `PROMETHEUS_URL`: Prometheus服务地址
+- `GRAFANA_URL`: Grafana服务地址
+- `GRAFANA_API_KEY`: Grafana API密钥
+
+#### 定时任务配置
+- `POWER_STATE_REFRESH_INTERVAL`: 电源状态刷新间隔（分钟）
+- `POWER_STATE_REFRESH_ENABLED`: 是否启用电源状态刷新
+- `SCHEDULER_ENABLED`: 是否启用定时任务
+
 ### 数据持久化
-- SQLite数据: `./backend/data`目录
-- 应用数据: `./backend/data`目录
-- 日志文件: `./backend/logs`目录
+
+#### 生产环境
+- SQLite数据: `./backend/data`目录（通过Docker卷持久化）
+- 应用数据: `./backend/data`目录（通过Docker卷持久化）
+- 日志文件: `./backend/logs`目录（通过Docker卷持久化）
+
+#### 开发环境
+- SQLite数据: `./backend/data`目录（通过Docker卷持久化）
+- 应用数据: `./backend/data`目录（通过Docker卷持久化）
 
 ## 安全建议
 
