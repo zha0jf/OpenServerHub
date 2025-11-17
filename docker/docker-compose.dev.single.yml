@@ -13,8 +13,8 @@ services:
       DATABASE_URL: sqlite:///./data/openserverhub.db
       
       # 应用配置
-      APP_NAME: OpenServerHub
-      APP_VERSION: 1.0.0
+      PROJECT_NAME: OpenServerHub
+      VERSION: 1.0.0
       DEBUG: "true"
       TZ: Asia/Shanghai
       

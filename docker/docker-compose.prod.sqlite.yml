@@ -9,33 +9,48 @@ services:
       context: ..
       dockerfile: docker/backend.prod.sqlite.dockerfile
     container_name: openserverhub-backend-prod
+    env_file:
+      - .env.prod
     environment:
       # 数据库配置 - 生产环境使用SQLite
-      DATABASE_URL: sqlite:///./data/openserverhub.db
+      DATABASE_URL: ${DATABASE_URL}
       
       # 应用配置
-      APP_NAME: OpenServerHub
-      APP_VERSION: 1.0.0
-      DEBUG: "false"
+      PROJECT_NAME: ${PROJECT_NAME}
+      VERSION: ${VERSION}
+      ENVIRONMENT: ${ENVIRONMENT}
+      DEBUG: "${DEBUG}"
       TZ: Asia/Shanghai
       
       # CORS配置 - 使用SERVER_IP变量动态设置
-      CORS_ORIGINS: "http://${SERVER_IP}:3000,http://localhost:3000,http://127.0.0.1:3000"
+      CORS_ORIGINS: ${CORS_ORIGINS}
       
       # IPMI配置
-      IPMI_TIMEOUT: "30"
-      IPMI_RETRY_COUNT: "3"
+      IPMI_CONNECTION_POOL_SIZE: "${IPMI_CONNECTION_POOL_SIZE}"
+      IPMI_TIMEOUT: "${IPMI_TIMEOUT}"
+      IPMI_RETRY_COUNT: "${IPMI_RETRY_COUNT}"
       
       # 监控配置
-      MONITORING_ENABLED: "true"
-      MONITORING_INTERVAL: "5"
+      MONITORING_ENABLED: "${MONITORING_ENABLED}"
+      MONITORING_INTERVAL: "${MONITORING_INTERVAL}"
+      PROMETHEUS_URL: ${PROMETHEUS_URL}
+      GRAFANA_URL: ${GRAFANA_URL}
+      GRAFANA_API_KEY: ${GRAFANA_API_KEY}
+      PROMETHEUS_TARGETS_PATH: ${PROMETHEUS_TARGETS_PATH}
       
       # 定时任务配置
-      SCHEDULER_ENABLED: "true"
-      SCHEDULER_TIMEZONE: Asia/Shanghai
+      POWER_STATE_REFRESH_INTERVAL: ${POWER_STATE_REFRESH_INTERVAL}
+      POWER_STATE_REFRESH_ENABLED: "${POWER_STATE_REFRESH_ENABLED}"
+      SCHEDULER_ENABLED: "${SCHEDULER_ENABLED}"
+      SCHEDULER_TIMEZONE: ${SCHEDULER_TIMEZONE}
       
       # 安全配置 - 生产环境应使用强密钥
-      SECRET_KEY: "your-secret-key-here-change-in-production"
+      SECRET_KEY: ${SECRET_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      
+      # 日志配置
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_FILE: ${LOG_FILE}
     ports:
       - "8000:8000"
     volumes:
