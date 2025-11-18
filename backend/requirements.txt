@@ -38,6 +38,9 @@ aiofiles==23.2.1
 # 文件导出
 openpyxl==3.1.5
 
+# Prometheus指标导出
+prometheus-client==0.19.0
+
 # 开发工具
 pytest==7.4.3
 pytest-asyncio==0.21.1

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
@@ -18,6 +18,20 @@ from app.services import scheduler_service
 from app.services.monitoring_scheduler import MonitoringSchedulerService  # 导入类本身
 from app.services.ipmi import ipmi_pool
 
+# Prometheus指标导出
+try:
+    from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+    import time
+    
+    # 创建指标
+    REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
+    REQUEST_DURATION = Histogram('http_request_duration_seconds', 'HTTP request duration', ['method', 'endpoint'])
+except ImportError:
+    # 如果没有安装prometheus-client，则不启用指标功能
+    Counter = Histogram = generate_latest = CONTENT_TYPE_LATEST = None
+    time = None
+    REQUEST_COUNT = REQUEST_DURATION = None
+
 logger = logging.getLogger(__name__)
 
 # 设置日志
@@ -28,6 +42,7 @@ housekeeper = None
 
 # 导入监控调度服务模块（注意：不是实例）
 import app.services.monitoring_scheduler as monitoring_module
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -84,6 +99,25 @@ async def lifespan(app: FastAPI):
         logger.error(f"停止监控数据采集定时任务服务失败: {e}")
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
+
+# 添加Prometheus指标中间件（如果可用）
+if REQUEST_COUNT is not None and REQUEST_DURATION is not None and time is not None:
+    @app.middleware("http")
+    async def prometheus_middleware(request: Request, call_next):
+        """Prometheus指标收集中间件"""
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        
+        # 记录请求计数和持续时间
+        endpoint = request.url.path
+        method = request.method
+        status_code = response.status_code
+        
+        REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status_code).inc()
+        REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(process_time)
+        
+        return response
 
 # 配置CORS - 统一处理开发和生产环境
 # 从环境变量获取CORS配置，如果未设置则使用默认值
@@ -178,3 +212,10 @@ async def manual_refresh_power_state():
             "success": False,
             "message": str(e)
         }
+
+# 添加Prometheus指标端点（如果可用）
+if generate_latest is not None and CONTENT_TYPE_LATEST is not None:
+    @app.get("/metrics")
+    async def metrics():
+        """Prometheus指标端点"""
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
