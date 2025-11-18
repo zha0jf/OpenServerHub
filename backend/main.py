@@ -100,16 +100,17 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+# 包含API路由
+app.include_router(api_router, prefix=settings.API_V1_STR)
+
 # 在生产环境中提供前端静态文件
+# 注意：必须在API路由之后挂载静态文件服务，以避免路由冲突
 if settings.ENVIRONMENT == "production":
     # 在生产环境中，前端静态文件位于后端static目录中
     frontend_static_path = os.path.join(os.path.dirname(__file__), "static")
     
     if os.path.isdir(frontend_static_path):
         app.mount("/", StaticFiles(directory=frontend_static_path, html=True), name="frontend")
-
-# 包含API路由
-app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # 全局422错误处理器
 @app.exception_handler(RequestValidationError)
