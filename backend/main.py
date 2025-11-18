@@ -144,7 +144,16 @@ if settings.ENVIRONMENT == "production":
     frontend_static_path = os.path.join(os.path.dirname(__file__), "static")
     
     if os.path.isdir(frontend_static_path):
-        app.mount("/", StaticFiles(directory=frontend_static_path, html=True), name="frontend")
+        # 使用自定义的StaticFiles类来处理SPA路由
+        class SPAStaticFiles(StaticFiles):
+            async def get_response(self, path: str, scope):
+                try:
+                    return await super().get_response(path, scope)
+                except:
+                    # 如果文件不存在，返回index.html让前端路由处理
+                    return await super().get_response("index.html", scope)
+        
+        app.mount("/", SPAStaticFiles(directory=frontend_static_path, html=True), name="frontend")
 
 # 全局422错误处理器
 @app.exception_handler(RequestValidationError)
