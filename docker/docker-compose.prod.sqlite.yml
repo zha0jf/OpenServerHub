@@ -56,11 +56,11 @@ services:
       - "8000:8000"
     volumes:
       # SQLite数据持久化
-      - backend_prod_data:/app/data
+      - backend_prod_data:/app/backend/data
       # 备份目录映射
-      - ../backups:/app/backups
+      - ../backups:/app/backend/backups
       # 日志持久化
-      - backend_prod_logs:/app/logs
+      - backend_prod_logs:/app/backend/logs
       # 共享Prometheus目标配置目录
       - ../monitoring/prometheus/targets:/etc/prometheus/targets
     networks:

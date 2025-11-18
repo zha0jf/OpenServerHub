@@ -58,9 +58,9 @@ services:
       - ../frontend:/app/frontend
       - /app/frontend/node_modules
       # SQLite数据持久化
-      - dev_data:/app/data
+      - dev_data:/app/backend/data
       # 备份目录映射
-      - ../backups:/app/backups
+      - ../backups:/app/backend/backups
       # 共享Prometheus目标配置目录
       - ../monitoring/prometheus/targets:/etc/prometheus/targets
     networks:

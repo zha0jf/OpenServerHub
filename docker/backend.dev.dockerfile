@@ -50,7 +50,13 @@ COPY backend/ /app/backend/
 COPY frontend/ /app/frontend/
 
 # 创建SQLite数据库目录
-RUN mkdir -p /app/data
+RUN mkdir -p /app/backend/data
+
+# 创建日志目录
+RUN mkdir -p /app/backend/logs
+
+# 创建备份目录
+RUN mkdir -p /app/backend/backups
 
 # 暴露端口
 EXPOSE 8000

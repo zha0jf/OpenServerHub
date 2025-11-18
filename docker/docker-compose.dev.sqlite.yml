@@ -44,7 +44,7 @@ services:
       # 代码热重载
       - ../backend:/app
       # SQLite数据持久化
-      - backend_dev_data:/app/data
+      - backend_dev_data:/app/backend/data
       # 防止容器内安装node_modules
       - /app/node_modules
 
