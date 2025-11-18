@@ -1,15 +1,21 @@
+# 开发环境Docker Compose配置 - 单容器集成后端+前端
 version: '3.8'
+
+# 加载环境变量配置
+env_file:
+  - .env.dev.network
 
 services:
 
-  # 全栈开发服务（后端+前端）
-  app:
+  # 后端开发服务（集成前端）
+  backend:
     build:
       context: ..
       dockerfile: docker/backend.dev.dockerfile
+    image: zha0jf/openserverhub-dev:latest
     container_name: openserverhub-dev
     environment:
-      # 数据库配置 - 开发环境使用SQLite
+      # 数据库配置
       DATABASE_URL: sqlite:///./data/openserverhub.db
       
       # 应用配置
