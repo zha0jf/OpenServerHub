@@ -137,23 +137,12 @@ app.add_middleware(
 # 包含API路由
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# 在生产环境中提供前端静态文件
-# 注意：必须在API路由之后挂载静态文件服务，以避免路由冲突
-if settings.ENVIRONMENT == "production":
-    # 在生产环境中，前端静态文件位于后端static目录中
-    frontend_static_path = os.path.join(os.path.dirname(__file__), "static")
-    
-    if os.path.isdir(frontend_static_path):
-        # 使用自定义的StaticFiles类来处理SPA路由
-        class SPAStaticFiles(StaticFiles):
-            async def get_response(self, path: str, scope):
-                try:
-                    return await super().get_response(path, scope)
-                except:
-                    # 如果文件不存在，返回index.html让前端路由处理
-                    return await super().get_response("index.html", scope)
-        
-        app.mount("/", SPAStaticFiles(directory=frontend_static_path, html=True), name="frontend")
+# 添加Prometheus指标端点（如果可用）
+if generate_latest is not None and CONTENT_TYPE_LATEST is not None:
+    @app.get("/metrics")
+    async def metrics():
+        """Prometheus指标端点"""
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # 全局422错误处理器
 @app.exception_handler(RequestValidationError)
@@ -176,10 +165,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "message": "; ".join(errors)
         },
     )
-
-@app.get("/")
-async def root():
-    return {"message": "OpenServerHub API Server"}
 
 @app.get("/health")
 async def health_check():
@@ -222,9 +207,25 @@ async def manual_refresh_power_state():
             "message": str(e)
         }
 
-# 添加Prometheus指标端点（如果可用）
-if generate_latest is not None and CONTENT_TYPE_LATEST is not None:
-    @app.get("/metrics")
-    async def metrics():
-        """Prometheus指标端点"""
-        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+# 在生产环境中提供前端静态文件
+# 注意：必须在所有API路由和端点之后挂载静态文件服务，以避免路由冲突
+if settings.ENVIRONMENT == "production":
+    # 在生产环境中，前端静态文件位于后端static目录中
+    frontend_static_path = os.path.join(os.path.dirname(__file__), "static")
+    
+    if os.path.isdir(frontend_static_path):
+        # 使用自定义的StaticFiles类来处理SPA路由
+        class SPAStaticFiles(StaticFiles):
+            async def get_response(self, path: str, scope):
+                try:
+                    return await super().get_response(path, scope)
+                except:
+                    # 如果文件不存在，返回index.html让前端路由处理
+                    return await super().get_response("index.html", scope)
+        
+        app.mount("/", SPAStaticFiles(directory=frontend_static_path, html=True), name="frontend")
+
+# 根路径端点 - 在生产环境中会被静态文件服务覆盖，在开发环境中提供API响应
+@app.get("/")
+async def root():
+    return {"message": "OpenServerHub API Server"}
