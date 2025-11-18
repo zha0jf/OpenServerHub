@@ -1,10 +1,33 @@
 # 生产环境后端Dockerfile - 基于Python，集成Node.js和SQLite
+# 使用多阶段构建来减小最终镜像大小
+
+# 第一阶段：前端构建阶段
+FROM node:22-alpine AS frontend-builder
+
+# 安装git以支持版本信息获取
+RUN apk add --no-cache git
+
+# 配置Node.js国内源
+RUN npm config set registry https://registry.npmmirror.com
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制整个项目以确保Git信息可用
+COPY . .
+
+# 安装前端依赖
+RUN cd frontend && npm ci --only=production
+
+# 构建前端静态资源
+RUN cd frontend && npm run build
+
+# 第二阶段：后端构建阶段
 FROM python:3.11-slim
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV NODE_VERSION=22.x
 
 # 安装系统依赖，包括ipmitool和其他常用工具
 RUN apt-get update && apt-get install -y \
@@ -18,12 +41,6 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 配置Node.js国内源并安装Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs \
-    && npm config set registry https://registry.npmmirror.com \
-    && npm install -g npm@latest
-
 # 配置Python国内源
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
@@ -36,20 +53,11 @@ COPY backend/requirements.txt ./
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制前端package.json和package-lock.json文件
-COPY frontend/package.json frontend/package-lock.json* /app/frontend/
-
-# 在构建阶段安装前端依赖 - 使用npm install来处理跨平台兼容性
-RUN cd /app/frontend && npm install --ignore-scripts
-
-# 复制后端代码到子目录
+# 复制后端代码
 COPY backend/ /app/backend/
 
-# 复制前端代码到子目录
-COPY frontend/ /app/frontend/
-
-# 构建前端静态资源
-RUN cd /app/frontend && npm run build
+# 从第一阶段复制构建好的前端文件到后端静态文件目录
+COPY --from=frontend-builder /app/frontend/build /app/backend/static
 
 # 创建SQLite数据库目录
 RUN mkdir -p /app/data

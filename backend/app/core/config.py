@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     # 项目信息
     PROJECT_NAME: str = "OpenServerHub"
     VERSION: str = "1.0.0"
+    ENVIRONMENT: str = "development"  # 添加环境变量，默认为开发环境
     API_V1_STR: str = "/api/v1"
     
     # 数据库配置 (开发阶段使用SQLite)

@@ -2,8 +2,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
+import os
 
 from pyghmi.ipmi.command import Housekeeper
 
@@ -97,6 +99,14 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"]
 )
+
+# 在生产环境中提供前端静态文件
+if settings.ENVIRONMENT == "production":
+    # 在生产环境中，前端静态文件位于后端static目录中
+    frontend_static_path = os.path.join(os.path.dirname(__file__), "static")
+    
+    if os.path.isdir(frontend_static_path):
+        app.mount("/", StaticFiles(directory=frontend_static_path, html=True), name="frontend")
 
 # 包含API路由
 app.include_router(api_router, prefix=settings.API_V1_STR)
