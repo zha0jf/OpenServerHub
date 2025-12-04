@@ -29,6 +29,39 @@ class IPMIConnectionPool:
         self.connections = {}
         self.semaphore = asyncio.Semaphore(max_connections)
     
+    def _is_connection_valid(self, conn) -> bool:
+        """检查IPMI连接是否仍然有效"""
+        try:
+            # 检查连接对象是否存在
+            if conn is None:
+                return False
+            
+            # 检查连接对象是否有is_alive方法（pyghmi特定检查）
+            if hasattr(conn, 'is_alive'):
+                return conn.is_alive()
+            
+            # 检查连接对象是否有session属性
+            if hasattr(conn, 'session') and conn.session is not None:
+                # 检查session是否仍然连接
+                session = conn.session
+                if hasattr(session, 'is_connected'):
+                    return session.is_connected()
+                elif hasattr(session, '_connected'):
+                    return bool(session._connected)
+            
+            # 特殊处理pyghmi的错误消息检查
+            # 如果出现'Session no longer connected'错误，说明连接已断开
+            if hasattr(conn, '_fail_reason') and conn._fail_reason:
+                fail_reason = str(conn._fail_reason).lower()
+                if 'session no longer connected' in fail_reason:
+                    return False
+            
+            # 如果无法确定连接状态，假设连接是有效的
+            return True
+        except Exception as e:
+            logger.debug(f"[IPMI连接] 检查连接有效性时出错: {e}")
+            return False
+    
     async def get_connection(self, ip: str, username: str, password: str, port: int = 623, timeout: int = 30):
         """获取IPMI连接（安全版，带超时保护，避免在OpenBMC卡死）"""
         # 使用配置的超时值作为默认值
@@ -49,10 +82,21 @@ class IPMIConnectionPool:
 
         async with self.semaphore:
             if connection_key in self.connections:
-                # 为现有连接也更新超时设置
+                # 检查现有连接是否仍然有效
                 existing_conn = self.connections[connection_key]
-                # 注意：pyghmi的Command对象不支持动态修改超时，所以我们只能复用连接
-                return existing_conn
+                if self._is_connection_valid(existing_conn):
+                    # 注意：pyghmi的Command对象不支持动态修改超时，所以我们只能复用连接
+                    return existing_conn
+                else:
+                    # 连接已失效，从连接池中移除
+                    logger.debug(f"[IPMI连接] 移除失效连接: {connection_key}")
+                    self.connections.pop(connection_key, None)
+                    # 关闭失效连接
+                    try:
+                        if hasattr(existing_conn, 'close'):
+                            existing_conn.close()
+                    except Exception as e:
+                        logger.debug(f"[IPMI连接] 关闭失效连接时出错: {e}")
 
             loop = asyncio.get_running_loop()
             
@@ -131,8 +175,8 @@ class IPMIService:
     async def get_power_state(self, ip: str, username: str, password: str, port: int = 623) -> str:
         """获取电源状态"""
         port = self._ensure_port_is_int(port)
+        start_time = time.time()
         try:
-            start_time = time.time()
             logger.debug(f"[电源状态] 开始获取电源状态: {ip}:{port}")
             conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             result = await self._run_sync_ipmi(conn.get_power)
@@ -140,9 +184,11 @@ class IPMIService:
             logger.debug(f"[电源状态] 获取电源状态完成: {ip}:{port}, 耗时: {execution_time:.3f}秒")
             return result.get('powerstate', 'unknown')
         except IpmiException as e:
+            execution_time = time.time() - start_time
             logger.error(f"获取电源状态失败 {ip}: {e}")
             raise IPMIError(f"获取电源状态失败: {str(e)}")
         except Exception as e:
+            execution_time = time.time() - start_time
             # 处理pyghmi库内部的特定错误
             error_msg = str(e)
             if "'Session' object has no attribute 'errormsg'" in error_msg:
@@ -155,12 +201,14 @@ class IPMIService:
     async def power_control(self, ip: str, username: str, password: str, action: str, port: int = 623) -> Dict[str, Any]:
         """电源控制"""
         port = self._ensure_port_is_int(port)
+        start_time = time.time()
+        # 定义电源操作映射
+        power_actions = {'on': 'on', 'off': 'off', 'restart': 'reset', 'force_off': 'off', 'force_restart': 'cycle'}
+        
         try:
-            start_time = time.time()
             logger.debug(f"[电源控制] 开始电源控制操作: {ip}:{port}, 操作: {action}")
             conn = await self.pool.get_connection(ip, username, password, port, timeout=settings.IPMI_TIMEOUT)
             
-            power_actions = {'on': 'on', 'off': 'off', 'restart': 'reset', 'force_off': 'off', 'force_restart': 'cycle'}
             if action not in power_actions:
                 raise IPMIError(f"不支持的电源操作: {action}")
             
@@ -172,9 +220,11 @@ class IPMIService:
             return {"action": action, "result": "success", "message": f"电源{action}操作成功"}
             
         except IpmiException as e:
+            execution_time = time.time() - start_time
             logger.error(f"电源控制失败 {ip} {action}: {e}")
             raise IPMIError(f"电源控制失败: {str(e)}")
         except Exception as e:
+            execution_time = time.time() - start_time
             # 处理pyghmi库内部的特定错误
             error_msg = str(e)
             if "'Session' object has no attribute 'errormsg'" in error_msg:
