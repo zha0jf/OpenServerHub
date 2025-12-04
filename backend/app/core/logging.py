@@ -13,8 +13,10 @@ def setup_logging():
     log_dir.mkdir(exist_ok=True)
     
     # 根据DEBUG环境变量确定日志级别
-    log_level = settings.LOG_LEVEL
-    console_level = "DEBUG" if os.getenv("DEBUG", "").lower() == "true" else "INFO"
+    # 如果环境变量DEBUG=true，则将根日志级别和控制台级别都设为DEBUG
+    debug_mode = os.getenv("DEBUG", "").lower() == "true"
+    log_level = "DEBUG" if debug_mode else settings.LOG_LEVEL
+    console_level = "DEBUG" if debug_mode else "INFO"
     
     logging_config = {
         "version": 1,

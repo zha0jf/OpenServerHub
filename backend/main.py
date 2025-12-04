@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 # 设置日志
 setup_logging()
 
+logger.debug(f"[应用启动] DEBUG环境变量值: '{os.getenv('DEBUG', '')}'")
+logger.debug(f"[应用启动] 当前日志级别: {logging.getLogger().level}")
+
 # 全局Housekeeper实例
 housekeeper = None
 

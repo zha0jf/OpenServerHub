@@ -31,36 +31,50 @@ class IPMIConnectionPool:
     
     def _is_connection_valid(self, conn) -> bool:
         """检查IPMI连接是否仍然有效"""
+        logger.debug(f"[IPMI连接] 开始检查连接有效性: {conn}")
         try:
             # 检查连接对象是否存在
             if conn is None:
+                logger.debug("[IPMI连接] 连接对象为None")
                 return False
             
             # 检查连接对象是否有is_alive方法（pyghmi特定检查）
             if hasattr(conn, 'is_alive'):
-                return conn.is_alive()
+                is_alive = conn.is_alive()
+                logger.debug(f"[IPMI连接] 检查is_alive方法返回: {is_alive}")
+                return is_alive
             
             # 检查连接对象是否有session属性
             if hasattr(conn, 'session') and conn.session is not None:
+                logger.debug("[IPMI连接] 检查session属性")
                 # 检查session是否仍然连接
                 session = conn.session
                 if hasattr(session, 'is_connected'):
-                    return session.is_connected()
+                    is_connected = session.is_connected()
+                    logger.debug(f"[IPMI连接] session.is_connected()返回: {is_connected}")
+                    return is_connected
                 elif hasattr(session, '_connected'):
-                    return bool(session._connected)
+                    is_connected = bool(session._connected)
+                    logger.debug(f"[IPMI连接] session._connected返回: {is_connected}")
+                    return is_connected
             
             # 特殊处理pyghmi的错误消息检查
             # 如果出现'Session no longer connected'错误，说明连接已断开
             if hasattr(conn, '_fail_reason') and conn._fail_reason:
                 fail_reason = str(conn._fail_reason).lower()
+                logger.debug(f"[IPMI连接] 检查_fail_reason: {conn._fail_reason}")
                 if 'session no longer connected' in fail_reason:
+                    logger.debug("[IPMI连接] 检测到'Session no longer connected'错误，连接已断开")
                     return False
             
             # 如果无法确定连接状态，假设连接是有效的
+            logger.debug("[IPMI连接] 无法确定连接状态，假设连接有效")
             return True
         except Exception as e:
             logger.debug(f"[IPMI连接] 检查连接有效性时出错: {e}")
             return False
+        finally:
+            logger.debug("[IPMI连接] 连接有效性检查完成")
     
     async def get_connection(self, ip: str, username: str, password: str, port: int = 623, timeout: int = 30):
         """获取IPMI连接（安全版，带超时保护，避免在OpenBMC卡死）"""
