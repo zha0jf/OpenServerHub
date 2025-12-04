@@ -38,38 +38,26 @@ class IPMIConnectionPool:
                 logger.debug("[IPMI连接] 连接对象为None")
                 return False
             
-            # 检查连接对象是否有is_alive方法（pyghmi特定检查）
-            if hasattr(conn, 'is_alive'):
-                is_alive = conn.is_alive()
-                logger.debug(f"[IPMI连接] 检查is_alive方法返回: {is_alive}")
-                return is_alive
+            # 检查连接对象是否有ipmi_session属性
+            if hasattr(conn, 'ipmi_session') and conn.ipmi_session is not None:
+                logger.debug("[IPMI连接] 检查ipmi_session属性")
+                # 检查ipmi_session是否标记为broken
+                ipmi_session = conn.ipmi_session
+                if hasattr(ipmi_session, 'broken'):
+                    is_broken = bool(ipmi_session.broken)
+                    logger.debug(f"[IPMI连接] ipmi_session.broken返回: {is_broken}")
+                    if is_broken:
+                        logger.debug("[IPMI连接] ipmi_session.broken为True，连接已断开")
+                        return False
+            elif hasattr(conn, 'ipmi_session'):
+                # ipmi_session属性存在但为None
+                logger.debug("[IPMI连接] ipmi_session属性为None")
+                return False
             
-            # 检查连接对象是否有session属性
-            if hasattr(conn, 'session') and conn.session is not None:
-                logger.debug("[IPMI连接] 检查session属性")
-                # 检查session是否仍然连接
-                session = conn.session
-                if hasattr(session, 'is_connected'):
-                    is_connected = session.is_connected()
-                    logger.debug(f"[IPMI连接] session.is_connected()返回: {is_connected}")
-                    return is_connected
-                elif hasattr(session, '_connected'):
-                    is_connected = bool(session._connected)
-                    logger.debug(f"[IPMI连接] session._connected返回: {is_connected}")
-                    return is_connected
-            
-            # 特殊处理pyghmi的错误消息检查
-            # 如果出现'Session no longer connected'错误，说明连接已断开
-            if hasattr(conn, '_fail_reason') and conn._fail_reason:
-                fail_reason = str(conn._fail_reason).lower()
-                logger.debug(f"[IPMI连接] 检查_fail_reason: {conn._fail_reason}")
-                if 'session no longer connected' in fail_reason:
-                    logger.debug("[IPMI连接] 检测到'Session no longer connected'错误，连接已断开")
-                    return False
-            
-            # 如果无法确定连接状态，假设连接是有效的
-            logger.debug("[IPMI连接] 无法确定连接状态，假设连接有效")
+            # 如果所有检查都通过，认为连接是有效的
+            logger.debug("[IPMI连接] 连接检查通过，连接有效")
             return True
+            
         except Exception as e:
             logger.debug(f"[IPMI连接] 检查连接有效性时出错: {e}")
             return False
