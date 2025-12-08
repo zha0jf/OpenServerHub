@@ -359,6 +359,36 @@ const ServerList: React.FC = () => {
     try {
       await serverService.powerControl(server.id, action);
       message.success(`${server.name} 电源${action}操作成功`);
+      
+      // 在1.5秒和4.5秒后分别刷新服务器状态
+      setTimeout(async () => {
+        try {
+          setRefreshingStatus(server.id);
+          await serverService.updateServerStatus(server.id);
+          // 再次加载服务器列表以获取最新状态
+          await loadServers();
+        } catch (statusError) {
+          // 状态刷新失败时给出友好提示，但不显示具体错误信息
+          message.warning('电源操作成功，但状态刷新失败，请手动刷新状态');
+        } finally {
+          setRefreshingStatus(null);
+        }
+      }, 1500); // 1.5秒后执行
+      
+      setTimeout(async () => {
+        try {
+          setRefreshingStatus(server.id);
+          await serverService.updateServerStatus(server.id);
+          // 再次加载服务器列表以获取最新状态
+          await loadServers();
+        } catch (statusError) {
+          // 状态刷新失败时给出友好提示，但不显示具体错误信息
+          message.warning('电源操作成功，但状态刷新失败，请手动刷新状态');
+        } finally {
+          setRefreshingStatus(null);
+        }
+      }, 4500); // 4.5秒后执行
+      
       loadServers(); // 重新加载列表
     } catch (error) {
       message.error('电源操作失败');
@@ -413,6 +443,28 @@ const ServerList: React.FC = () => {
           
           // 清除选中状态并重新加载数据
           setSelectedRowKeys([]);
+          
+          // 在1.5秒和4.5秒后分别刷新所有受影响服务器的状态
+          setTimeout(async () => {
+            try {
+              // 重新加载服务器列表以获取最新状态
+              await loadServers();
+            } catch (statusError) {
+              // 状态刷新失败时给出友好提示，但不显示具体错误信息
+              message.warning('批量操作成功，但状态刷新失败，请手动刷新状态');
+            }
+          }, 1500); // 1.5秒后执行
+          
+          setTimeout(async () => {
+            try {
+              // 重新加载服务器列表以获取最新状态
+              await loadServers();
+            } catch (statusError) {
+              // 状态刷新失败时给出友好提示，但不显示具体错误信息
+              message.warning('批量操作成功，但状态刷新失败，请手动刷新状态');
+            }
+          }, 4500); // 4.5秒后执行
+          
           await loadServers();
           
         } catch (error) {

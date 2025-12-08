@@ -321,6 +321,9 @@ async def power_control(
             user_agent=user_agent,
         )
         
+        # 调度服务器刷新任务，在1秒和4秒后执行两次刷新
+        scheduler_service.schedule_server_refresh(server_id)
+        
         return result
     except ValidationError as e:
         logger.warning(f"电源控制验证失败: {e.message}")
@@ -649,6 +652,16 @@ async def batch_power_control(
         failed_count = total_count - success_count
         
         logger.info(f"批量电源操作完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
+        
+        # 对于可能改变电源状态的操作，调度刷新任务
+        powerChangingActions = ['on', 'off', 'restart', 'force_off', 'force_restart']
+        if request.action in powerChangingActions:
+            try:
+                # 为每个服务器调度刷新任务
+                for server_id in request.server_ids:
+                    scheduler_service.schedule_server_refresh(server_id)
+            except Exception as e:
+                logger.error(f"调度服务器刷新任务失败: {str(e)}")
         
         # 记录批量电源操作
         audit_service.log_batch_operation(
