@@ -14,6 +14,7 @@ from app.services.server_monitoring import PrometheusConfigManager
 from app.services.server_monitoring_service import ServerMonitoringService
 from app.core.exceptions import ValidationError, IPMIError
 from app.core.config import settings
+from app.services.scheduler_service import scheduler_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,8 +62,9 @@ class ServerService:
         if settings.MONITORING_ENABLED and bool(db_server.monitoring_enabled):
             asyncio.create_task(self.server_monitoring_service.on_server_added(db_server))
         
-        # 标记需要状态刷新（前端会调用状态刷新接口）
-        logger.info(f"服务器 {db_server.id} 创建成功，建议立即刷新状态")
+        # 调度服务器状态刷新任务（在0.5秒后执行）
+        scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
+        logger.info(f"服务器 {db_server.id} 创建成功，已调度状态刷新任务")
         
         return db_server
 
@@ -138,9 +140,10 @@ class ServerService:
             original_ipmi_port != new_ipmi_port
         )
         
-        # 如果IPMI相关信息发生变化，记录日志建议刷新状态
+        # 如果IPMI相关信息发生变化，调度服务器状态刷新任务
         if ipmi_changed:
-            logger.info(f"服务器 {db_server.id} IPMI信息已更新，建议立即刷新状态")
+            scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
+            logger.info(f"服务器 {db_server.id} IPMI信息已更新，已调度状态刷新任务")
         
         # 异步处理监控配置更新（仅在启用监控时）
         if settings.MONITORING_ENABLED and (original_monitoring_enabled != bool(db_server.monitoring_enabled) or ipmi_changed):

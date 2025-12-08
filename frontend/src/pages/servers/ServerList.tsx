@@ -334,21 +334,22 @@ const ServerList: React.FC = () => {
       await loadServers();
       
       // 自动刷新新创建或更新的服务器状态
-      try {
-        setRefreshingStatus(createdOrUpdatedServer.id);
-        message.loading('正在刷新服务器状态...', 0.5);
-        
-        await serverService.updateServerStatus(createdOrUpdatedServer.id);
-        message.success('服务器状态已自动刷新');
-        
-        // 再次加载服务器列表以获取最新状态
-        await loadServers();
-      } catch (statusError) {
-        // 状态刷新失败时给出友好提示，但不显示具体错误信息
-        message.warning('服务器保存成功，但状态刷新失败，请手动刷新状态');
-      } finally {
-        setRefreshingStatus(null);
-      }
+      // 在0.5秒后自动刷新服务器状态
+      setTimeout(async () => {
+        try {
+          setRefreshingStatus(createdOrUpdatedServer.id);
+          await serverService.updateServerStatus(createdOrUpdatedServer.id);
+          message.success('服务器状态已自动刷新');
+          
+          // 再次加载服务器列表以获取最新状态
+          await loadServers();
+        } catch (statusError) {
+          // 状态刷新失败时给出友好提示，但不显示具体错误信息
+          message.warning('服务器保存成功，但状态刷新失败，请手动刷新状态');
+        } finally {
+          setRefreshingStatus(null);
+        }
+      }, 500); // 0.5秒后执行
     } catch (error) {
       message.error(editingServer ? '服务器更新失败' : '服务器创建失败');
     }

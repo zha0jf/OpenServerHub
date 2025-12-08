@@ -137,8 +137,28 @@ const ServerDetail: React.FC = () => {
           setPowerLoading(true);
           await serverService.powerControl(server.id, action);
           message.success(`${getPowerActionName(action)}操作成功`);
-          // 刷新服务器状态
-          await loadServerDetail();
+          
+          // 对于可能改变电源状态的操作，调度刷新任务
+          const powerChangingActions: PowerAction[] = ['on', 'off', 'restart', 'force_off', 'force_restart'];
+          if (powerChangingActions.includes(action)) {
+            try {
+              await serverService.scheduleServerRefresh(server.id);
+              
+              // 增加前端自动刷新：在1.5秒和4.5秒后分别刷新服务器状态
+              setTimeout(async () => {
+                await loadServerDetail();
+              }, 1500);
+              
+              setTimeout(async () => {
+                await loadServerDetail();
+              }, 4500);
+            } catch (error) {
+              console.error('调度服务器刷新任务失败:', error);
+            }
+          } else {
+            // 对于不改变电源状态的操作，直接刷新服务器状态
+            await loadServerDetail();
+          }
         } catch (error) {
           message.error(`${getPowerActionName(action)}操作失败`);
         } finally {

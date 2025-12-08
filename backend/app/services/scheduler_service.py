@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.base import JobLookupError
@@ -256,6 +256,105 @@ class PowerStateSchedulerService:
                 "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL,
                 "error": str(e)
             }
+    
+    def schedule_server_refresh(self, server_id: int):
+        """
+        为特定服务器调度刷新任务，在1秒和4秒后执行两次刷新
+        :param server_id: 服务器ID
+        """
+        # 生成唯一的任务ID
+        job_id_base = f"server_refresh_{server_id}"
+        
+        # 先移除可能存在的旧任务
+        try:
+            self.scheduler.remove_job(job_id_base + "_1")
+        except JobLookupError:
+            pass  # 任务不存在，忽略错误
+        
+        try:
+            self.scheduler.remove_job(job_id_base + "_2")
+        except JobLookupError:
+            pass  # 任务不存在，忽略错误
+        
+        # 添加第一次刷新任务（1秒后执行）
+        self.scheduler.add_job(
+            self._execute_single_server_refresh,
+            'date',
+            run_date=datetime.now() + timedelta(seconds=1),
+            id=job_id_base + "_1",
+            replace_existing=True,
+            args=[server_id]
+        )
+        
+        # 添加第二次刷新任务（4秒后执行）
+        self.scheduler.add_job(
+            self._execute_single_server_refresh,
+            'date',
+            run_date=datetime.now() + timedelta(seconds=4),
+            id=job_id_base + "_2",
+            replace_existing=True,
+            args=[server_id]
+        )
+        
+        logger.info(f"已为服务器 {server_id} 调度刷新任务，在1秒和4秒后分别执行刷新")
+    
+    def schedule_single_refresh(self, server_id: int, delay: float = 0.5):
+        """
+        为特定服务器调度单次刷新任务
+        :param server_id: 服务器ID
+        :param delay: 延迟时间（秒），默认0.5秒
+        """
+        # 生成唯一的任务ID
+        job_id = f"single_refresh_{server_id}"
+        
+        # 先移除可能存在的旧任务
+        try:
+            self.scheduler.remove_job(job_id)
+        except JobLookupError:
+            pass  # 任务不存在，忽略错误
+        
+        # 添加刷新任务
+        self.scheduler.add_job(
+            self._execute_single_server_refresh,
+            'date',
+            run_date=datetime.now() + timedelta(seconds=delay),
+            id=job_id,
+            replace_existing=True,
+            args=[server_id]
+        )
+        
+        logger.info(f"已为服务器 {server_id} 调度单次刷新任务，在 {delay} 秒后执行")
+    
+    async def _execute_single_server_refresh(self, server_id: int):
+        """
+        执行单个服务器的电源状态刷新
+        :param server_id: 服务器ID
+        """
+        try:
+            logger.info(f"开始刷新服务器 {server_id} 的电源状态")
+            
+            # 使用异步上下文管理器正确处理会话
+            async with AsyncSessionLocal() as session:
+                # 获取指定服务器
+                from sqlalchemy import select
+                stmt = select(Server).where(Server.id == server_id)
+                result = await session.execute(stmt)
+                server = result.scalar_one_or_none()
+                
+                if not server:
+                    logger.warning(f"未找到ID为 {server_id} 的服务器")
+                    return
+                
+                # 刷新服务器电源状态
+                success = await self._refresh_single_server_power_state(server)
+                
+                if success:
+                    logger.info(f"服务器 {server_id} 电源状态刷新成功")
+                else:
+                    logger.warning(f"服务器 {server_id} 电源状态刷新失败")
+                    
+        except Exception as e:
+            logger.error(f"刷新服务器 {server_id} 电源状态时发生错误: {e}")
 
 
 # 创建全局实例

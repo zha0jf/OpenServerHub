@@ -131,4 +131,10 @@ export const serverService = {
     const response = await api.post<LEDControlResponse>(`/servers/${id}/led-off`);
     return response.data;
   },
+
+  // 调度服务器刷新任务
+  async scheduleServerRefresh(id: number): Promise<any> {
+    const response = await api.post<any>(`/servers/${id}/schedule-refresh`);
+    return response.data;
+  },
 };

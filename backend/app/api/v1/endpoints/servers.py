@@ -852,3 +852,21 @@ async def turn_off_led(
     except Exception as e:
         logger.error(f"LED关闭失败: {str(e)}")
         raise HTTPException(status_code=500, detail="操作失败，请稍后重试")
+
+# 导入定时任务服务
+from app.services.scheduler_service import scheduler_service
+
+@router.post("/{server_id}/schedule-refresh")
+async def schedule_server_refresh(
+    server_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(AuthService.get_current_user)
+):
+    """为特定服务器调度刷新任务，在1秒和4秒后执行两次刷新"""
+    try:
+        # 调度服务器刷新任务
+        scheduler_service.schedule_server_refresh(server_id)
+        return {"message": f"已为服务器 {server_id} 调度刷新任务，在1秒和4秒后分别执行刷新"}
+    except Exception as e:
+        logger.error(f"调度服务器 {server_id} 刷新任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="调度刷新任务失败，请稍后重试")
