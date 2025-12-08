@@ -7,9 +7,12 @@ OpenServerHub 是一个现代化的服务器管理平台，提供统一的界面
 1. [仪表板和页面框架](00-dashboard-overview.md) - 系统概览和导航说明
 2. [用户认证和权限管理](01-authentication.md) - 用户登录和权限控制
 3. [服务器管理](02-server-management.md) - 添加、编辑、删除服务器，以及电源控制
-4. [集群管理](03-cluster-management.md) - 服务器分组和批量操作
-5. [设备发现](device-discovery-guide.md) - 自动发现网络中的服务器设备
-6. [监控系统](monitoring/) - 实时监控服务器状态和性能指标
+4. [服务器详情界面](02-server-detail.md) - 服务器详细信息查看和管理
+5. [集群管理](03-cluster-management.md) - 服务器分组和批量操作
+6. [设备发现](device-discovery-guide.md) - 自动发现网络中的服务器设备
+7. [数据库备份](04-database-backup.md) - 数据库备份和恢复管理
+8. [审计日志](05-audit-logs.md) - 系统操作审计和日志管理
+9. [监控系统](monitoring/) - 实时监控服务器状态和性能指标
    - [用户指南](monitoring/01-user-guide.md)
    - [管理员手册](monitoring/02-admin-guide.md)
    - [用户故事](monitoring/monitoring-user-stories.md)

@@ -46,9 +46,7 @@ echo 3) 重启生产环境
 echo 4) 查看服务状态
 echo 5) 查看日志
 echo 6) 初始化数据库
-echo 7) 备份数据库
-echo 8) 恢复数据库
-set /p choice=请输入选项 (1-8): 
+set /p choice=请输入选项 (1-6): 
 
 if "%choice%"=="1" (
     echo 🏭 正在启动生产环境...
@@ -114,26 +112,6 @@ if "%choice%"=="1" (
     echo 💾 正在初始化数据库...
     docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod exec backend sh -c "cd /app/backend && python init_db.py"
     echo ✅ 数据库初始化完成！
-) else if "%choice%"=="7" (
-    echo 💾 正在备份数据库...
-    REM 获取当前时间戳
-    for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
-    set backup_file=backup_%dt:~0,8%_%dt:~8,6%.db
-    docker-compose -f docker-compose.prod.sqlite.yml --env-file .env.prod exec backend cp /app/data/openserverhub.db /app/data/%backup_file%
-    docker cp openserverhub-backend-prod:/app/data/%backup_file% ./%backup_file%
-    echo ✅ 数据库备份完成: %backup_file%
-) else if "%choice%"=="8" (
-    echo 📂 可用的备份文件：
-    dir backup_*.db 2>nul | findstr .db || echo 未找到备份文件
-    set /p backup_file=请输入备份文件名: 
-    if exist "%backup_file%" (
-        echo 📥 正在恢复数据库...
-        docker cp ./%backup_file% openserverhub-backend-prod:/app/data/openserverhub.db
-        echo ✅ 数据库恢复完成！
-        echo ⚠️  建议重启服务以确保数据一致性
-    ) else (
-        echo ❌ 备份文件不存在！
-    )
 ) else (
     echo ❌ 无效选项！
     pause

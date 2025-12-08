@@ -21,6 +21,7 @@ OpenServerHub 是一个现代化的服务器管理平台，基于 FastAPI + Reac
 - ✅ RESTful API 接口
 - ✅ 自动 API 文档生成
 - ✅ 全局异常处理和日志
+- ✅ 数据库备份管理功能
 
 **前端功能**
 - ✅ React + TypeScript + Ant Design
@@ -32,6 +33,7 @@ OpenServerHub 是一个现代化的服务器管理平台，基于 FastAPI + Reac
 - ✅ 监控数据展示
 - ✅ 电源控制操作
 - ✅ 服务器状态实时刷新
+- ✅ 数据库备份管理界面
 
 #### Week 5-6 集群管理功能 ✅
 - ✅ 服务器分组管理
@@ -44,6 +46,7 @@ OpenServerHub 是一个现代化的服务器管理平台，基于 FastAPI + Reac
 - ✅ AlertManager 告警系统
 - ✅ Grafana 可视化仪表板
 - ✅ 动态监控配置管理
+- ✅ 数据库备份管理功能
 
 #### Week 14-16 待开发功能
 - 🔲 SOL (Serial Over LAN) 串口访问功能
@@ -270,6 +273,14 @@ OpenServerHub/
 ### 告警接口
 - `POST /api/v1/monitoring/alerts/webhook` - AlertManager告警Webhook
 
+### 数据库备份接口
+- `POST /api/v1/backup/create` - 创建数据库备份
+- `GET /api/v1/backup/list` - 获取备份文件列表
+- `DELETE /api/v1/backup/delete` - 删除备份文件
+- `POST /api/v1/backup/restore` - 恢复数据库备份
+- `POST /api/v1/backup/verify` - 验证备份文件完整性
+- `GET /api/v1/backup/download/{filename}` - 下载备份文件
+
 ## 开发进度验收状态
 
 ### Week 1-4 验收标准 ✅ 全部完成
@@ -283,6 +294,7 @@ OpenServerHub/
 - ✅ API 文档自动生成
 - ✅ 用户管理CRUD功能
 - ✅ 监控数据采集API
+- ✅ 数据库备份管理API
 
 #### 前端验收 ✅ 已完成
 - ✅ React 应用正常启动
@@ -292,12 +304,14 @@ OpenServerHub/
 - ✅ 用户管理界面
 - ✅ 基础监控展示
 - ✅ 响应式设计适配
+- ✅ 数据库备份管理界面
 
 #### 整体验收 ✅ 已完成
 - ✅ 前后端正常通信
 - ✅ 用户认证流程完整
 - ✅ 服务器管理功能完整
 - ✅ 一键启动脚本正常工作
+- ✅ 数据库备份功能完整
 
 ### Week 5-6 集群管理 ✅ 已完成
 - ✅ 服务器分组功能
