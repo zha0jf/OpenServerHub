@@ -96,6 +96,10 @@ class IPMIConnectionPool:
                     # 关闭失效连接，退出登录以清理pyghmi缓存
                     try:
                         if hasattr(existing_conn, 'ipmi_session'):
+                            # 1. 欺骗 pyghmi，让它以为连接是好的
+                            existing_conn.ipmi_session.broken = False 
+                            # 2. 欺骗 pyghmi，让它以为已经登出了(避免发包报错)，直接进清理流程
+                            existing_conn.ipmi_session.logged = 0                                 
                             existing_conn.ipmi_session.logout()
                             logger.debug(f"[IPMI连接] logout成功: {connection_key}")
                     except Exception as e:
