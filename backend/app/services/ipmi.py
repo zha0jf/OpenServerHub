@@ -93,12 +93,13 @@ class IPMIConnectionPool:
                     # 连接已失效，从连接池中移除
                     logger.debug(f"[IPMI连接] 移除失效连接: {connection_key}")
                     self.connections.pop(connection_key, None)
-                    # 关闭失效连接
+                    # 关闭失效连接，退出登录以清理pyghmi缓存
                     try:
-                        if hasattr(existing_conn, 'close'):
-                            existing_conn.close()
+                        if hasattr(existing_conn, 'ipmi_session'):
+                            existing_conn.ipmi_session.logout()
+                            logger.debug(f"[IPMI连接] logout成功: {connection_key}")
                     except Exception as e:
-                        logger.debug(f"[IPMI连接] 关闭失效连接时出错: {e}")
+                        logger.debug(f"[IPMI连接] 关闭失效连接时logout出错: {e}")
 
             loop = asyncio.get_running_loop()
             
