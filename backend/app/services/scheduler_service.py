@@ -409,3 +409,7 @@ class PowerStateSchedulerService:
                     
         except Exception as e:
             logger.error(f"刷新服务器 {server_id} 电源状态时发生错误: {e}")
+
+
+# 创建全局实例
+scheduler_service = PowerStateSchedulerService()
