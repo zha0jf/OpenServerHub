@@ -20,10 +20,7 @@ AsyncSessionLocal = async_sessionmaker(
     autocommit=False, 
     autoflush=False, 
     bind=async_engine, 
-    expire_on_commit=False,
-    # 添加连接验证配置
-    autoflush=False,
-    autocommit=False
+    expire_on_commit=False
 )
 
 class MonitoringSchedulerService:
