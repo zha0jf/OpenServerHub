@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # IPMI配置
     IPMI_CONNECTION_POOL_SIZE: int = 500  # 从50提高到500以支持更多服务器
     IPMI_TIMEOUT: int = 10  # 进一步降低超时时间到10秒
+    IPMI_CONCURRENT_LIMIT: int = 20  # IPMI并发限制
+    IPMI_THREAD_POOL_SIZE: int = 20  # IPMI线程池大小
     
     # 定时任务配置
     POWER_STATE_REFRESH_INTERVAL: int = 3  # 电源状态刷新间隔（分钟）

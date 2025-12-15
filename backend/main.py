@@ -16,7 +16,7 @@ from app.api.v1.api import api_router
 from app.models import Base
 from app.services import scheduler_service
 from app.services.monitoring_scheduler import MonitoringSchedulerService  # 导入类本身
-from app.services.ipmi import ipmi_pool
+# from app.services.ipmi import ipmi_pool  # 已移除，因切换到多进程实现
 
 # Prometheus指标导出
 try:

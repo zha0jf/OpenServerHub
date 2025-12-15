@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BMC服务器电源状态定时获取测试脚本
-用于测试IPMI连接池的连接故障检查和重连功能
-
-注意：此测试文件已被禁用，因为已切换到多进程实现，不再使用连接池。
+BMC服务器电源状态循环测试脚本
+用于测试多进程IPMI实现的连接稳定性和电源状态获取功能
 """
-
-print("注意：BMC电源状态测试已被禁用，因为已切换到多进程实现，不再使用连接池。")
-sys.exit(0)
-
-
 
 import asyncio
 import logging
@@ -22,17 +15,16 @@ import os
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# from app.services.ipmi import ipmi_pool, IPMIService  # 已移除ipmi_pool，因切换到多进程实现
 from app.services.ipmi import IPMIService
 from app.core.config import settings
 
 # 配置日志
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bmc_power_status_test.log')
+        logging.FileHandler('bmc_power_status_loop_test.log')
     ]
 )
 
@@ -76,10 +68,6 @@ async def periodic_power_status_check(ip: str, username: str, password: str, por
     
     logger.info(f"开始定时获取服务器 {ip}:{port} 的电源状态，间隔 {interval} 秒")
     
-    # 记录连接池初始状态
-    initial_pool_size = len(ipmi_pool.connections)
-    logger.info(f"初始连接池大小: {initial_pool_size}")
-    
     check_count = 0
     success_count = 0
     failure_count = 0
@@ -105,10 +93,6 @@ async def periodic_power_status_check(ip: str, username: str, password: str, por
                 failure_count += 1
                 logger.warning(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 电源状态获取失败，耗时: {duration:.2f}秒")
                 
-            # 显示连接池状态
-            current_pool_size = len(ipmi_pool.connections)
-            logger.info(f"当前连接池大小: {current_pool_size}")
-                
         except Exception as e:
             failure_count += 1
             logger.error(f"定时获取电源状态过程中发生错误: {e}")
@@ -124,56 +108,6 @@ async def periodic_power_status_check(ip: str, username: str, password: str, por
             await asyncio.sleep(1)
     
     logger.info(f"定时检查结束 - 总检查: {check_count}, 成功: {success_count}, 失败: {failure_count}, 成功率: {success_count/check_count*100:.1f}%")
-
-async def test_connection_pool_management(ip: str, username: str, password: str, port: int = 623):
-    """测试连接池管理功能"""
-    logger.info("开始测试连接池管理功能")
-    
-    try:
-        # 测试多次连接获取
-        for i in range(3):
-            logger.info(f"第 {i+1} 次获取连接")
-            conn = await ipmi_pool.get_connection(ip, username, password, port)
-            logger.info(f"成功获取连接: {conn}")
-            
-            # 检查连接有效性
-            is_valid = ipmi_pool._is_connection_valid(conn)
-            logger.info(f"连接有效性检查结果: {is_valid}")
-            
-            await asyncio.sleep(1)
-            
-        logger.info("连接池管理功能测试完成")
-        
-    except Exception as e:
-        logger.error(f"连接池管理功能测试失败: {e}")
-
-async def test_connection_failure_recovery(ip: str, username: str, password: str, port: int = 623):
-    """测试连接故障恢复功能"""
-    logger.info("开始测试连接故障恢复功能")
-    
-    try:
-        # 正常获取连接
-        logger.info("1. 正常获取连接")
-        conn1 = await ipmi_pool.get_connection(ip, username, password, port)
-        logger.info(f"   成功获取连接: {conn1}")
-        
-        # 模拟连接失效
-        logger.info("2. 模拟连接失效")
-        connection_key = f"{ip}:{port}:{username}"
-        if connection_key in ipmi_pool.connections:
-            # 移除连接但不关闭，模拟连接失效
-            ipmi_pool.connections.pop(connection_key)
-            logger.info("   已移除连接（模拟失效）")
-        
-        # 再次获取连接，应该会重新建立
-        logger.info("3. 重新获取连接（测试自动恢复）")
-        conn2 = await ipmi_pool.get_connection(ip, username, password, port)
-        logger.info(f"   成功重新获取连接: {conn2}")
-        
-        logger.info("连接故障恢复功能测试完成")
-        
-    except Exception as e:
-        logger.error(f"连接故障恢复功能测试失败: {e}")
 
 async def main():
     """主函数"""
@@ -191,24 +125,15 @@ async def main():
     
     CHECK_INTERVAL = int(input("请输入检查间隔秒数 (默认: 60): ").strip() or "60")
     
-    logger.info("BMC服务器电源状态定时获取测试开始")
+    logger.info("BMC服务器电源状态循环测试开始")
     logger.info(f"配置信息: IP={BMC_IP}, Username={BMC_USERNAME}, Port={BMC_PORT}")
     logger.info(f"检查间隔: {CHECK_INTERVAL} 秒")
     logger.info(f"IPMI超时设置: {settings.IPMI_TIMEOUT}秒")
-    logger.info(f"连接池大小: {settings.IPMI_CONNECTION_POOL_SIZE}")
     
     try:
         # 首先测试单次连接和电源状态获取
         logger.info("=== 单次连接测试 ===")
         await test_single_power_status(BMC_IP, BMC_USERNAME, BMC_PASSWORD, BMC_PORT)
-        
-        # 测试连接池管理
-        logger.info("=== 连接池管理测试 ===")
-        await test_connection_pool_management(BMC_IP, BMC_USERNAME, BMC_PASSWORD, BMC_PORT)
-        
-        # 测试连接故障恢复
-        logger.info("=== 连接故障恢复测试 ===")
-        await test_connection_failure_recovery(BMC_IP, BMC_USERNAME, BMC_PASSWORD, BMC_PORT)
         
         # 开始定时检查
         logger.info("=== 开始定时检查 ===")
@@ -216,19 +141,13 @@ async def main():
         
     except Exception as e:
         logger.error(f"测试过程中发生错误: {e}")
-    finally:
-        logger.info("测试结束，清理资源...")
-        # 关闭连接池
-        ipmi_pool.close()
-        logger.info("资源清理完成")
 
 if __name__ == "__main__":
-    print("BMC服务器电源状态定时获取测试工具")
+    print("BMC服务器电源状态循环测试工具")
     print("=" * 50)
     print("此工具将测试:")
     print("1. 定时获取BMC服务器电源状态")
-    print("2. IPMI连接池的连接管理和故障恢复功能")
-    print("3. 连接有效性检查")
+    print("2. 多进程IPMI实现的连接稳定性")
     print("")
     print("按 Ctrl+C 可以随时停止测试")
     print("=" * 50)
