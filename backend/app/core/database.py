@@ -15,17 +15,15 @@ engine = create_engine(
     echo=True if settings.ENVIRONMENT == "development" else False  # 仅在开发环境显示SQL
 )
 
-# 异步引擎配置 - 添加连接池配置
+# 异步引擎配置 - 为SQLite调整配置
+# 注意：SQLite使用aiosqlite时，不支持pool_size, max_overflow, pool_timeout等参数
 async_engine = create_async_engine(
     settings.DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///"),
     connect_args={"check_same_thread": False},
     echo=True if settings.ENVIRONMENT == "development" else False,
-    # 添加连接池配置
-    pool_size=10,  # 连接池大小
-    max_overflow=20,  # 超出pool_size后最多可创建的连接数
+    # SQLite特定配置
     pool_recycle=3600,  # 连接回收时间（秒），1小时
     pool_pre_ping=True,  # 在使用连接前先ping一下，确保连接有效
-    pool_timeout=30,  # 获取连接的超时时间
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
