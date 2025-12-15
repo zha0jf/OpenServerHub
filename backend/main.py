@@ -6,11 +6,12 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
 import os
+import asyncio
 
 from pyghmi.ipmi.command import Housekeeper
 
 from app.core.config import settings
-from app.core.database import engine
+from app.core.database import engine, periodic_health_check
 from app.core.logging import setup_logging
 from app.api.v1.api import api_router
 from app.models import Base
@@ -46,10 +47,13 @@ housekeeper = None
 # 导入监控调度服务模块（注意：不是实例）
 import app.services.monitoring_scheduler as monitoring_module
 
+# 健康检查任务引用
+health_check_task = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global housekeeper
+    global housekeeper, health_check_task
     
     # 启动时创建数据库表
     Base.metadata.create_all(bind=engine)
@@ -63,6 +67,13 @@ async def lifespan(app: FastAPI):
         logger.error(f"IPMI Housekeeper初始化失败: {e}")
         # 不应该因为Housekeeper初始化失败而阻止应用启动
         housekeeper = None
+    
+    # 启动数据库健康检查任务
+    try:
+        health_check_task = asyncio.create_task(periodic_health_check())
+        logger.info("数据库健康检查任务已启动")
+    except Exception as e:
+        logger.error(f"启动数据库健康检查任务失败: {e}")
     
     # 打印配置值用于调试
     logger.info(f"POWER_STATE_REFRESH_ENABLED 配置值: {settings.POWER_STATE_REFRESH_ENABLED}")
@@ -100,6 +111,15 @@ async def lifespan(app: FastAPI):
         logger.info("监控数据采集定时任务服务已停止")
     except Exception as e:
         logger.error(f"停止监控数据采集定时任务服务失败: {e}")
+    
+    # 停止数据库健康检查任务
+    if health_check_task:
+        health_check_task.cancel()
+        try:
+            await health_check_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("数据库健康检查任务已停止")
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
 

@@ -11,15 +11,19 @@ from ..core.database import async_engine
 from ..models.server import Server, ServerStatus, PowerState
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError, DisconnectionError
 
 logger = logging.getLogger(__name__)
 
-# 创建异步会话工厂
+# 创建异步会话工厂 - 添加更多配置
 AsyncSessionLocal = async_sessionmaker(
     autocommit=False, 
     autoflush=False, 
     bind=async_engine, 
-    expire_on_commit=False
+    expire_on_commit=False,
+    # 添加连接验证配置
+    autoflush=False,
+    autocommit=False
 )
 
 class MonitoringSchedulerService:

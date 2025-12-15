@@ -10,15 +10,20 @@ from .ipmi import IPMIService
 from ..core.database import async_engine
 from ..models.server import Server, PowerState, ServerStatus
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.exc import SQLAlchemyError, DisconnectionError
+from sqlalchemy import update, select
 
 logger = logging.getLogger(__name__)
 
-# 创建异步会话工厂
+# 创建异步会话工厂 - 添加更多配置
 AsyncSessionLocal = async_sessionmaker(
     autocommit=False, 
     autoflush=False, 
     bind=async_engine, 
-    expire_on_commit=False
+    expire_on_commit=False,
+    # 添加连接验证配置
+    autoflush=False,
+    autocommit=False
 )
 
 class PowerStateSchedulerService:
@@ -92,7 +97,6 @@ class PowerStateSchedulerService:
             # 使用异步上下文管理器正确处理会话
             async with AsyncSessionLocal() as session:
                 # 获取所有服务器
-                from sqlalchemy import select
                 stmt = select(Server)
                 result = await session.execute(stmt)
                 servers = result.scalars().all()
@@ -184,21 +188,51 @@ class PowerStateSchedulerService:
                 bmc_status = ServerStatus.ONLINE
                 
                 # 更新数据库中的电源状态和BMC状态
-                async with AsyncSessionLocal() as session:
-                    from sqlalchemy import update
-                    stmt = update(Server).where(Server.id == server.id).values(
-                        power_state=power_state_enum,
-                        status=bmc_status,
-                        last_seen=datetime.utcnow()
+                try:
+                    async with AsyncSessionLocal() as session:
+                        stmt = update(Server).where(Server.id == server.id).values(
+                            power_state=power_state_enum,
+                            status=bmc_status,
+                            last_seen=datetime.utcnow()
+                        )
+                        await session.execute(stmt)
+                        await session.commit()
+                        
+                    logger.debug(
+                        f"服务器 {server.name} ({server.ipmi_ip}) 电源状态已更新: {power_state_enum.value}, "
+                        f"BMC状态已更新: {bmc_status.value}"
                     )
-                    await session.execute(stmt)
-                    await session.commit()
+                    return True
+                except (SQLAlchemyError, DisconnectionError) as db_error:
+                    logger.error(
+                        f"更新服务器 {server.name} ({server.ipmi_ip}) 数据库状态失败: {db_error}"
+                    )
+                    # 尝试重新建立连接后重试一次
+                    try:
+                        async with AsyncSessionLocal() as session:
+                            stmt = update(Server).where(Server.id == server.id).values(
+                                power_state=power_state_enum,
+                                status=bmc_status,
+                                last_seen=datetime.utcnow()
+                            )
+                            await session.execute(stmt)
+                            await session.commit()
+                            
+                        logger.debug(
+                            f"服务器 {server.name} ({server.ipmi_ip}) 电源状态已更新（重试成功）: {power_state_enum.value}"
+                        )
+                        return True
+                    except Exception as retry_error:
+                        logger.error(
+                            f"重试更新服务器 {server.name} ({server.ipmi_ip}) 数据库状态失败: {retry_error}"
+                        )
+                        return False
+                except Exception as e:
+                    logger.error(
+                        f"更新服务器 {server.name} ({server.ipmi_ip}) 数据库状态时发生未知错误: {e}"
+                    )
+                    return False
                     
-                logger.debug(
-                    f"服务器 {server.name} ({server.ipmi_ip}) 电源状态已更新: {power_state_enum.value}, "
-                    f"BMC状态已更新: {bmc_status.value}"
-                )
-                return True
             else:
                 logger.warning(
                     f"无法获取服务器 {server.name} ({server.ipmi_ip}) 的电源状态"
@@ -211,14 +245,38 @@ class PowerStateSchedulerService:
             )
             
             # 连接失败时更新服务器状态为离线，电源状态为未知
-            async with AsyncSessionLocal() as session:
-                from sqlalchemy import update
-                stmt = update(Server).where(Server.id == server.id).values(
-                    status=ServerStatus.OFFLINE,
-                    power_state=PowerState.UNKNOWN
+            try:
+                async with AsyncSessionLocal() as session:
+                    stmt = update(Server).where(Server.id == server.id).values(
+                        status=ServerStatus.OFFLINE,
+                        power_state=PowerState.UNKNOWN
+                    )
+                    await session.execute(stmt)
+                    await session.commit()
+            except (SQLAlchemyError, DisconnectionError) as db_error:
+                logger.error(
+                    f"更新服务器 {server.name} ({server.ipmi_ip}) 离线状态失败: {db_error}"
                 )
-                await session.execute(stmt)
-                await session.commit()
+                # 尝试重新建立连接后重试一次
+                try:
+                    async with AsyncSessionLocal() as session:
+                        stmt = update(Server).where(Server.id == server.id).values(
+                            status=ServerStatus.OFFLINE,
+                            power_state=PowerState.UNKNOWN
+                        )
+                        await session.execute(stmt)
+                        await session.commit()
+                    logger.debug(
+                        f"服务器 {server.name} ({server.ipmi_ip}) 离线状态已更新（重试成功）"
+                    )
+                except Exception as retry_error:
+                    logger.error(
+                        f"重试更新服务器 {server.name} ({server.ipmi_ip}) 离线状态失败: {retry_error}"
+                    )
+            except Exception as update_error:
+                logger.error(
+                    f"更新服务器 {server.name} ({server.ipmi_ip}) 离线状态时发生未知错误: {update_error}"
+                )
             
             return False
     
@@ -336,7 +394,6 @@ class PowerStateSchedulerService:
             # 使用异步上下文管理器正确处理会话
             async with AsyncSessionLocal() as session:
                 # 获取指定服务器
-                from sqlalchemy import select
                 stmt = select(Server).where(Server.id == server_id)
                 result = await session.execute(stmt)
                 server = result.scalar_one_or_none()
@@ -355,7 +412,3 @@ class PowerStateSchedulerService:
                     
         except Exception as e:
             logger.error(f"刷新服务器 {server_id} 电源状态时发生错误: {e}")
-
-
-# 创建全局实例
-scheduler_service = PowerStateSchedulerService()
