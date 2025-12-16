@@ -243,7 +243,14 @@ class IPMIService:
         # 用于 pyghmi 这种可能导致 GIL 锁死的操作
         if IPMIService._process_pool is None:
             max_procs = getattr(settings, 'IPMI_PROCESS_POOL_SIZE', 4)
-            IPMIService._process_pool = ProcessPoolExecutor(max_workers=max_procs)
+            try:
+                IPMIService._process_pool = ProcessPoolExecutor(
+                    max_workers=max_procs, 
+                    max_tasks_per_child=1  # 仅 Python 3.11+ 支持
+                )
+            except TypeError:
+                # 旧版本 Python 不支持此参数，回退到默认
+                IPMIService._process_pool = ProcessPoolExecutor(max_workers=max_procs)
             logger.info(f"IPMI ProcessPoolExecutor started with {max_procs} workers")
         
         # 2. 初始化线程池

@@ -173,16 +173,26 @@ class PowerStateSchedulerService:
                     ipmi_time = (datetime.now() - ipmi_start).total_seconds()
                     logger.debug(f"[电源状态刷新] 服务器 {server_id} IPMI调用耗时: {ipmi_time:.3f}秒")
                     
-                    # 3. 转换电源状态
-                    try:
-                        new_power_state = PowerState(power_state_str.lower())
-                    except ValueError:
-                        logger.warning(f"无效的电源状态值: {power_state_str}")
+                    # 3. 根据IPMI调用结果确定服务器在线状态和电源状态
+                    if power_state_str and power_state_str != "unknown":
+                        # IPMI调用成功，服务器在线
+                        server_status = ServerStatus.ONLINE
+                        
+                        # 转换电源状态
+                        try:
+                            new_power_state = PowerState(power_state_str.lower())
+                        except ValueError:
+                            logger.warning(f"无效的电源状态值: {power_state_str}")
+                            new_power_state = PowerState.UNKNOWN
+                    else:
+                        # IPMI调用失败，服务器离线，电源状态设为未知
+                        server_status = ServerStatus.OFFLINE
                         new_power_state = PowerState.UNKNOWN
                     
                     # 4. 更新数据库
                     db_update_start = datetime.now()
                     stmt = update(Server).where(Server.id == server_id).values(
+                        status=server_status,
                         power_state=new_power_state
                     )
                     await session.execute(stmt)
@@ -190,12 +200,12 @@ class PowerStateSchedulerService:
                     db_update_time = (datetime.now() - db_update_start).total_seconds()
                     logger.debug(f"[电源状态刷新] 服务器 {server_id} 数据库更新耗时: {db_update_time:.3f}秒")
                     
-                    logger.debug(f"服务器 {server_id} 电源状态更新成功: {new_power_state.value}")
+                    logger.debug(f"服务器 {server_id} 状态更新成功: 状态={server_status.value}, 电源={new_power_state.value}")
                     return True
                     
                 except Exception as e:
                     await session.rollback()
-                    logger.error(f"刷新服务器 {server_id} 电源状态失败: {e}")
+                    logger.error(f"刷新服务器 {server_id} 状态失败: {e}")
                     return False
 
     def get_status(self) -> Dict[str, Any]:
