@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 
 class AuditLogBase(BaseModel):
     action: str
@@ -10,8 +10,8 @@ class AuditLogBase(BaseModel):
     resource_type: Optional[str] = None
     resource_id: Optional[int] = None
     resource_name: Optional[str] = None
-    action_details: Optional[str] = None
-    result: Optional[str] = None
+    action_details: Optional[Union[Dict[str, Any], str]] = None
+    result: Optional[Union[Dict[str, Any], str]] = None
     error_message: Optional[str] = None
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
