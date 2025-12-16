@@ -82,11 +82,12 @@ class ServerGroupResponse(ServerGroupBase):
 class BatchPowerRequest(BaseModel):
     """批量电源操作请求"""
     server_ids: List[int] = Field(..., min_length=1, max_length=50, description="服务器ID列表")
-    action: str = Field(..., description="电源操作类型: on, off, restart, force_off")
+    action: str = Field(..., description="电源操作类型: on, off, restart, force_off, force_restart")
     
     @validator('action')
     def validate_action(cls, v):
-        allowed_actions = ['on', 'off', 'restart', 'force_off']
+        # 增加了 force_restart
+        allowed_actions = ['on', 'off', 'restart', 'force_off', 'force_restart']
         if v not in allowed_actions:
             raise ValueError(f'不支持的操作类型，支持的操作: {", ".join(allowed_actions)}')
         return v
@@ -180,3 +181,34 @@ class CSVImportResponse(BaseModel):
     success_count: int = Field(description="成功导入数量")
     failed_count: int = Field(description="失败导入数量")
     failed_details: List[Dict[str, Any]] = Field(description="失败详情")
+
+
+# 补充在 BatchPowerResponse 之后，或文件末尾
+
+class BatchUpdateMonitoringRequest(BaseModel):
+    """批量更新监控请求"""
+    server_ids: List[int] = Field(..., min_length=1, description="服务器ID列表")
+    monitoring_enabled: bool = Field(..., description="是否启用监控")
+
+class BatchUpdateMonitoringResponse(BaseModel):
+    """批量更新监控响应"""
+    total_count: int = Field(description="总数量")
+    success_count: int = Field(description="成功数量")
+    failed_count: int = Field(description="失败数量")
+    results: List[BatchOperationResult] = Field(description="详细结果")
+
+class RedfishSupportResponse(BaseModel):
+    server_id: int
+    redfish_supported: bool
+    redfish_version: Optional[str] = None
+    message: Optional[str] = None
+
+class LedStatusResponse(BaseModel):
+    server_id: int
+    status: str = Field(description="LED状态") # 注意：路由里可能叫 status 或 state，需与 service 返回一致
+    supported: bool
+
+class LedControlResponse(BaseModel):
+    server_id: int
+    success: bool
+    message: str

@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
+from typing import Literal
 import logging
-
-# Pydantic 导入
-from pydantic import BaseModel, Field 
 
 from app.core.database import get_async_db
 from app.schemas.server import (
@@ -589,7 +587,7 @@ async def delete_server(
 @router.post("/{server_id}/power/{action}")
 async def power_control(
     server_id: int,
-    action: str,  # on, off, restart, force_off
+    action: Literal['on', 'off', 'restart', 'force_off', 'force_restart'], # 使用 Literal 限制
     request: Request,
     db: AsyncSession = Depends(get_async_db),
     current_user = Depends(get_current_user)
