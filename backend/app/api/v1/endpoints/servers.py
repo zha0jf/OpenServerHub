@@ -1,20 +1,24 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional
 import logging
 
 from app.core.database import get_async_db
-from app.schemas.server import ServerCreate, ServerUpdate, ServerResponse, ServerGroupCreate, ServerGroupResponse, BatchPowerRequest, BatchPowerResponse, ClusterStatsResponse
+from app.schemas.server import (
+    ServerCreate, ServerUpdate, ServerResponse, ServerListResponse,
+    ServerStatistics, ServerGroupCreate, ServerGroupResponse,
+    BatchPowerRequest, BatchUpdateMonitoringRequest, PowerControlResponse,
+    BatchPowerResponse, BatchUpdateMonitoringResponse, RedfishSupportResponse,
+    LedStatusResponse, LedControlResponse
+)
 from app.services.server import ServerService
-from app.services.auth import AuthService
+from app.services.auth import get_current_user
 from app.services.audit_log import AuditLogService
-from app.models.audit_log import AuditAction
-from app.core.exceptions import ValidationError, IPMIError, NotFoundError
-from pydantic import BaseModel, Field
-
-logger = logging.getLogger(__name__)
+from app.models.audit_log import AuditAction, AuditStatus
+from app.core.config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def get_client_ip(request: Request) -> str:
     """获取客户端IP地址"""
@@ -30,7 +34,7 @@ async def create_server(
     server_data: ServerCreate,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """添加服务器"""
     try:
@@ -102,7 +106,7 @@ async def get_servers(
     limit: int = 100,
     group_id: Optional[int] = None,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取服务器列表"""
     server_service = ServerService(db)
@@ -114,7 +118,7 @@ async def get_servers(
 async def get_cluster_statistics(
     group_id: Optional[int] = None,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取集群统计信息"""
     try:
@@ -132,7 +136,7 @@ async def get_cluster_statistics(
 async def get_server(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取指定服务器"""
     server_service = ServerService(db)
@@ -148,7 +152,7 @@ async def update_server(
     server_data: ServerUpdate,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """更新服务器信息"""
     try:
@@ -219,7 +223,7 @@ async def delete_server(
     server_id: int,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """删除服务器"""
     try:
@@ -279,7 +283,7 @@ async def power_control(
     action: str,  # on, off, restart, force_off
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """服务器电源控制"""
     try:
@@ -367,7 +371,7 @@ async def power_control(
 async def update_server_status(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """更新服务器状态"""
     try:
@@ -392,7 +396,7 @@ async def create_server_group(
     group_data: ServerGroupCreate,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """创建服务器分组"""
     try:
@@ -458,7 +462,7 @@ async def create_server_group(
 @router.get("/groups/", response_model=List[ServerGroupResponse])
 async def get_server_groups(
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取服务器分组列表"""
     server_service = ServerService(db)
@@ -469,7 +473,7 @@ async def get_server_groups(
 async def get_server_group(
     group_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取指定服务器分组"""
     server_service = ServerService(db)
@@ -485,7 +489,7 @@ async def update_server_group(
     group_data: ServerGroupCreate,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """更新服务器分组"""
     try:
@@ -555,7 +559,7 @@ async def delete_server_group(
     group_id: int,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """删除服务器分组"""
     try:
@@ -631,7 +635,7 @@ async def batch_power_control(
     request: BatchPowerRequest,
     http_request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """批量电源控制"""
     try:
@@ -695,18 +699,12 @@ async def batch_power_control(
         logger.error(f"批量电源操作失败: {str(e)}")
         raise HTTPException(status_code=500, detail="批量操作失败，请稍后重试")
 
-
-class BatchUpdateMonitoringRequest(BaseModel):
-    """批量更新监控状态请求"""
-    server_ids: List[int] = Field(..., min_length=1, max_length=100, description="服务器ID列表")
-    monitoring_enabled: bool = Field(..., description="监控启用状态")
-
-@router.post("/batch/monitoring", response_model=BatchPowerResponse)
+@router.post("/batch/monitoring", response_model=BatchUpdateMonitoringResponse)
 async def batch_update_monitoring(
     request: BatchUpdateMonitoringRequest,
     http_request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """批量更新服务器监控状态"""
     try:
@@ -746,7 +744,7 @@ async def batch_update_monitoring(
             user_agent=http_request.headers.get("user-agent", "unknown"),
         )
         
-        return BatchPowerResponse(
+        return BatchUpdateMonitoringResponse(
             total_count=total_count,
             success_count=success_count,
             failed_count=failed_count,
@@ -786,7 +784,7 @@ class LEDControlResponse(BaseModel):
 async def check_redfish_support(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """检查服务器BMC是否支持Redfish"""
     try:
@@ -808,7 +806,7 @@ async def check_redfish_support(
 async def get_led_status(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取服务器LED状态"""
     try:
@@ -830,7 +828,7 @@ async def get_led_status(
 async def turn_on_led(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """点亮服务器LED"""
     try:
@@ -852,7 +850,7 @@ async def turn_on_led(
 async def turn_off_led(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """关闭服务器LED"""
     try:
@@ -877,7 +875,7 @@ from app.services.scheduler_service import scheduler_service
 async def schedule_server_refresh(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """为特定服务器调度刷新任务，在1秒和4秒后执行两次刷新"""
     try:

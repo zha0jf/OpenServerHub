@@ -1,15 +1,15 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 import logging
 
 from app.core.database import get_async_db
-from app.schemas.user import UserCreate, UserUpdate, UserResponse
+from app.schemas.user import UserResponse, UserCreate, UserUpdate
 from app.services.user import UserService
-from app.services.auth import AuthService
+from app.services.auth import get_current_admin_user, get_current_user
 from app.services.audit_log import AuditLogService
-from app.models.audit_log import AuditAction
+from app.models.audit_log import AuditAction, AuditStatus
 from app.core.exceptions import ValidationError, NotFoundError
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ async def create_user(
     user_data: UserCreate,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_admin_user)
+    current_user = Depends(get_current_admin_user)
 ):
     """创建用户（仅管理员）"""
     try:
@@ -88,7 +88,7 @@ async def get_users(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取用户列表"""
     user_service = UserService(db)
@@ -98,7 +98,7 @@ async def get_users(
 async def get_user(
     user_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取指定用户"""
     user_service = UserService(db)
@@ -113,7 +113,7 @@ async def update_user(
     user_data: UserUpdate,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """更新用户信息"""
     try:
@@ -184,7 +184,7 @@ async def delete_user(
     user_id: int,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_admin_user)
+    current_user = Depends(get_current_admin_user)
 ):
     """删除用户（仅管理员）"""
     try:

@@ -6,7 +6,7 @@ from app.core.database import get_async_db
 from app.core.config import settings
 from app.schemas.auth import Token, UserLogin
 from app.schemas.user import UserResponse
-from app.services.auth import AuthService
+from app.services.auth import AuthService, get_current_user, get_current_admin_user
 from app.services.audit_log import AuditLogService
 from app.models.audit_log import AuditAction, AuditStatus
 
@@ -62,6 +62,13 @@ async def login(
     )
     
     access_token = auth_service.create_access_token(user.id)
+    
+    # 在返回之前，确保所有需要的字段都已加载，避免在Pydantic序列化时触发数据库查询
+    # 显式访问可能触发查询的字段
+    _ = user.updated_at
+    _ = user.created_at
+    _ = user.last_login_at
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -71,7 +78,7 @@ async def login(
 @router.post("/logout")
 async def logout(
     request: Request = None,
-    current_user = Depends(AuthService.get_current_user),
+    current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
     """用户登出"""
@@ -81,19 +88,43 @@ async def logout(
     client_ip = get_client_ip(request) if request else "unknown"
     user_agent = request.headers.get("user-agent", "unknown") if request else "unknown"
     
-    # 记录登出操作
+    # 记录登出日志
     await audit_service.log_logout(
         user_id=current_user.id,
         username=current_user.username,
         ip_address=client_ip,
         user_agent=user_agent,
+        success=True,
     )
     
     return {"message": "成功登出"}
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(
-    current_user = Depends(AuthService.get_current_user)
+async def read_users_me(
+    current_user = Depends(get_current_user)
 ):
     """获取当前用户信息"""
-    return UserResponse.model_validate(current_user)
+    return current_user
+
+@router.put("/me", response_model=UserResponse)
+async def update_current_user(
+    user_update: UserUpdate,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """更新当前用户信息"""
+    auth_service = AuthService(db)
+    updated_user = await auth_service.user_service.update_user(current_user.id, user_update)
+    if not updated_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 记录用户信息更新日志
+    audit_service = AuditLogService(db)
+    await audit_service.log_user_action(
+        user_id=current_user.id,
+        action=AuditAction.UPDATE_PROFILE,
+        status=AuditStatus.SUCCESS,
+        details=f"用户 {current_user.username} 更新了个人信息"
+    )
+    
+    return updated_user

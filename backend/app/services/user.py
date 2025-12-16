@@ -1,24 +1,21 @@
+import asyncio
 from typing import Optional, List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate
 from app.core.exceptions import ValidationError
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from app.core import security
 
 class UserService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    def get_password_hash(self, password: str) -> str:
-        """生成密码哈希"""
-        # bcrypt对密码长度有限制，不能超过72字节
-        password_bytes = password.encode('utf-8')
-        if len(password_bytes) > 72:
-            raise ValidationError("密码不能超过72个字节，请缩短密码长度")
-        return pwd_context.hash(password)
+    async def _hash_password(self, password: str) -> str:
+        """内部辅助：异步执行密码哈希"""
+        loop = asyncio.get_running_loop()
+        # 调用 security 模块的同步函数
+        return await loop.run_in_executor(None, security.get_password_hash, password)
 
     async def create_user(self, user_data: UserCreate) -> User:
         """创建用户"""
@@ -32,9 +29,9 @@ class UserService:
         
         # 创建用户
         try:
-            password_hash = self.get_password_hash(user_data.password)
+            password_hash = await self._hash_password(user_data.password)
         except Exception as e:
-            raise ValidationError(f"密码哈希处理失败: {str(e)}")
+            raise ValidationError(f"密码处理失败: {str(e)}")
         
         db_user = User(
             username=user_data.username,
@@ -84,9 +81,9 @@ class UserService:
         # 处理密码更新
         if "password" in update_data:
             try:
-                update_data["password_hash"] = self.get_password_hash(update_data.pop("password"))
+                update_data["password_hash"] = await self._hash_password(update_data.pop("password"))
             except Exception as e:
-                raise ValidationError(f"密码哈希处理失败: {str(e)}")
+                raise ValidationError(f"密码处理失败: {str(e)}")
         
         # 检查用户名和邮箱唯一性
         if "username" in update_data and update_data["username"] != db_user.username:

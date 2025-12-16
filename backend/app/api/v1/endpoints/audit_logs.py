@@ -1,27 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timedelta
-from io import StringIO, BytesIO
-import csv
-import json
-import logging
+from typing import List, Optional
+from datetime import datetime
 
 from app.core.database import get_async_db
-from app.services.auth import AuthService
-from app.schemas.audit_log import AuditLogListResponse, AuditLog
+from app.schemas.audit_log import AuditLogResponse, AuditLogQueryParams
 from app.services.audit_log import AuditLogService
-from app.models.user import UserRole
-from app.models.audit_log import AuditLog as AuditLogModel, AuditAction, AuditStatus, AuditResourceType
-
-try:
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-    HAS_OPENPYXL = True
-except ImportError:
-    HAS_OPENPYXL = False
-
-logger = logging.getLogger(__name__)
+from app.services.auth import get_current_admin_user
+from app.models.audit_log import AuditLog, AuditAction, AuditResourceType, AuditStatus
 
 router = APIRouter()
 
@@ -29,7 +15,7 @@ router = APIRouter()
 
 @router.get("/types")
 async def get_audit_types(
-    current_user = Depends(AuthService.get_current_admin_user),
+    current_user = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -56,7 +42,7 @@ async def get_audit_types(
 @router.get("/stats/summary")
 async def get_audit_stats_summary(
     days: int = Query(7, ge=1, le=90),
-    current_user = Depends(AuthService.get_current_admin_user),
+    current_user = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -73,39 +59,39 @@ async def get_audit_stats_summary(
     
     # 统计各操作类型的数量
     stmt = select(
-        AuditLogModel.action,
-        func.count(AuditLogModel.id).label('count')
+        AuditLog.action,
+        func.count(AuditLog.id).label('count')
     ).where(
-        AuditLogModel.created_at >= start_date
+        AuditLog.created_at >= start_date
     ).group_by(
-        AuditLogModel.action
+        AuditLog.action
     )
     result = await db.execute(stmt)
     action_stats = result.all()
     
     # 统计各操作者的活动
     stmt = select(
-        AuditLogModel.operator_username,
-        func.count(AuditLogModel.id).label('count')
+        AuditLog.operator_username,
+        func.count(AuditLog.id).label('count')
     ).where(
-        AuditLogModel.created_at >= start_date
+        AuditLog.created_at >= start_date
     ).group_by(
-        AuditLogModel.operator_username
+        AuditLog.operator_username
     )
     result = await db.execute(stmt)
     operator_stats = result.all()
     
     # 统计失败操作
-    stmt = select(func.count(AuditLogModel.id)).where(
-        AuditLogModel.created_at >= start_date,
-        AuditLogModel.status == 'failed'
+    stmt = select(func.count(AuditLog.id)).where(
+        AuditLog.created_at >= start_date,
+        AuditLog.status == 'failed'
     )
     result = await db.execute(stmt)
     failed_count = result.scalar()
     
     # 总操作数
-    stmt = select(func.count(AuditLogModel.id)).where(
-        AuditLogModel.created_at >= start_date
+    stmt = select(func.count(AuditLog.id)).where(
+        AuditLog.created_at >= start_date
     )
     result = await db.execute(stmt)
     total_count = result.scalar()
@@ -145,7 +131,7 @@ async def export_audit_logs_csv(
     start_date: str = Query(None),
     end_date: str = Query(None),
     http_request: Request = None,
-    current_user = Depends(AuthService.get_current_admin_user),
+    current_user = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -276,7 +262,7 @@ async def export_audit_logs_excel(
     start_date: str = Query(None),
     end_date: str = Query(None),
     http_request: Request = None,
-    current_user = Depends(AuthService.get_current_admin_user),
+    current_user = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -433,7 +419,7 @@ async def export_audit_logs_excel(
 async def cleanup_old_audit_logs(
     request_body: dict,
     http_request: Request,
-    current_user = Depends(AuthService.get_current_admin_user),
+    current_user = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -458,7 +444,7 @@ async def cleanup_old_audit_logs(
     try:
         # 删除过期的日志
         from sqlalchemy import select
-        stmt = select(AuditLogModel).where(AuditLogModel.created_at < cutoff_date)
+        stmt = select(AuditLog).where(AuditLog.created_at < cutoff_date)
         result = await db.execute(stmt)
         logs_to_delete = result.scalars().all()
         delete_count = len(logs_to_delete)
@@ -525,7 +511,7 @@ async def cleanup_old_audit_logs(
 @router.get("/{log_id}", response_model=AuditLog)
 async def get_audit_log(
     log_id: int,
-    current_user = Depends(AuthService.get_current_admin_user),
+    current_user = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -545,8 +531,8 @@ async def get_audit_log(
     
     return AuditLog.model_validate(log)
 
-@router.get("/", response_model=AuditLogListResponse)
-@router.get("", response_model=AuditLogListResponse)
+@router.get("/", response_model=AuditLogResponse)
+@router.get("", response_model=AuditLogResponse)
 async def get_audit_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -556,7 +542,7 @@ async def get_audit_logs(
     resource_id: int = Query(None),
     start_date: str = Query(None),  # ISO格式日期
     end_date: str = Query(None),    # ISO格式日期
-    current_user = Depends(AuthService.get_current_admin_user),
+    current_user = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -613,7 +599,7 @@ async def get_audit_logs(
     )
     
     logger.info(f"审计日志列表查询完成，用户={current_user.username}，返回记录数={len(logs)}，总记录数={total}")
-    return AuditLogListResponse(
+    return AuditLogResponse(
         items=[
             AuditLog.model_validate(log) for log in logs
         ],

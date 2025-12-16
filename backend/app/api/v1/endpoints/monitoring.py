@@ -1,31 +1,28 @@
 from app.models.monitoring import MonitoringRecord
 from typing import List
-from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timedelta
-import httpx
 import logging
 import time
-from sqlalchemy import select
+import requests
+from typing import Optional
 
 from app.core.database import get_async_db
-from app.schemas.monitoring import MonitoringRecordResponse
 from app.services.monitoring import MonitoringService
 from app.services.server import ServerService
-from app.services.auth import AuthService
-from app.services.server_monitoring import GrafanaService
+from app.services.auth import get_current_user
+from app.services.audit_log import AuditLogService
+from app.models.audit_log import AuditAction, AuditStatus
 from app.core.config import settings
-from app.models.server import Server
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/servers/{server_id}/dashboard")
 async def get_server_dashboard(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取服务器Grafana仪表板信息"""
     try:
@@ -65,7 +62,7 @@ async def get_server_metrics(
     server_id: int,
     metric_type: str = Query(None, description="指标类型：temperature, voltage, fan_speed"),
     db = Depends(get_async_db),  # 使用异步数据库依赖
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """获取服务器监控指标 - 显示当前数据"""
     try:
@@ -92,7 +89,7 @@ async def get_server_metrics(
 async def collect_server_metrics(
     server_id: int,
     db = Depends(get_async_db),  # 使用异步数据库依赖
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """手动采集服务器指标"""
     start_time = time.time()
@@ -137,7 +134,7 @@ async def query_prometheus_metrics(
     query: str = Query(..., description="Prometheus查询表达式"),
     time: str = Query(None, description="查询时间点"),
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """查询Prometheus监控数据"""
     try:
@@ -181,7 +178,7 @@ async def query_prometheus_metrics_range(
     end: str = Query(..., description="结束时间"),
     step: str = Query("60s", description="时间步长"),
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """查询Prometheus监控数据范围"""
     try:

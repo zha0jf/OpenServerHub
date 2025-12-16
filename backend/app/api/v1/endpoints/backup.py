@@ -9,13 +9,13 @@ from app.schemas.backup import (
     BackupDeleteRequest, BackupRestoreRequest, BackupVerifyResponse
 )
 from app.services.backup import BackupService
-from app.services.auth import AuthService
+from app.services.auth import get_current_admin_user
 from app.services.audit_log import AuditLogService
 from app.models.audit_log import AuditAction, AuditResourceType, AuditStatus
 
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
 
 def get_client_ip(request: Request) -> str:
     """获取客户端IP地址"""
@@ -29,7 +29,7 @@ def get_client_ip(request: Request) -> str:
 async def create_backup(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_admin_user)
+    current_user = Depends(get_current_admin_user)
 ):
     """创建数据库备份（仅管理员）"""
     logger.debug(f"用户 {current_user.username} 请求创建数据库备份")
@@ -99,7 +99,7 @@ async def create_backup(
 async def list_backups(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_admin_user)
+    current_user = Depends(get_current_admin_user)
 ):
     """列出所有备份文件（仅管理员）"""
     logger.debug(f"用户 {current_user.username} 请求列出备份文件")
@@ -119,7 +119,7 @@ async def delete_backup(
     request: Request,
     delete_request: BackupDeleteRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_admin_user)
+    current_user = Depends(get_current_admin_user)
 ):
     """删除备份文件（仅管理员）"""
     logger.debug(f"用户 {current_user.username} 请求删除备份文件: {delete_request.filename}")
@@ -169,7 +169,7 @@ async def restore_backup(
     request: Request,
     restore_request: BackupRestoreRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_admin_user)
+    current_user = Depends(get_current_admin_user)
 ):
     """恢复数据库备份（仅管理员）"""
     logger.debug(f"用户 {current_user.username} 请求恢复数据库备份: {restore_request.filename}")
@@ -219,7 +219,7 @@ async def verify_backup(
     request: Request,
     verify_request: BackupRestoreRequest,  # 重用RestoreRequest，因为只需要filename
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_admin_user)
+    current_user = Depends(get_current_admin_user)
 ):
     """验证备份文件完整性（仅管理员）"""
     logger.debug(f"用户 {current_user.username} 请求验证备份文件完整性: {verify_request.filename}")
@@ -269,7 +269,7 @@ async def download_backup(
     filename: str,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_admin_user)
+    current_user = Depends(get_current_admin_user)
 ):
     """下载备份文件（仅管理员）"""
     logger.debug(f"用户 {current_user.username} 请求下载备份文件: {filename}")

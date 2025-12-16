@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, field_validator
 from typing import Optional
 from datetime import datetime
 from app.models.user import UserRole
@@ -10,13 +10,15 @@ class UserBase(BaseModel):
     role: UserRole = Field(default=UserRole.USER, description="用户角色")
     is_active: bool = Field(default=True, description="是否激活")
     
-    @validator('username')
+    @field_validator('username')
+    @classmethod
     def validate_username(cls, v):
         if not re.match(r'^[a-zA-Z0-9_-]+$', v):
             raise ValueError('用户名只能包含字母、数字、下划线和短横线')
         return v
     
-    @validator('email')
+    @field_validator('email')
+    @classmethod
     def validate_email(cls, v):
         # 基本的邮箱格式验证，允许测试邮箱
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -27,7 +29,8 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, max_length=128, description="密码，至少6个字符")
     
-    @validator('password')
+    @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
         if len(v) < 6:
             raise ValueError('密码长度至少6个字符')
@@ -40,7 +43,8 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = None
     
-    @validator('email')
+    @field_validator('email')
+    @classmethod
     def validate_email(cls, v):
         if v is not None:
             # 基本的邮箱格式验证，允许测试邮箱

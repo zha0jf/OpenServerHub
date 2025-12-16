@@ -1,25 +1,25 @@
 import time
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
+import ipaddress
+import csv
+import io
 
 from app.core.database import get_async_db
-from app.schemas.server import (
-    NetworkScanRequest, NetworkScanResponse, DiscoveredDevice,
-    BatchImportRequest, BatchImportResponse,
-    CSVImportRequest, CSVImportResponse
-)
 from app.services.discovery import DiscoveryService
-from app.services.auth import AuthService
+from app.services.server import ServerService
+from app.services.auth import get_current_user
 from app.services.audit_log import AuditLogService
-from app.models.audit_log import AuditAction
-from app.core.exceptions import ValidationError
-
-logger = logging.getLogger(__name__)
+from app.models.audit_log import AuditAction, AuditStatus
+from app.schemas.discovery import (
+    NetworkScanRequest, NetworkScanResponse, DiscoveredDevice,
+    BatchImportRequest, ImportResult, CSVImportRequest
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
 
 def get_client_ip(request: Request) -> str:
     """获取客户端IP地址"""
@@ -29,12 +29,13 @@ def get_client_ip(request: Request) -> str:
         return request.headers["x-real-ip"]
     return request.client.host if request.client else "unknown"
 
+
 @router.post("/network-scan", response_model=NetworkScanResponse)
 async def scan_network(
     request: NetworkScanRequest,
     http_request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     网络范围扫描BMC设备
@@ -108,12 +109,13 @@ async def scan_network(
         logger.error(f"网络扫描失败: {str(e)}")
         raise HTTPException(status_code=500, detail="网络扫描失败，请检查网络配置或稍后重试")
 
-@router.post("/batch-import", response_model=BatchImportResponse)
+
+@router.post("/batch-import", response_model=ImportResult)
 async def batch_import_servers(
     request: BatchImportRequest,
     http_request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     批量导入发现的服务器设备
@@ -132,7 +134,7 @@ async def batch_import_servers(
             group_id=request.group_id
         )
         
-        response = BatchImportResponse(**result)
+        response = ImportResult(**result)
         
         logger.info(f"批量导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
         
@@ -164,13 +166,14 @@ async def batch_import_servers(
         logger.error(f"批量导入失败: {str(e)}")
         raise HTTPException(status_code=500, detail="批量导入失败，请稍后重试")
 
-@router.post("/csv-import", response_model=CSVImportResponse)
+
+@router.post("/csv-import", response_model=ImportResult)
 async def import_from_csv(
     csv_file: UploadFile = File(...),
     group_id: Optional[int] = None,
     http_request: Request = None,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     从CSV文件导入服务器
@@ -198,7 +201,7 @@ async def import_from_csv(
             group_id=group_id
         )
         
-        response = CSVImportResponse(**result)
+        response = ImportResult(**result)
         
         logger.info(f"CSV导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
         
@@ -234,12 +237,13 @@ async def import_from_csv(
         logger.error(f"CSV导入失败: {str(e)}")
         raise HTTPException(status_code=500, detail="CSV导入失败，请检查文件格式或稍后重试")
 
-@router.post("/csv-import-text", response_model=CSVImportResponse)
+
+@router.post("/csv-import-text", response_model=ImportResult)
 async def import_from_csv_text(
     request: CSVImportRequest,
     http_request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     从CSV文本内容导入服务器（用于前端直接提交CSV内容）
@@ -256,7 +260,7 @@ async def import_from_csv_text(
             group_id=request.group_id
         )
         
-        response = CSVImportResponse(**result)
+        response = ImportResult(**result)
         
         logger.info(f"CSV文本导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
         
@@ -288,9 +292,10 @@ async def import_from_csv_text(
         logger.error(f"CSV文本导入失败: {str(e)}")
         raise HTTPException(status_code=500, detail="CSV导入失败，请检查数据格式或稍后重试")
 
+
 @router.get("/csv-template", response_class=PlainTextResponse)
 async def get_csv_template(
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     获取CSV导入模板
@@ -311,9 +316,10 @@ async def get_csv_template(
         logger.error(f"生成CSV模板失败: {str(e)}")
         raise HTTPException(status_code=500, detail="生成CSV模板失败")
 
+
 @router.get("/network-examples")
 async def get_network_examples(
-    current_user = Depends(AuthService.get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     获取网络范围格式示例
