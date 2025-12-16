@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import logging
@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field
 
 from app.core.database import get_async_db
 from app.schemas.server import (
-    ServerCreate, ServerUpdate, ServerResponse, ServerListResponse,
-    ServerStatistics, ServerGroupCreate, ServerGroupResponse,
-    BatchPowerRequest, BatchUpdateMonitoringRequest, PowerControlResponse,
+    ServerCreate, ServerUpdate, ServerResponse, 
+    ServerGroupCreate, ServerGroupResponse,
+    BatchPowerRequest, BatchUpdateMonitoringRequest, 
     BatchPowerResponse, BatchUpdateMonitoringResponse, RedfishSupportResponse,
     LedStatusResponse, LedControlResponse,
     ClusterStatsResponse
