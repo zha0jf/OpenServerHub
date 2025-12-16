@@ -15,7 +15,7 @@ from app.core.database import engine, periodic_health_check
 from app.core.logging import setup_logging
 from app.api.v1.api import api_router
 from app.models import Base
-from app.services import scheduler_service
+
 from app.services.monitoring_scheduler import MonitoringSchedulerService  # 导入类本身
 # from app.services.ipmi import ipmi_pool  # 已移除，因切换到多进程实现
 
@@ -50,6 +50,9 @@ import app.services.monitoring_scheduler as monitoring_module
 # 健康检查任务引用
 health_check_task = None
 
+# 电源状态定时刷新服务引用
+power_state_scheduler_service = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -79,10 +82,13 @@ async def lifespan(app: FastAPI):
     logger.info(f"POWER_STATE_REFRESH_ENABLED 配置值: {settings.POWER_STATE_REFRESH_ENABLED}")
     logger.info(f"POWER_STATE_REFRESH_INTERVAL 配置值: {settings.POWER_STATE_REFRESH_INTERVAL}")
     
-    # 启动电源状态定时刷新服务（如果启用）
+    # 初始化并启动电源状态定时刷新服务（如果启用）
+    global power_state_scheduler_service
     if settings.POWER_STATE_REFRESH_ENABLED:
         try:
-            await scheduler_service.start()
+            from app.services.scheduler_service import PowerStateSchedulerService
+            power_state_scheduler_service = PowerStateSchedulerService()
+            await power_state_scheduler_service.start()
             logger.info("电源状态定时刷新服务已启动")
         except Exception as e:
             logger.error(f"启动电源状态定时任务服务失败: {e}")
@@ -97,10 +103,11 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # 关闭时停止定时任务服务
+    # 关闭时停止电源状态定时刷新服务
     try:
-        await scheduler_service.stop()
-        logger.info("电源状态定时刷新服务已停止")
+        if power_state_scheduler_service:
+            await power_state_scheduler_service.stop()
+            logger.info("电源状态定时刷新服务已停止")
     except Exception as e:
         logger.error(f"停止电源状态定时任务服务失败: {e}")
     
@@ -197,7 +204,7 @@ async def health_check():
 async def get_scheduler_status():
     """获取定时任务状态"""
     try:
-        power_status = scheduler_service.get_status()
+        power_status = power_state_scheduler_service.get_status() if power_state_scheduler_service else {}
         # 使用模块中的实例
         monitoring_status = monitoring_module.monitoring_scheduler_service.get_status() if monitoring_module.monitoring_scheduler_service else {}
         return {
@@ -218,7 +225,8 @@ async def get_scheduler_status():
 async def manual_refresh_power_state():
     """手动刷新所有服务器电源状态"""
     try:
-        await scheduler_service.refresh_all_servers_power_state()
+        if power_state_scheduler_service:
+            await power_state_scheduler_service.refresh_all_servers_power_state()
         return {
             "success": True,
             "message": "电源状态刷新任务已提交"
