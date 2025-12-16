@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from io import StringIO, BytesIO
 import csv
 from fastapi.responses import StreamingResponse
+import logging
 
 # 检查是否安装了openpyxl库
 try:
@@ -20,6 +21,7 @@ from app.services.auth import get_current_admin_user
 from app.models.audit_log import AuditLog as AuditLogModel, AuditAction, AuditResourceType, AuditStatus
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # 更具体的路由定义在前面（优先匹配）
 

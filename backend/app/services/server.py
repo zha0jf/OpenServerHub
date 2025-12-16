@@ -370,14 +370,23 @@ class ServerService:
             manufacturer = server.manufacturer or "Unknown"
             manufacturer_counts[manufacturer] += 1
         
+        # 分组统计
+        group_stats = defaultdict(int)
+        for server in servers:
+            if server.group_id:
+                group_stats[server.group_id] += 1
+            else:
+                group_stats["未分组"] += 1
+        
         return {
-            "total": total_count,
-            "status_distribution": dict(status_counts),
-            "power_state_distribution": dict(power_state_counts),
-            "manufacturer_distribution": dict(manufacturer_counts),
-            "online_count": len(online_servers),
-            "offline_count": status_counts.get("offline", 0),
-            "error_count": status_counts.get("error", 0)
+            "total_servers": total_count,
+            "online_servers": status_counts.get("online", 0),
+            "offline_servers": status_counts.get("offline", 0),
+            "unknown_servers": status_counts.get("unknown", 0),
+            "power_on_servers": power_state_counts.get("on", 0),
+            "power_off_servers": power_state_counts.get("off", 0),
+            "group_stats": dict(group_stats),
+            "manufacturer_stats": dict(manufacturer_counts)
         }
 
     async def _sync_monitoring_config(self):
