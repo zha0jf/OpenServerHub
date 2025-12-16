@@ -171,8 +171,7 @@ class PowerStateSchedulerService:
                     
                     # 4. 更新数据库
                     stmt = update(Server).where(Server.id == server_id).values(
-                        power_state=new_power_state,
-                        last_power_refresh=datetime.now()
+                        power_state=new_power_state
                     )
                     await session.execute(stmt)
                     await session.commit()
