@@ -37,6 +37,7 @@ class AuthService:
         # 更新最后登录时间 (使用 timezone.utc)
         user.last_login_at = datetime.now(timezone.utc)
         await self.db.commit()
+        await self.db.refresh(user)
         
         return user
 

@@ -63,12 +63,6 @@ async def login(
     
     access_token = auth_service.create_access_token(user.id)
     
-    # 在返回之前，确保所有需要的字段都已加载，避免在Pydantic序列化时触发数据库查询
-    # 显式访问可能触发查询的字段
-    _ = user.updated_at
-    _ = user.created_at
-    _ = user.last_login_at
-    
     return {
         "access_token": access_token,
         "token_type": "bearer",
