@@ -89,16 +89,16 @@ class PowerStateSchedulerService:
             self._is_refreshing = True
             start_time = datetime.now()
             
-            # 1. 快速获取目标服务器ID列表 (只读操作，用完即释放Session)
+            # 1. 快速获取所有服务器ID列表 (只读操作，用完即释放Session)
             target_server_ids = []
             async with AsyncSessionLocal() as session:
                 # 仅查询 ID，避免加载整个对象导致 Detached 错误
-                stmt = select(Server.id).where(Server.status == ServerStatus.ONLINE)
+                stmt = select(Server.id)
                 result = await session.execute(stmt)
                 target_server_ids = result.scalars().all()
             
             if not target_server_ids:
-                logger.info("当前没有在线服务器，跳过电源状态刷新")
+                logger.info("当前没有服务器，跳过电源状态刷新")
                 return
 
             logger.info(f"开始刷新 {len(target_server_ids)} 台服务器的电源状态")
