@@ -891,7 +891,7 @@ class ServerService:
             led_state: LED状态（"On" 或 "Off"）
             
         Returns:
-            Dict[str, Any]: 包含操作结果的字典
+            Dict[str, Any]: 包含操作结果的字典，符合LedControlResponse模型
         """
         # 使用异步方法获取服务器
         db_server = await self.get_server_async(server_id)
@@ -901,17 +901,17 @@ class ServerService:
         # 检查服务器是否在线
         if db_server.status != ServerStatus.ONLINE:
             return {
+                "server_id": server_id,
                 "success": False,
-                "message": "操作失败",
-                "error": "服务器不在线，无法设置LED状态"
+                "message": "服务器不在线，无法设置LED状态"
             }
         
         # 检查服务器是否支持Redfish
         if db_server.redfish_supported is not True:
             return {
+                "server_id": server_id,
                 "success": False,
-                "message": "操作失败",
-                "error": "服务器BMC不支持Redfish，无法设置LED状态"
+                "message": "服务器BMC不支持Redfish，无法设置LED状态"
             }
         
         try:
@@ -924,14 +924,19 @@ class ServerService:
                 timeout=10
             )
             
-            return result
+            # 转换结果格式以匹配LedControlResponse模型
+            return {
+                "server_id": server_id,
+                "success": result.get("success", False),
+                "message": result.get("message", result.get("error", "未知错误"))
+            }
             
         except Exception as e:
             logger.error(f"设置服务器 {server_id} LED状态失败: {str(e)}")
             return {
+                "server_id": server_id,
                 "success": False,
-                "message": "操作失败",
-                "error": f"设置LED状态失败: {str(e)}"
+                "message": f"设置LED状态失败: {str(e)}"
             }
 
     def get_cluster_statistics(self, group_id: Optional[int] = None) -> Dict[str, Any]:
