@@ -514,7 +514,7 @@ async def cleanup_old_audit_logs(
             detail=f"清理审计日志失败: {str(e)}"
         )
 
-@router.get("/{log_id}", response_model=schemas.AuditLog)
+@router.get("/{log_id}", response_model=AuditLog)
 async def get_audit_log(
     log_id: int,
     current_user = Depends(get_current_admin_user),
@@ -535,7 +535,7 @@ async def get_audit_log(
             detail="审计日志不存在"
         )
     
-    return schemas.AuditLog.model_validate(log)
+    return AuditLog.model_validate(log)
 
 @router.get("/", response_model=AuditLogListResponse)
 @router.get("", response_model=AuditLogListResponse)
@@ -607,7 +607,7 @@ async def get_audit_logs(
     logger.info(f"审计日志列表查询完成，用户={current_user.username}，返回记录数={len(logs)}，总记录数={total}")
     return AuditLogListResponse(
         items=[
-            schemas.AuditLog.model_validate(log) for log in logs
+            AuditLog.model_validate(log) for log in logs
         ],
         total=total,
         skip=skip,
