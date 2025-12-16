@@ -40,6 +40,10 @@ class AuthService:
         
         return user
 
+    def create_access_token(self, user_id: int) -> str:
+        """创建访问令牌"""
+        return security.create_access_token(user_id)
+
 # 将 get_current_user 移出类，作为独立的依赖函数
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
