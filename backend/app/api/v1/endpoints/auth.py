@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_async_db
 from app.core.config import settings
 from app.schemas.auth import Token, UserLogin
-from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse, UserUpdate
 from app.services.auth import AuthService, get_current_user, get_current_admin_user
 from app.services.audit_log import AuditLogService
 from app.models.audit_log import AuditAction, AuditStatus

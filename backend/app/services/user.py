@@ -1,14 +1,16 @@
 import asyncio
-from typing import Optional, List
+from typing import Optional, List, Union
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate
 from app.core.exceptions import ValidationError
 from app.core import security
+import asyncio
 
 class UserService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: Union[AsyncSession, Session]):
         self.db = db
 
     async def _hash_password(self, password: str) -> str:
@@ -17,10 +19,14 @@ class UserService:
         # 调用 security 模块的同步函数
         return await loop.run_in_executor(None, security.get_password_hash, password)
 
+    def _hash_password_sync(self, password: str) -> str:
+        """内部辅助：同步执行密码哈希"""
+        return security.get_password_hash(password)
+
     async def create_user(self, user_data: UserCreate) -> User:
-        """创建用户"""
+        """创建用户（异步版本）"""
         # 检查用户名是否已存在
-        if await self.get_user_by_username(user_data.username):
+        if await self.get_user_by_username_async(user_data.username):
             raise ValidationError("用户名已存在")
         
         # 检查邮箱是否已存在
@@ -46,14 +52,54 @@ class UserService:
         await self.db.refresh(db_user)
         return db_user
 
+    def create_user_sync(self, user_data: UserCreate) -> User:
+        """创建用户（同步版本）"""
+        # 检查用户名是否已存在
+        if self.get_user_by_username(user_data.username):
+            raise ValidationError("用户名已存在")
+        
+        # 检查邮箱是否已存在
+        user = self.db.query(User).filter(User.email == user_data.email).first()
+        if user:
+            raise ValidationError("邮箱已存在")
+        
+        # 创建用户
+        try:
+            password_hash = self._hash_password_sync(user_data.password)
+        except Exception as e:
+            raise ValidationError(f"密码处理失败: {str(e)}")
+        
+        db_user = User(
+            username=user_data.username,
+            email=user_data.email,
+            password_hash=password_hash,
+            role=user_data.role,
+            is_active=user_data.is_active
+        )
+        
+        self.db.add(db_user)
+        self.db.commit()
+        self.db.refresh(db_user)
+        return db_user
+
     async def get_user(self, user_id: int) -> Optional[User]:
         """根据ID获取用户"""
         stmt = select(User).where(User.id == user_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_user_by_username(self, username: str) -> Optional[User]:
-        """根据用户名获取用户"""
+    def get_user_by_username(self, username: str) -> Optional[User]:
+        """根据用户名获取用户（同步版本）"""
+        from sqlalchemy.orm import Session
+        if isinstance(self.db, Session):
+            # 如果是同步会话
+            return self.db.query(User).filter(User.username == username).first()
+        else:
+            # 如果是异步会话，需要在异步上下文中运行
+            raise RuntimeError("请使用异步版本 get_user_by_username_async")
+
+    async def get_user_by_username_async(self, username: str) -> Optional[User]:
+        """根据用户名获取用户（异步版本）"""
         stmt = select(User).where(User.username == username)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()

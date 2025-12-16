@@ -1,4 +1,5 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Union
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
@@ -21,13 +22,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ServerService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Union[Session, AsyncSession]):
         self.db = db
         self.ipmi_service = IPMIService()
         # 注意：这里传入的是同步会话，仅用于同步方法
         # 异步方法需要创建新的异步监控服务实例
         self.monitoring_service = MonitoringService(db) if hasattr(db, 'query') else None
         self.server_monitoring_service = None  # 异步方法中动态创建
+        self.async_db = db if isinstance(db, AsyncSession) else None
         
     def _get_async_server_monitoring_service(self, async_db: AsyncSession):
         """获取异步服务器监控服务实例"""
@@ -38,15 +40,15 @@ class ServerService:
         self.async_db = async_db
         self.server_monitoring_service = ServerMonitoringService(async_db)
     
-    def create_server(self, server_data: ServerCreate) -> Server:
-        """创建服务器"""
-        # 检查IPMI IP是否已存在
-        if self.get_server_by_ipmi_ip(server_data.ipmi_ip):
-            raise ValidationError("IPMI IP地址已存在")
-        
-        # 检查服务器名是否已存在
+    def create_server_sync(self, server_data: ServerCreate) -> Server:
+        """创建服务器（同步版本）"""
+        # 检查服务器名称是否已存在
         if self.get_server_by_name(server_data.name):
             raise ValidationError("服务器名称已存在")
+        
+        # 检查IPMI IP是否已存在
+        if server_data.ipmi_ip and self.db.query(Server).filter(Server.ipmi_ip == server_data.ipmi_ip).first():
+            raise ValidationError("IPMI IP地址已存在")
         
         # 创建服务器
         db_server = Server(
@@ -67,30 +69,19 @@ class ServerService:
         self.db.add(db_server)
         self.db.commit()
         self.db.refresh(db_server)
-        
-        # 异步处理监控配置（仅在启用监控时）
-        if settings.MONITORING_ENABLED and bool(db_server.monitoring_enabled):
-            asyncio.create_task(self.server_monitoring_service.on_server_added(db_server))
-        
-        # 调度服务器状态刷新任务（在0.5秒后执行）
-        scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
-        logger.info(f"服务器 {db_server.id} 创建成功，已调度状态刷新任务")
-        
         return db_server
-    
-    async def create_server_async(self, server_data: ServerCreate) -> Server:
-        """异步创建服务器"""
+
+    async def create_server(self, server_data: ServerCreate) -> Server:
+        """创建服务器"""
+        # 检查服务器名称是否已存在
+        if await self.get_server_by_name_async(server_data.name):
+            raise ValidationError("服务器名称已存在")
+        
         # 检查IPMI IP是否已存在
         stmt = select(Server).where(Server.ipmi_ip == server_data.ipmi_ip)
         result = await self.async_db.execute(stmt)
         if result.scalar_one_or_none():
             raise ValidationError("IPMI IP地址已存在")
-        
-        # 检查服务器名是否已存在
-        stmt = select(Server).where(Server.name == server_data.name)
-        result = await self.async_db.execute(stmt)
-        if result.scalar_one_or_none():
-            raise ValidationError("服务器名称已存在")
         
         # 创建服务器
         db_server = Server(
@@ -111,16 +102,39 @@ class ServerService:
         self.async_db.add(db_server)
         await self.async_db.commit()
         await self.async_db.refresh(db_server)
+        return db_server
+
+    async def create_server_async(self, server_data: ServerCreate) -> Server:
+        """创建服务器（异步版本）"""
+        # 检查服务器名称是否已存在
+        if await self.get_server_by_name_async(server_data.name):
+            raise ValidationError("服务器名称已存在")
         
-        # 异步处理监控配置（仅在启用监控时）
-        if settings.MONITORING_ENABLED and bool(db_server.monitoring_enabled):
-            server_monitoring_service = self._get_async_server_monitoring_service(self.async_db)
-            asyncio.create_task(server_monitoring_service.on_server_added(db_server))
+        # 检查IPMI IP是否已存在
+        stmt = select(Server).where(Server.ipmi_ip == server_data.ipmi_ip)
+        result = await self.async_db.execute(stmt)
+        if result.scalar_one_or_none():
+            raise ValidationError("IPMI IP地址已存在")
         
-        # 调度服务器状态刷新任务（在0.5秒后执行）
-        scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
-        logger.info(f"服务器 {db_server.id} 创建成功，已调度状态刷新任务")
+        # 创建服务器
+        db_server = Server(
+            name=server_data.name,
+            ipmi_ip=server_data.ipmi_ip,
+            ipmi_username=server_data.ipmi_username,
+            ipmi_password=server_data.ipmi_password,
+            ipmi_port=server_data.ipmi_port,
+            monitoring_enabled=server_data.monitoring_enabled,
+            manufacturer=server_data.manufacturer,
+            model=server_data.model,
+            serial_number=server_data.serial_number,
+            description=server_data.description,
+            tags=server_data.tags,
+            group_id=server_data.group_id
+        )
         
+        self.async_db.add(db_server)
+        await self.async_db.commit()
+        await self.async_db.refresh(db_server)
         return db_server
 
     def get_server(self, server_id: int) -> Optional[Server]:
@@ -516,12 +530,8 @@ class ServerService:
             }
 
     # 服务器分组管理
-    def create_server_group(self, group_data: ServerGroupCreate) -> ServerGroup:
-        """创建服务器分组"""
-        # 检查分组名是否已存在
-        if self.get_server_group_by_name(group_data.name):
-            raise ValidationError("分组名称已存在")
-        
+    def create_server_group_sync(self, group_data: ServerGroupCreate) -> ServerGroup:
+        """创建服务器分组（同步版本）"""
         db_group = ServerGroup(
             name=group_data.name,
             description=group_data.description
@@ -532,14 +542,20 @@ class ServerService:
         self.db.refresh(db_group)
         return db_group
 
+    async def create_server_group(self, group_data: ServerGroupCreate) -> ServerGroup:
+        """创建服务器分组"""
+        db_group = ServerGroup(
+            name=group_data.name,
+            description=group_data.description
+        )
+        
+        self.async_db.add(db_group)
+        await self.async_db.commit()
+        await self.async_db.refresh(db_group)
+        return db_group
+
     async def create_server_group_async(self, group_data: ServerGroupCreate) -> ServerGroup:
         """创建服务器分组（异步版本）"""
-        # 检查分组名是否已存在
-        stmt = select(ServerGroup).where(ServerGroup.name == group_data.name)
-        result = await self.async_db.execute(stmt)
-        if result.scalar_one_or_none():
-            raise ValidationError("分组名称已存在")
-        
         db_group = ServerGroup(
             name=group_data.name,
             description=group_data.description

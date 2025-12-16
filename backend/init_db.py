@@ -84,7 +84,7 @@ def init_database():
                 is_active=True
             )
             
-            admin_user = user_service.create_user(admin_data)
+            admin_user = user_service.create_user_sync(admin_data)
             logger.info(f"创建默认管理员用户: {admin_user.username}")
         else:
             logger.info("管理员用户已存在，跳过创建")
@@ -97,7 +97,7 @@ def init_database():
                 name="测试环境",
                 description="用于测试的服务器分组"
             )
-            test_group = server_service.create_server_group(group_data)
+            test_group = server_service.create_server_group_sync(group_data)
             logger.info(f"创建测试服务器分组: {test_group.name}")
         else:
             logger.info("测试服务器分组已存在，跳过创建")
@@ -128,7 +128,7 @@ def init_database():
                 tags="test,demo",
                 group_id=group_id_value
             )
-            test_server = server_service.create_server(server_data)
+            test_server = server_service.create_server_sync(server_data)
             logger.info(f"创建测试服务器: {test_server.name}")
         else:
             logger.info("测试服务器已存在，跳过创建")
