@@ -88,14 +88,18 @@ class PowerStateSchedulerService:
         try:
             self._is_refreshing = True
             start_time = datetime.now()
+            logger.debug(f"[电源状态刷新] 开始执行电源状态刷新任务")
             
             # 1. 快速获取所有服务器ID列表 (只读操作，用完即释放Session)
+            db_query_start = datetime.now()
             target_server_ids = []
             async with AsyncSessionLocal() as session:
                 # 仅查询 ID，避免加载整个对象导致 Detached 错误
                 stmt = select(Server.id)
                 result = await session.execute(stmt)
                 target_server_ids = result.scalars().all()
+            db_query_time = (datetime.now() - db_query_start).total_seconds()
+            logger.debug(f"[电源状态刷新] 数据库查询耗时: {db_query_time:.3f}秒")
             
             if not target_server_ids:
                 logger.info("当前没有服务器，跳过电源状态刷新")
@@ -130,6 +134,7 @@ class PowerStateSchedulerService:
             
             elapsed = (datetime.now() - start_time).total_seconds()
             logger.info(f"电源状态刷新完成: 成功 {success_cnt}, 失败 {error_cnt}, 耗时 {elapsed:.2f}s")
+            logger.debug(f"[电源状态刷新] 任务执行完成，总耗时: {elapsed:.3f}秒")
                 
         except Exception as e:
             logger.error(f"定时刷新电源状态全局异常: {e}")
@@ -144,23 +149,29 @@ class PowerStateSchedulerService:
         async with self._semaphore:  # 限制并发数
             # [关键] 每个并发任务必须使用独立的 Session，严禁共享 Session
             async with AsyncSessionLocal() as session:
+                server_fetch_start = datetime.now()
                 try:
                     # 1. 获取服务器信息
                     stmt = select(Server).where(Server.id == server_id)
                     result = await session.execute(stmt)
                     server = result.scalar_one_or_none()
+                    server_fetch_time = (datetime.now() - server_fetch_start).total_seconds()
+                    logger.debug(f"[电源状态刷新] 服务器 {server_id} 信息获取耗时: {server_fetch_time:.3f}秒")
                     
                     if not server:
                         logger.warning(f"服务器不存在 (ID: {server_id})")
                         return False
                     
                     # 2. 调用 IPMI 服务获取电源状态
+                    ipmi_start = datetime.now()
                     power_state_str = await self.ipmi_service.get_power_state(
                         ip=server.ipmi_ip,
                         username=server.ipmi_username,
                         password=server.ipmi_password,
                         port=server.ipmi_port
                     )
+                    ipmi_time = (datetime.now() - ipmi_start).total_seconds()
+                    logger.debug(f"[电源状态刷新] 服务器 {server_id} IPMI调用耗时: {ipmi_time:.3f}秒")
                     
                     # 3. 转换电源状态
                     try:
@@ -170,11 +181,14 @@ class PowerStateSchedulerService:
                         new_power_state = PowerState.UNKNOWN
                     
                     # 4. 更新数据库
+                    db_update_start = datetime.now()
                     stmt = update(Server).where(Server.id == server_id).values(
                         power_state=new_power_state
                     )
                     await session.execute(stmt)
                     await session.commit()
+                    db_update_time = (datetime.now() - db_update_start).total_seconds()
+                    logger.debug(f"[电源状态刷新] 服务器 {server_id} 数据库更新耗时: {db_update_time:.3f}秒")
                     
                     logger.debug(f"服务器 {server_id} 电源状态更新成功: {new_power_state.value}")
                     return True

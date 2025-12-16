@@ -83,8 +83,10 @@ class MonitoringSchedulerService:
         try:
             self._is_collecting = True
             start_time = datetime.now()
+            logger.debug(f"[监控数据采集] 开始执行监控数据采集任务")
             
             # 1. 快速获取目标服务器ID列表 (只读操作，用完即释放Session)
+            db_query_start = datetime.now()
             target_server_ids = []
             async with AsyncSessionLocal() as session:
                 # 仅查询 ID，避免加载整个对象导致 Detached 错误
@@ -94,6 +96,8 @@ class MonitoringSchedulerService:
                 )
                 result = await session.execute(stmt)
                 target_server_ids = result.scalars().all()
+            db_query_time = (datetime.now() - db_query_start).total_seconds()
+            logger.debug(f"[监控数据采集] 数据库查询耗时: {db_query_time:.3f}秒")
             
             if not target_server_ids:
                 logger.info("当前没有在线且开机的服务器，跳过数据采集")
@@ -128,6 +132,7 @@ class MonitoringSchedulerService:
             
             elapsed = (datetime.now() - start_time).total_seconds()
             logger.info(f"监控采集完成: 成功 {success_cnt}, 失败 {error_cnt}, 耗时 {elapsed:.2f}s")
+            logger.debug(f"[监控数据采集] 任务执行完成，总耗时: {elapsed:.3f}秒")
                 
         except Exception as e:
             logger.error(f"定时采集监控数据全局异常: {e}")
@@ -142,6 +147,7 @@ class MonitoringSchedulerService:
         async with self._semaphore:  # 限制并发数
             # [关键] 每个并发任务必须使用独立的 Session，严禁共享 Session
             async with AsyncSessionLocal() as session:
+                collect_start = datetime.now()
                 try:
                     # 实例化 MonitoringService (传入当前独立的 session)
                     monitoring_service = MonitoringService(session)
@@ -149,12 +155,13 @@ class MonitoringSchedulerService:
                     # 执行采集 (内部包含采集 + 删除旧数据 + 插入新数据)
                     result = await monitoring_service.collect_server_metrics(server_id)
                     
+                    collect_time = (datetime.now() - collect_start).total_seconds()
                     if result.get("status") == "success":
                         # 使用 debug 级别，避免日志量过大
-                        logger.debug(f"Server {server_id} 采集成功: {len(result.get('collected_metrics', []))} 指标")
+                        logger.debug(f"Server {server_id} 采集成功: {len(result.get('collected_metrics', []))} 指标，耗时: {collect_time:.3f}秒")
                         return True
                     else:
-                        logger.warning(f"Server {server_id} 采集异常: {result.get('message')}")
+                        logger.warning(f"Server {server_id} 采集异常: {result.get('message')}，耗时: {collect_time:.3f}秒")
                         return False
                         
                 except Exception as e:
@@ -184,4 +191,5 @@ class MonitoringSchedulerService:
             return {"error": str(e)}
 
 # 全局变量
+monitoring_scheduler_service: Optional[MonitoringSchedulerService] = None
 monitoring_scheduler_service: Optional[MonitoringSchedulerService] = None
