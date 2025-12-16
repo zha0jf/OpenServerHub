@@ -3,19 +3,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import logging
 
+# Pydantic 导入
+from pydantic import BaseModel, Field 
+
 from app.core.database import get_async_db
 from app.schemas.server import (
     ServerCreate, ServerUpdate, ServerResponse, ServerListResponse,
     ServerStatistics, ServerGroupCreate, ServerGroupResponse,
     BatchPowerRequest, BatchUpdateMonitoringRequest, PowerControlResponse,
     BatchPowerResponse, BatchUpdateMonitoringResponse, RedfishSupportResponse,
-    LedStatusResponse, LedControlResponse
+    LedStatusResponse, LedControlResponse,
+    ClusterStatsResponse
 )
+# 异常类导入
+from app.core.exceptions import ValidationError, IPMIError 
 from app.services.server import ServerService
 from app.services.auth import get_current_user
 from app.services.audit_log import AuditLogService
 from app.models.audit_log import AuditAction, AuditStatus
 from app.core.config import settings
+# 服务导入
+from app.services.scheduler_service import scheduler_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -28,7 +36,323 @@ def get_client_ip(request: Request) -> str:
         return request.headers["x-real-ip"]
     return request.client.host if request.client else "unknown"
 
-# 服务器管理
+# ==========================================
+# 1. 静态路由与特定功能 (必须放在动态ID路由之前)
+# ==========================================
+
+# 集群统计接口
+@router.get("/stats", response_model=ClusterStatsResponse)
+async def get_cluster_statistics(
+    group_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_async_db),
+    current_user = Depends(get_current_user)
+):
+    """获取集群统计信息"""
+    try:
+        server_service = ServerService(db)
+        stats = await server_service.get_cluster_statistics_async(group_id=group_id)
+        return ClusterStatsResponse(**stats)
+    except Exception as e:
+        logger.error(f"获取集群统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取统计信息失败")
+
+# 批量电源控制
+@router.post("/batch/power", response_model=BatchPowerResponse)
+async def batch_power_control(
+    request: BatchPowerRequest,
+    http_request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    current_user = Depends(get_current_user)
+):
+    """批量电源控制"""
+    try:
+        server_service = ServerService(db)
+        audit_service = AuditLogService(db)
+        # 使用异步方法进行批量电源控制
+        results = await server_service.batch_power_control(
+            server_ids=request.server_ids,
+            action=request.action
+        )
+        
+        # 统计结果
+        total_count = len(results)
+        success_count = sum(1 for r in results if r.success)
+        failed_count = total_count - success_count
+        
+        logger.info(f"批量电源操作完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
+        
+        # 对于可能改变电源状态的操作，调度刷新任务
+        powerChangingActions = ['on', 'off', 'restart', 'force_off', 'force_restart']
+        if request.action in powerChangingActions:
+            try:
+                for server_id in request.server_ids:
+                    scheduler_service.schedule_server_refresh(server_id)
+            except Exception as e:
+                logger.error(f"调度服务器刷新任务失败: {str(e)}")
+        
+        # 记录批量电源操作
+        await audit_service.log_batch_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.BATCH_POWER_CONTROL,
+            action_details={
+                "action": request.action,
+                "server_ids": request.server_ids,
+                "count": len(request.server_ids)
+            },
+            result={
+                "total_count": total_count,
+                "success_count": success_count,
+                "failed_count": failed_count
+            },
+            success=(failed_count == 0),
+            ip_address=get_client_ip(http_request),
+            user_agent=http_request.headers.get("user-agent", "unknown"),
+        )
+        
+        return BatchPowerResponse(
+            total_count=total_count,
+            success_count=success_count,
+            failed_count=failed_count,
+            results=results
+        )
+    except ValidationError as e:
+        logger.warning(f"批量电源操作验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        logger.error(f"批量电源操作失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="批量操作失败，请稍后重试")
+
+# 批量更新监控状态
+@router.post("/batch/monitoring", response_model=BatchUpdateMonitoringResponse)
+async def batch_update_monitoring(
+    request: BatchUpdateMonitoringRequest,
+    http_request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    current_user = Depends(get_current_user)
+):
+    """批量更新服务器监控状态"""
+    try:
+        server_service = ServerService(db)
+        audit_service = AuditLogService(db)
+        results = await server_service.batch_update_monitoring(
+            server_ids=request.server_ids,
+            monitoring_enabled=request.monitoring_enabled
+        )
+        
+        total_count = len(results)
+        success_count = sum(1 for r in results if r.success)
+        failed_count = total_count - success_count
+        
+        logger.info(f"批量更新监控状态完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
+        
+        await audit_service.log_batch_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.MONITORING_ENABLE if request.monitoring_enabled else AuditAction.MONITORING_DISABLE,
+            action_details={
+                "monitoring_enabled": request.monitoring_enabled,
+                "server_ids": request.server_ids,
+                "count": len(request.server_ids)
+            },
+            result={
+                "total_count": total_count,
+                "success_count": success_count,
+                "failed_count": failed_count
+            },
+            success=(failed_count == 0),
+            ip_address=get_client_ip(http_request),
+            user_agent=http_request.headers.get("user-agent", "unknown"),
+        )
+        
+        return BatchUpdateMonitoringResponse(
+            total_count=total_count,
+            success_count=success_count,
+            failed_count=failed_count,
+            results=results
+        )
+    except ValidationError as e:
+        logger.warning(f"批量更新监控状态验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        logger.error(f"批量更新监控状态失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="批量操作失败，请稍后重试")
+
+# ==========================================
+# 2. 分组管理路由 (必须在 /{server_id} 之前)
+# ==========================================
+
+@router.post("/groups/", response_model=ServerGroupResponse)
+async def create_server_group(
+    group_data: ServerGroupCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    current_user = Depends(get_current_user)
+):
+    """创建服务器分组"""
+    try:
+        server_service = ServerService(db)
+        audit_service = AuditLogService(db)
+        group = await server_service.create_server_group(group_data)
+        
+        await audit_service.log_group_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.GROUP_CREATE,
+            group_id=group.id,
+            group_name=group.name,
+            action_details={"description": group.description},
+            result={"status": "success", "group_id": group.id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
+        return group
+    except ValidationError as e:
+        # 记录失败日志逻辑保持不变，略简写
+        logger.warning(f"服务器分组创建验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        logger.error(f"服务器分组创建失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="服务器分组创建失败，请稍后重试")
+
+@router.get("/groups/", response_model=List[ServerGroupResponse])
+async def get_server_groups(
+    db: AsyncSession = Depends(get_async_db),
+    current_user = Depends(get_current_user)
+):
+    """获取服务器分组列表"""
+    server_service = ServerService(db)
+    return await server_service.get_server_groups_async()
+
+@router.get("/groups/{group_id}", response_model=ServerGroupResponse)
+async def get_server_group(
+    group_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user = Depends(get_current_user)
+):
+    """获取指定服务器分组"""
+    server_service = ServerService(db)
+    group = await server_service.get_server_group_async(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="服务器分组不存在")
+    return group
+
+@router.put("/groups/{group_id}", response_model=ServerGroupResponse)
+async def update_server_group(
+    group_id: int,
+    group_data: ServerGroupCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    current_user = Depends(get_current_user)
+):
+    """更新服务器分组"""
+    try:
+        server_service = ServerService(db)
+        audit_service = AuditLogService(db)
+        group = await server_service.update_server_group_async(group_id, group_data)
+        if not group:
+            raise HTTPException(status_code=404, detail="服务器分组不存在")
+        
+        await audit_service.log_group_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.GROUP_UPDATE,
+            group_id=group.id,
+            group_name=group.name,
+            action_details={"name": group_data.name, "description": group_data.description},
+            result={"status": "success", "group_id": group.id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
+        return group
+    except ValidationError as e:
+        logger.warning(f"服务器分组更新验证失败: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        logger.error(f"服务器分组更新失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="服务器分组更新失败，请稍后重试")
+
+@router.delete("/groups/{group_id}")
+async def delete_server_group(
+    group_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    current_user = Depends(get_current_user)
+):
+    """删除服务器分组"""
+    try:
+        server_service = ServerService(db)
+        audit_service = AuditLogService(db)
+        
+        group = await server_service.get_server_group_async(group_id)
+        if not group:
+            raise HTTPException(status_code=404, detail="服务器分组不存在")
+        
+        group_name = group.name
+        success = await server_service.delete_server_group_async(group_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="服务器分组不存在")
+        
+        # 记录成功的分组删除操作
+        await audit_service.log_group_operation(
+            user_id=current_user.id,
+            username=current_user.username,
+            action=AuditAction.GROUP_DELETE,
+            group_id=group_id,
+            group_name=group_name,
+            result={"status": "success", "deleted_group_id": group_id},
+            success=True,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent", "unknown"),
+        )
+        
+        return {"message": "服务器分组删除成功"}
+    except HTTPException:
+        # 记录失败的分组删除操作
+        try:
+            audit_service_local = AuditLogService(db)
+            await audit_service_local.log_group_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.GROUP_DELETE,
+                group_id=group_id,
+                success=False,
+                error_message="服务器分组不存在",
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录分组删除失败操作失败: {str(audit_error)}")
+        raise
+    except Exception as e:
+        # 记录失败的分组删除操作
+        try:
+            audit_service_local = AuditLogService(db)
+            await audit_service_local.log_group_operation(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=AuditAction.GROUP_DELETE,
+                group_id=group_id,
+                success=False,
+                error_message=str(e),
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("user-agent", "unknown"),
+            )
+        except Exception as audit_error:
+            logger.warning(f"记录分组删除失败操作失败: {str(audit_error)}")
+        
+        logger.error(f"服务器分组删除失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="服务器分组删除失败，请稍后重试")
+
+# ==========================================
+# 3. 通用服务器操作
+# ==========================================
+
 @router.post("/", response_model=ServerResponse)
 async def create_server(
     server_data: ServerCreate,
@@ -39,9 +363,8 @@ async def create_server(
     """添加服务器"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
-        server = await server_service.create_server_async(server_data)
+        server = await server_service.create_server(server_data)
         
         # 记录成功的服务器创建操作
         await audit_service.log_server_operation(
@@ -50,16 +373,18 @@ async def create_server(
             action=AuditAction.SERVER_CREATE,
             server_id=server.id,
             server_name=server.name,
-            action_details={
-                "ipmi_ip": str(server.ipmi_ip),
-                "manufacturer": server.manufacturer,
-                "model": server.model
-            },
+            action_details=server_data.model_dump(),
             result={"status": "success", "server_id": server.id},
             success=True,
             ip_address=get_client_ip(request),
             user_agent=request.headers.get("user-agent", "unknown"),
         )
+        
+        # 创建服务器后立即调度刷新任务
+        try:
+            scheduler_service.schedule_server_refresh(server.id)
+        except Exception as e:
+            logger.error(f"调度服务器刷新任务失败: {str(e)}")
         
         return server
     except ValidationError as e:
@@ -70,7 +395,8 @@ async def create_server(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.SERVER_CREATE,
-                action_details={"name": server_data.name},
+                server_name=server_data.name,
+                action_details=server_data.model_dump(),
                 success=False,
                 error_message=e.message,
                 ip_address=get_client_ip(request),
@@ -79,6 +405,7 @@ async def create_server(
         except Exception as audit_error:
             logger.error(f"记录审计日志失败: {audit_error}")
         
+        logger.warning(f"服务器创建验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
     except Exception as e:
         # 记录失败的服务器创建操作
@@ -88,7 +415,8 @@ async def create_server(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.SERVER_CREATE,
-                action_details={"name": server_data.name},
+                server_name=server_data.name,
+                action_details=server_data.model_dump(),
                 success=False,
                 error_message=str(e),
                 ip_address=get_client_ip(request),
@@ -104,33 +432,17 @@ async def create_server(
 async def get_servers(
     skip: int = 0,
     limit: int = 100,
-    group_id: Optional[int] = None,
+    group_id: Optional[int] = Query(None, description="筛选指定分组的服务器"),
     db: AsyncSession = Depends(get_async_db),
     current_user = Depends(get_current_user)
 ):
     """获取服务器列表"""
     server_service = ServerService(db)
-    await server_service.__init_async__(db)
     return await server_service.get_servers_async(skip=skip, limit=limit, group_id=group_id)
 
-# 集群统计接口（必须在 /{server_id} 之前）
-@router.get("/stats", response_model=ClusterStatsResponse)
-async def get_cluster_statistics(
-    group_id: Optional[int] = None,
-    db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(get_current_user)
-):
-    """获取集群统计信息"""
-    try:
-        server_service = ServerService(db)
-        await server_service.__init_async__(db)
-        stats = await server_service.get_cluster_statistics_async(group_id=group_id)
-        
-        return ClusterStatsResponse(**stats)
-        
-    except Exception as e:
-        logger.error(f"获取集群统计失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="获取统计信息失败")
+# ==========================================
+# 4. 动态ID路由 (必须放在最后)
+# ==========================================
 
 @router.get("/{server_id}", response_model=ServerResponse)
 async def get_server(
@@ -140,7 +452,6 @@ async def get_server(
 ):
     """获取指定服务器"""
     server_service = ServerService(db)
-    await server_service.__init_async__(db)
     server = await server_service.get_server_async(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="服务器不存在")
@@ -157,7 +468,6 @@ async def update_server(
     """更新服务器信息"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
         server = await server_service.update_server_async(server_id, server_data)
         if not server:
@@ -228,7 +538,6 @@ async def delete_server(
     """删除服务器"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
         
         # 获取服务器信息用于审计日志
@@ -288,7 +597,6 @@ async def power_control(
     """服务器电源控制"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
         
         # 获取服务器信息
@@ -376,7 +684,6 @@ async def update_server_status(
     """更新服务器状态"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         # 使用异步方法更新服务器状态
         result = await server_service.update_server_status(server_id)
         return result
@@ -390,396 +697,7 @@ async def update_server_status(
         logger.error(f"状态更新失败: {str(e)}")
         raise HTTPException(status_code=500, detail="状态更新失败，请稍后重试")
 
-# 服务器分组
-@router.post("/groups/", response_model=ServerGroupResponse)
-async def create_server_group(
-    group_data: ServerGroupCreate,
-    request: Request,
-    db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(get_current_user)
-):
-    """创建服务器分组"""
-    try:
-        server_service = ServerService(db)
-        await server_service.__init_async__(db)
-        audit_service = AuditLogService(db)
-        group = await server_service.create_server_group_async(group_data)
-        
-        # 记录成功的分组创建操作
-        await audit_service.log_group_operation(
-            user_id=current_user.id,
-            username=current_user.username,
-            action=AuditAction.GROUP_CREATE,
-            group_id=group.id,
-            group_name=group.name,
-            action_details={"description": group.description},
-            result={"status": "success", "group_id": group.id},
-            success=True,
-            ip_address=get_client_ip(request),
-            user_agent=request.headers.get("user-agent", "unknown"),
-        )
-        
-        return group
-    except ValidationError as e:
-        # 记录失败的分组创建操作
-        try:
-            audit_service_local = AuditLogService(db)
-            await audit_service_local.log_group_operation(
-                user_id=current_user.id,
-                username=current_user.username,
-                action=AuditAction.GROUP_CREATE,
-                group_name=group_data.name,
-                success=False,
-                error_message=e.message,
-                ip_address=get_client_ip(request),
-                user_agent=request.headers.get("user-agent", "unknown"),
-            )
-        except Exception as audit_error:
-            logger.warning(f"记录分组创建失败操作失败: {str(audit_error)}")
-        
-        logger.warning(f"服务器分组创建验证失败: {e.message}")
-        raise HTTPException(status_code=400, detail=e.message)
-    except Exception as e:
-        # 记录失败的分组创建操作
-        try:
-            audit_service_local = AuditLogService(db)
-            await audit_service_local.log_group_operation(
-                user_id=current_user.id,
-                username=current_user.username,
-                action=AuditAction.GROUP_CREATE,
-                group_name=group_data.name,
-                success=False,
-                error_message=str(e),
-                ip_address=get_client_ip(request),
-                user_agent=request.headers.get("user-agent", "unknown"),
-            )
-        except Exception as audit_error:
-            logger.warning(f"记录分组创建失败操作失败: {str(audit_error)}")
-        
-        logger.error(f"服务器分组创建失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="服务器分组创建失败，请稍后重试")
-
-@router.get("/groups/", response_model=List[ServerGroupResponse])
-async def get_server_groups(
-    db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(get_current_user)
-):
-    """获取服务器分组列表"""
-    server_service = ServerService(db)
-    await server_service.__init_async__(db)
-    return await server_service.get_server_groups_async()
-
-@router.get("/groups/{group_id}", response_model=ServerGroupResponse)
-async def get_server_group(
-    group_id: int,
-    db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(get_current_user)
-):
-    """获取指定服务器分组"""
-    server_service = ServerService(db)
-    await server_service.__init_async__(db)
-    group = await server_service.get_server_group_async(group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="服务器分组不存在")
-    return group
-
-@router.put("/groups/{group_id}", response_model=ServerGroupResponse)
-async def update_server_group(
-    group_id: int,
-    group_data: ServerGroupCreate,
-    request: Request,
-    db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(get_current_user)
-):
-    """更新服务器分组"""
-    try:
-        server_service = ServerService(db)
-        await server_service.__init_async__(db)
-        audit_service = AuditLogService(db)
-        group = await server_service.update_server_group_async(group_id, group_data)
-        if not group:
-            raise HTTPException(status_code=404, detail="服务器分组不存在")
-        
-        # 记录成功的分组更新操作
-        await audit_service.log_group_operation(
-            user_id=current_user.id,
-            username=current_user.username,
-            action=AuditAction.GROUP_UPDATE,
-            group_id=group.id,
-            group_name=group.name,
-            action_details={"name": group_data.name, "description": group_data.description},
-            result={"status": "success", "group_id": group.id},
-            success=True,
-            ip_address=get_client_ip(request),
-            user_agent=request.headers.get("user-agent", "unknown"),
-        )
-        
-        return group
-    except ValidationError as e:
-        # 记录失败的分组更新操作
-        try:
-            audit_service_local = AuditLogService(db)
-            await audit_service_local.log_group_operation(
-                user_id=current_user.id,
-                username=current_user.username,
-                action=AuditAction.GROUP_UPDATE,
-                group_id=group_id,
-                success=False,
-                error_message=e.message,
-                ip_address=get_client_ip(request),
-                user_agent=request.headers.get("user-agent", "unknown"),
-            )
-        except Exception as audit_error:
-            logger.warning(f"记录分组更新失败操作失败: {str(audit_error)}")
-        
-        logger.warning(f"服务器分组更新验证失败: {e.message}")
-        raise HTTPException(status_code=400, detail=e.message)
-    except Exception as e:
-        # 记录失败的分组更新操作
-        try:
-            audit_service_local = AuditLogService(db)
-            await audit_service_local.log_group_operation(
-                user_id=current_user.id,
-                username=current_user.username,
-                action=AuditAction.GROUP_UPDATE,
-                group_id=group_id,
-                success=False,
-                error_message=str(e),
-                ip_address=get_client_ip(request),
-                user_agent=request.headers.get("user-agent", "unknown"),
-            )
-        except Exception as audit_error:
-            logger.warning(f"记录分组更新失败操作失败: {str(audit_error)}")
-        
-        logger.error(f"服务器分组更新失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="服务器分组更新失败，请稍后重试")
-
-@router.delete("/groups/{group_id}")
-async def delete_server_group(
-    group_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(get_current_user)
-):
-    """删除服务器分组"""
-    try:
-        server_service = ServerService(db)
-        await server_service.__init_async__(db)
-        audit_service = AuditLogService(db)
-        
-        # 获取分组信息用于审计日志
-        group = await server_service.get_server_group_async(group_id)
-        if not group:
-            raise HTTPException(status_code=404, detail="服务器分组不存在")
-        
-        group_name = group.name
-        success = await server_service.delete_server_group_async(group_id)
-        
-        if not success:
-            raise HTTPException(status_code=404, detail="服务器分组不存在")
-        
-        # 记录成功的分组删除操作
-        await audit_service.log_group_operation(
-            user_id=current_user.id,
-            username=current_user.username,
-            action=AuditAction.GROUP_DELETE,
-            group_id=group_id,
-            group_name=group_name,
-            result={"status": "success", "deleted_group_id": group_id},
-            success=True,
-            ip_address=get_client_ip(request),
-            user_agent=request.headers.get("user-agent", "unknown"),
-        )
-        
-        return {"message": "服务器分组删除成功"}
-    except HTTPException:
-        # 记录失败的分组删除操作
-        try:
-            audit_service_local = AuditLogService(db)
-            await audit_service_local.log_group_operation(
-                user_id=current_user.id,
-                username=current_user.username,
-                action=AuditAction.GROUP_DELETE,
-                group_id=group_id,
-                success=False,
-                error_message="服务器分组不存在",
-                ip_address=get_client_ip(request),
-                user_agent=request.headers.get("user-agent", "unknown"),
-            )
-        except Exception as audit_error:
-            logger.warning(f"记录分组删除失败操作失败: {str(audit_error)}")
-        raise
-    except Exception as e:
-        # 记录失败的分组删除操作
-        try:
-            audit_service_local = AuditLogService(db)
-            await audit_service_local.log_group_operation(
-                user_id=current_user.id,
-                username=current_user.username,
-                action=AuditAction.GROUP_DELETE,
-                group_id=group_id,
-                success=False,
-                error_message=str(e),
-                ip_address=get_client_ip(request),
-                user_agent=request.headers.get("user-agent", "unknown"),
-            )
-        except Exception as audit_error:
-            logger.warning(f"记录分组删除失败操作失败: {str(audit_error)}")
-        
-        logger.error(f"服务器分组删除失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="服务器分组删除失败，请稍后重试")
-
-# 批量操作接口
-@router.post("/batch/power", response_model=BatchPowerResponse)
-async def batch_power_control(
-    request: BatchPowerRequest,
-    http_request: Request,
-    db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(get_current_user)
-):
-    """批量电源控制"""
-    try:
-        server_service = ServerService(db)
-        await server_service.__init_async__(db)
-        audit_service = AuditLogService(db)
-        # 使用异步方法进行批量电源控制
-        results = await server_service.batch_power_control(
-            server_ids=request.server_ids,
-            action=request.action
-        )
-        
-        # 统计结果
-        total_count = len(results)
-        success_count = sum(1 for r in results if r.success)
-        failed_count = total_count - success_count
-        
-        logger.info(f"批量电源操作完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
-        
-        # 对于可能改变电源状态的操作，调度刷新任务
-        powerChangingActions = ['on', 'off', 'restart', 'force_off', 'force_restart']
-        if request.action in powerChangingActions:
-            try:
-                # 为每个服务器调度刷新任务
-                for server_id in request.server_ids:
-                    scheduler_service.schedule_server_refresh(server_id)
-            except Exception as e:
-                logger.error(f"调度服务器刷新任务失败: {str(e)}")
-        
-        # 记录批量电源操作
-        await audit_service.log_batch_operation(
-            user_id=current_user.id,
-            username=current_user.username,
-            action=AuditAction.BATCH_POWER_CONTROL,
-            action_details={
-                "action": request.action,
-                "server_ids": request.server_ids,
-                "count": len(request.server_ids)
-            },
-            result={
-                "total_count": total_count,
-                "success_count": success_count,
-                "failed_count": failed_count
-            },
-            success=(failed_count == 0),
-            ip_address=get_client_ip(http_request),
-            user_agent=http_request.headers.get("user-agent", "unknown"),
-        )
-        
-        return BatchPowerResponse(
-            total_count=total_count,
-            success_count=success_count,
-            failed_count=failed_count,
-            results=results
-        )
-        
-    except ValidationError as e:
-        logger.warning(f"批量电源操作验证失败: {e.message}")
-        raise HTTPException(status_code=400, detail=e.message)
-    except Exception as e:
-        logger.error(f"批量电源操作失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="批量操作失败，请稍后重试")
-
-@router.post("/batch/monitoring", response_model=BatchUpdateMonitoringResponse)
-async def batch_update_monitoring(
-    request: BatchUpdateMonitoringRequest,
-    http_request: Request,
-    db: AsyncSession = Depends(get_async_db),
-    current_user = Depends(get_current_user)
-):
-    """批量更新服务器监控状态"""
-    try:
-        server_service = ServerService(db)
-        await server_service.__init_async__(db)
-        audit_service = AuditLogService(db)
-        # 使用异步方法进行批量更新监控状态
-        results = await server_service.batch_update_monitoring(
-            server_ids=request.server_ids,
-            monitoring_enabled=request.monitoring_enabled
-        )
-        
-        # 统计结果
-        total_count = len(results)
-        success_count = sum(1 for r in results if r.success)
-        failed_count = total_count - success_count
-        
-        logger.info(f"批量更新监控状态完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
-        
-        # 记录批量监控操作
-        await audit_service.log_batch_operation(
-            user_id=current_user.id,
-            username=current_user.username,
-            action=AuditAction.MONITORING_ENABLE if request.monitoring_enabled else AuditAction.MONITORING_DISABLE,
-            action_details={
-                "monitoring_enabled": request.monitoring_enabled,
-                "server_ids": request.server_ids,
-                "count": len(request.server_ids)
-            },
-            result={
-                "total_count": total_count,
-                "success_count": success_count,
-                "failed_count": failed_count
-            },
-            success=(failed_count == 0),
-            ip_address=get_client_ip(http_request),
-            user_agent=http_request.headers.get("user-agent", "unknown"),
-        )
-        
-        return BatchUpdateMonitoringResponse(
-            total_count=total_count,
-            success_count=success_count,
-            failed_count=failed_count,
-            results=results
-        )
-        
-    except ValidationError as e:
-        logger.warning(f"批量更新监控状态验证失败: {e.message}")
-        raise HTTPException(status_code=400, detail=e.message)
-    except Exception as e:
-        logger.error(f"批量更新监控状态失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="批量操作失败，请稍后重试")
-
-# Redfish支持检查响应模型
-class RedfishSupportResponse(BaseModel):
-    """Redfish支持检查响应"""
-    supported: bool = Field(..., description="是否支持Redfish")
-    version: Optional[str] = Field(None, description="Redfish版本")
-    error: Optional[str] = Field(None, description="错误信息")
-    service_root: Optional[dict] = Field(None, description="Redfish服务根信息")
-
-# LED状态响应模型
-class LEDStatusResponse(BaseModel):
-    """LED状态响应"""
-    supported: bool = Field(..., description="是否支持LED控制")
-    led_state: str = Field(..., description="LED状态（On, Off, Unknown）")
-    error: Optional[str] = Field(None, description="错误信息")
-
-# LED控制响应模型
-class LEDControlResponse(BaseModel):
-    """LED控制响应"""
-    success: bool = Field(..., description="操作是否成功")
-    message: str = Field(..., description="操作结果信息")
-    error: Optional[str] = Field(None, description="错误信息")
-
+# Redfish支持检查
 @router.post("/{server_id}/redfish-check", response_model=RedfishSupportResponse)
 async def check_redfish_support(
     server_id: int,
@@ -789,21 +707,18 @@ async def check_redfish_support(
     """检查服务器BMC是否支持Redfish"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         result = await server_service.check_redfish_support(server_id)
         return result
     except ValidationError as e:
         logger.warning(f"Redfish检查验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
-    except IPMIError as e:
-        logger.error(f"Redfish检查失败: {e.message}")
-        raise HTTPException(status_code=500, detail=f"检查失败: {e.message}")
     except Exception as e:
-        logger.error(f"Redfish检查失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="检查失败，请稍后重试")
+        logger.error(f"Redfish支持检查失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="Redfish支持检查失败，请稍后重试")
 
-@router.get("/{server_id}/led-status", response_model=LEDStatusResponse)
-async def get_led_status(
+# LED状态获取
+@router.get("/{server_id}/led-status", response_model=LedStatusResponse)
+async def get_server_led_status(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user = Depends(get_current_user)
@@ -811,21 +726,18 @@ async def get_led_status(
     """获取服务器LED状态"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         result = await server_service.get_server_led_status(server_id)
         return result
     except ValidationError as e:
-        logger.warning(f"LED状态查询验证失败: {e.message}")
+        logger.warning(f"LED状态获取验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
-    except IPMIError as e:
-        logger.error(f"LED状态查询失败: {e.message}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {e.message}")
     except Exception as e:
-        logger.error(f"LED状态查询失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="查询失败，请稍后重试")
+        logger.error(f"获取LED状态失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取LED状态失败，请稍后重试")
 
-@router.post("/{server_id}/led-on", response_model=LEDControlResponse)
-async def turn_on_led(
+# LED开启
+@router.post("/{server_id}/led-on", response_model=LedControlResponse)
+async def set_server_led_state_on(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user = Depends(get_current_user)
@@ -833,21 +745,18 @@ async def turn_on_led(
     """点亮服务器LED"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         result = await server_service.set_server_led_state(server_id, "On")
         return result
     except ValidationError as e:
-        logger.warning(f"LED点亮验证失败: {e.message}")
+        logger.warning(f"LED控制验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
-    except IPMIError as e:
-        logger.error(f"LED点亮失败: {e.message}")
-        raise HTTPException(status_code=500, detail=f"操作失败: {e.message}")
     except Exception as e:
-        logger.error(f"LED点亮失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="操作失败，请稍后重试")
+        logger.error(f"点亮LED失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="点亮LED失败，请稍后重试")
 
-@router.post("/{server_id}/led-off", response_model=LEDControlResponse)
-async def turn_off_led(
+# LED关闭
+@router.post("/{server_id}/led-off", response_model=LedControlResponse)
+async def set_server_led_state_off(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user = Depends(get_current_user)
@@ -855,22 +764,16 @@ async def turn_off_led(
     """关闭服务器LED"""
     try:
         server_service = ServerService(db)
-        await server_service.__init_async__(db)
         result = await server_service.set_server_led_state(server_id, "Off")
         return result
     except ValidationError as e:
-        logger.warning(f"LED关闭验证失败: {e.message}")
+        logger.warning(f"LED控制验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
-    except IPMIError as e:
-        logger.error(f"LED关闭失败: {e.message}")
-        raise HTTPException(status_code=500, detail=f"操作失败: {e.message}")
     except Exception as e:
-        logger.error(f"LED关闭失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="操作失败，请稍后重试")
+        logger.error(f"关闭LED失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="关闭LED失败，请稍后重试")
 
-# 导入定时任务服务
-from app.services.scheduler_service import scheduler_service
-
+# 调度刷新任务
 @router.post("/{server_id}/schedule-refresh")
 async def schedule_server_refresh(
     server_id: int,
