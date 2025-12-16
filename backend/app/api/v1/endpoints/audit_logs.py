@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.core.database import get_async_db
-from app.schemas.audit_log import AuditLogResponse, AuditLogQueryParams
+from app.schemas.audit_log import AuditLogListResponse
 from app.services.audit_log import AuditLogService
 from app.services.auth import get_current_admin_user
 from app.models.audit_log import AuditLog, AuditAction, AuditResourceType, AuditStatus
@@ -397,7 +397,7 @@ async def export_audit_logs_excel(
             }
         },
         result={"status": "success", "format": "excel"},
-        ip_address=http_request.client.host if http_request and http_request.client else "unknown",
+        ip_address=http_request.client.host if http_request.client else "unknown",
         user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
         status=AuditStatus.SUCCESS,
     )
@@ -531,8 +531,8 @@ async def get_audit_log(
     
     return AuditLog.model_validate(log)
 
-@router.get("/", response_model=AuditLogResponse)
-@router.get("", response_model=AuditLogResponse)
+@router.get("/", response_model=AuditLogListResponse)
+@router.get("", response_model=AuditLogListResponse)
 async def get_audit_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -599,7 +599,7 @@ async def get_audit_logs(
     )
     
     logger.info(f"审计日志列表查询完成，用户={current_user.username}，返回记录数={len(logs)}，总记录数={total}")
-    return AuditLogResponse(
+    return AuditLogListResponse(
         items=[
             AuditLog.model_validate(log) for log in logs
         ],

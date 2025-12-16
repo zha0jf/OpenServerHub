@@ -12,9 +12,9 @@ from app.services.server import ServerService
 from app.services.auth import get_current_user
 from app.services.audit_log import AuditLogService
 from app.models.audit_log import AuditAction, AuditStatus
-from app.schemas.discovery import (
+from app.schemas.server import (
     NetworkScanRequest, NetworkScanResponse, DiscoveredDevice,
-    BatchImportRequest, ImportResult, CSVImportRequest
+    BatchImportRequest, BatchImportResponse, CSVImportRequest
 )
 
 router = APIRouter()
@@ -110,7 +110,7 @@ async def scan_network(
         raise HTTPException(status_code=500, detail="网络扫描失败，请检查网络配置或稍后重试")
 
 
-@router.post("/batch-import", response_model=ImportResult)
+@router.post("/batch-import", response_model=BatchImportResponse)
 async def batch_import_servers(
     request: BatchImportRequest,
     http_request: Request,
@@ -134,7 +134,7 @@ async def batch_import_servers(
             group_id=request.group_id
         )
         
-        response = ImportResult(**result)
+        response = BatchImportResponse(**result)
         
         logger.info(f"批量导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
         
@@ -167,7 +167,7 @@ async def batch_import_servers(
         raise HTTPException(status_code=500, detail="批量导入失败，请稍后重试")
 
 
-@router.post("/csv-import", response_model=ImportResult)
+@router.post("/csv-import", response_model=BatchImportResponse)
 async def import_from_csv(
     csv_file: UploadFile = File(...),
     group_id: Optional[int] = None,
@@ -201,7 +201,7 @@ async def import_from_csv(
             group_id=group_id
         )
         
-        response = ImportResult(**result)
+        response = BatchImportResponse(**result)
         
         logger.info(f"CSV导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
         
@@ -260,7 +260,7 @@ async def import_from_csv_text(
             group_id=request.group_id
         )
         
-        response = ImportResult(**result)
+        response = BatchImportResponse(**result)
         
         logger.info(f"CSV文本导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
         
