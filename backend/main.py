@@ -8,8 +8,6 @@ import logging
 import os
 import asyncio
 
-from pyghmi.ipmi.command import Housekeeper
-
 from app.core.config import settings
 from app.core.database import engine, periodic_health_check
 from app.core.logging import setup_logging
@@ -41,8 +39,6 @@ setup_logging()
 logger.debug(f"[应用启动] DEBUG环境变量值: '{os.getenv('DEBUG', '')}'")
 logger.debug(f"[应用启动] 当前日志级别: {logging.getLogger().level}")
 
-# 全局Housekeeper实例
-housekeeper = None
 
 # 导入监控调度服务模块（注意：不是实例）
 import app.services.monitoring_scheduler as monitoring_module
@@ -56,20 +52,10 @@ power_state_scheduler_service = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global housekeeper, health_check_task
+    global health_check_task
     
     # 启动时创建数据库表
     Base.metadata.create_all(bind=engine)
-    
-    # 初始化并启动Housekeeper
-    try:
-        housekeeper = Housekeeper()
-        housekeeper.start()
-        logger.info("IPMI Housekeeper初始化并启动成功")
-    except Exception as e:
-        logger.error(f"IPMI Housekeeper初始化失败: {e}")
-        # 不应该因为Housekeeper初始化失败而阻止应用启动
-        housekeeper = None
     
     # 启动数据库健康检查任务
     try:
