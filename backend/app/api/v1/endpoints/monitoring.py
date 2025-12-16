@@ -15,7 +15,7 @@ from app.services.auth import get_current_user
 from app.core.config import settings
 from app.schemas.monitoring import MonitoringRecordResponse
 from app.models.server import Server
-from app.services.grafana import GrafanaService
+from app.services.server_monitoring import GrafanaService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
