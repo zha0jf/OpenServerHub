@@ -2,7 +2,8 @@ import json
 import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog, AuditAction, AuditStatus
 
@@ -11,10 +12,10 @@ logger = logging.getLogger(__name__)
 class AuditLogService:
     """审计日志服务"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
-    def create_log(
+    async def create_log(
         self,
         action: AuditAction,
         operator_id: Optional[int] = None,
@@ -64,19 +65,19 @@ class AuditLogService:
         
         try:
             self.db.add(audit_log)
-            self.db.commit()
-            self.db.refresh(audit_log)
+            await self.db.commit()
+            await self.db.refresh(audit_log)
             logger.info(
                 f"审计日志已记录: action={action}, operator={operator_username}, "
                 f"resource={resource_type}:{resource_id}, status={status}"
             )
             return audit_log
         except Exception as e:
-            self.db.rollback()
+            await self.db.rollback()
             logger.error(f"创建审计日志失败: {str(e)}", exc_info=True)
             raise
     
-    def get_logs(
+    async def get_logs(
         self,
         skip: int = 0,
         limit: int = 100,
@@ -101,37 +102,46 @@ class AuditLogService:
         :return: (日志列表, 总数)
         """
         
-        query = self.db.query(AuditLog)
+        # 构建查询语句
+        stmt = select(AuditLog)
         
         if action:
-            query = query.filter(AuditLog.action == action)
+            stmt = stmt.where(AuditLog.action == action)
         
         if operator_id:
-            query = query.filter(AuditLog.operator_id == operator_id)
+            stmt = stmt.where(AuditLog.operator_id == operator_id)
         
         if resource_type:
-            query = query.filter(AuditLog.resource_type == resource_type)
+            stmt = stmt.where(AuditLog.resource_type == resource_type)
         
         if resource_id:
-            query = query.filter(AuditLog.resource_id == resource_id)
+            stmt = stmt.where(AuditLog.resource_id == resource_id)
         
         if start_date:
-            query = query.filter(AuditLog.created_at >= start_date)
+            stmt = stmt.where(AuditLog.created_at >= start_date)
         
         if end_date:
-            query = query.filter(AuditLog.created_at <= end_date)
+            stmt = stmt.where(AuditLog.created_at <= end_date)
         
-        total = query.count()
+        # 获取总数
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        count_result = await self.db.execute(count_stmt)
+        total = count_result.scalar_one()
         
-        logs = query.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
+        # 获取日志列表
+        stmt = stmt.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit)
+        result = await self.db.execute(stmt)
+        logs = result.scalars().all()
         
         return logs, total
     
-    def get_log_by_id(self, log_id: int) -> Optional[AuditLog]:
+    async def get_log_by_id(self, log_id: int) -> Optional[AuditLog]:
         """获取指定ID的审计日志"""
-        return self.db.query(AuditLog).filter(AuditLog.id == log_id).first()
+        stmt = select(AuditLog).where(AuditLog.id == log_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
     
-    def log_login(
+    async def log_login(
         self,
         username: str,
         ip_address: Optional[str] = None,
@@ -140,7 +150,7 @@ class AuditLogService:
         success: bool = True,
     ) -> AuditLog:
         """记录登录操作"""
-        return self.create_log(
+        return await self.create_log(
             action=AuditAction.LOGIN if success else AuditAction.LOGIN_FAILED,
             operator_id=user_id,
             operator_username=username,
@@ -152,7 +162,7 @@ class AuditLogService:
             status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
         )
     
-    def log_logout(
+    async def log_logout(
         self,
         user_id: int,
         username: str,
@@ -160,7 +170,7 @@ class AuditLogService:
         user_agent: Optional[str] = None,
     ) -> AuditLog:
         """记录登出操作"""
-        return self.create_log(
+        return await self.create_log(
             action=AuditAction.LOGOUT,
             operator_id=user_id,
             operator_username=username,
@@ -171,7 +181,7 @@ class AuditLogService:
             user_agent=user_agent,
         )
     
-    def log_power_control(
+    async def log_power_control(
         self,
         user_id: int,
         username: str,
@@ -195,7 +205,7 @@ class AuditLogService:
         
         audit_action = action_map.get(action_type, AuditAction.POWER_ON)
         
-        return self.create_log(
+        return await self.create_log(
             action=audit_action,
             operator_id=user_id,
             operator_username=username,
@@ -209,7 +219,7 @@ class AuditLogService:
             status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
         )
     
-    def log_server_operation(
+    async def log_server_operation(
         self,
         user_id: int,
         username: str,
@@ -224,7 +234,7 @@ class AuditLogService:
         user_agent: Optional[str] = None,
     ) -> AuditLog:
         """记录服务器相关操作"""
-        return self.create_log(
+        return await self.create_log(
             action=action,
             operator_id=user_id,
             operator_username=username,
@@ -239,7 +249,7 @@ class AuditLogService:
             status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
         )
     
-    def log_user_operation(
+    async def log_user_operation(
         self,
         operator_id: int,
         operator_username: str,
@@ -254,7 +264,7 @@ class AuditLogService:
         user_agent: Optional[str] = None,
     ) -> AuditLog:
         """记录用户管理相关操作"""
-        return self.create_log(
+        return await self.create_log(
             action=action,
             operator_id=operator_id,
             operator_username=operator_username,
@@ -269,7 +279,7 @@ class AuditLogService:
             status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
         )
     
-    def log_group_operation(
+    async def log_group_operation(
         self,
         user_id: int,
         username: str,
@@ -284,7 +294,7 @@ class AuditLogService:
         user_agent: Optional[str] = None,
     ) -> AuditLog:
         """记录服务器分组相关操作"""
-        return self.create_log(
+        return await self.create_log(
             action=action,
             operator_id=user_id,
             operator_username=username,
@@ -299,7 +309,7 @@ class AuditLogService:
             status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
         )
     
-    def log_batch_operation(
+    async def log_batch_operation(
         self,
         user_id: int,
         username: str,
@@ -312,7 +322,7 @@ class AuditLogService:
         user_agent: Optional[str] = None,
     ) -> AuditLog:
         """记录批量操作相关审计日志"""
-        return self.create_log(
+        return await self.create_log(
             action=action,
             operator_id=user_id,
             operator_username=username,
@@ -325,7 +335,7 @@ class AuditLogService:
             status=AuditStatus.SUCCESS if success else AuditStatus.FAILED,
         )
     
-    def log_discovery_operation(
+    async def log_discovery_operation(
         self,
         user_id: int,
         username: str,
@@ -338,7 +348,7 @@ class AuditLogService:
         user_agent: Optional[str] = None,
     ) -> AuditLog:
         """记录设备发现相关操作"""
-        return self.create_log(
+        return await self.create_log(
             action=action,
             operator_id=user_id,
             operator_username=username,

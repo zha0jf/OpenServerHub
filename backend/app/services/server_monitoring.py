@@ -6,6 +6,7 @@ import os
 import base64
 
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.server import Server
 from app.core.config import settings
 

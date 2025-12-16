@@ -1,9 +1,9 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.schemas.server import ServerCreate, ServerUpdate, ServerResponse, ServerGroupCreate, ServerGroupResponse, BatchPowerRequest, BatchPowerResponse, ClusterStatsResponse
 from app.services.server import ServerService
 from app.services.auth import AuthService
@@ -29,17 +29,18 @@ def get_client_ip(request: Request) -> str:
 async def create_server(
     server_data: ServerCreate,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """添加服务器"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
-        server = server_service.create_server(server_data)
+        server = await server_service.create_server_async(server_data)
         
         # 记录成功的服务器创建操作
-        audit_service.log_server_operation(
+        await audit_service.log_server_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.SERVER_CREATE,
@@ -61,7 +62,7 @@ async def create_server(
         # 记录失败的服务器创建操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_server_operation(
+            await audit_service_local.log_server_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.SERVER_CREATE,
@@ -72,15 +73,14 @@ async def create_server(
                 user_agent=request.headers.get("user-agent", "unknown"),
             )
         except Exception as audit_error:
-            logger.warning(f"记录服务器创建失败操作失败: {str(audit_error)}")
+            logger.error(f"记录审计日志失败: {audit_error}")
         
-        logger.warning(f"服务器创建验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
     except Exception as e:
         # 记录失败的服务器创建操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_server_operation(
+            await audit_service_local.log_server_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.SERVER_CREATE,
@@ -91,34 +91,36 @@ async def create_server(
                 user_agent=request.headers.get("user-agent", "unknown"),
             )
         except Exception as audit_error:
-            logger.warning(f"记录服务器创建失败操作失败: {str(audit_error)}")
+            logger.error(f"记录审计日志失败: {audit_error}")
         
-        logger.error(f"服务器创建失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="服务器创建失败，请稍后重试")
+        logger.error(f"创建服务器失败: {e}")
+        raise HTTPException(status_code=500, detail="服务器创建失败")
 
 @router.get("/", response_model=List[ServerResponse])
 async def get_servers(
     skip: int = 0,
     limit: int = 100,
     group_id: Optional[int] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取服务器列表"""
     server_service = ServerService(db)
-    return server_service.get_servers(skip=skip, limit=limit, group_id=group_id)
+    await server_service.__init_async__(db)
+    return await server_service.get_servers_async(skip=skip, limit=limit, group_id=group_id)
 
 # 集群统计接口（必须在 /{server_id} 之前）
 @router.get("/stats", response_model=ClusterStatsResponse)
 async def get_cluster_statistics(
     group_id: Optional[int] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取集群统计信息"""
     try:
         server_service = ServerService(db)
-        stats = server_service.get_cluster_statistics(group_id=group_id)
+        await server_service.__init_async__(db)
+        stats = await server_service.get_cluster_statistics_async(group_id=group_id)
         
         return ClusterStatsResponse(**stats)
         
@@ -129,12 +131,13 @@ async def get_cluster_statistics(
 @router.get("/{server_id}", response_model=ServerResponse)
 async def get_server(
     server_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取指定服务器"""
     server_service = ServerService(db)
-    server = server_service.get_server(server_id)
+    await server_service.__init_async__(db)
+    server = await server_service.get_server_async(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="服务器不存在")
     return server
@@ -144,19 +147,20 @@ async def update_server(
     server_id: int,
     server_data: ServerUpdate,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """更新服务器信息"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
-        server = server_service.update_server(server_id, server_data)
+        server = await server_service.update_server_async(server_id, server_data)
         if not server:
             raise HTTPException(status_code=404, detail="服务器不存在")
         
         # 记录成功的服务器更新操作
-        audit_service.log_server_operation(
+        await audit_service.log_server_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.SERVER_UPDATE,
@@ -174,68 +178,68 @@ async def update_server(
         # 记录失败的服务器更新操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_server_operation(
+            await audit_service_local.log_server_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.SERVER_UPDATE,
                 server_id=server_id,
+                action_details=server_data.model_dump(exclude_unset=True),
                 success=False,
                 error_message=e.message,
                 ip_address=get_client_ip(request),
                 user_agent=request.headers.get("user-agent", "unknown"),
             )
         except Exception as audit_error:
-            logger.warning(f"记录服务器更新失败操作失败: {str(audit_error)}")
+            logger.error(f"记录审计日志失败: {audit_error}")
         
-        logger.warning(f"服务器更新验证失败: {e.message}")
         raise HTTPException(status_code=400, detail=e.message)
-    except HTTPException:
-        raise
     except Exception as e:
         # 记录失败的服务器更新操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_server_operation(
+            await audit_service_local.log_server_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.SERVER_UPDATE,
                 server_id=server_id,
+                action_details=server_data.model_dump(exclude_unset=True),
                 success=False,
                 error_message=str(e),
                 ip_address=get_client_ip(request),
                 user_agent=request.headers.get("user-agent", "unknown"),
             )
         except Exception as audit_error:
-            logger.warning(f"记录服务器更新失败操作失败: {str(audit_error)}")
+            logger.error(f"记录审计日志失败: {audit_error}")
         
-        logger.error(f"服务器更新失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="服务器更新失败，请稍后重试")
+        logger.error(f"更新服务器失败: {e}")
+        raise HTTPException(status_code=500, detail="服务器更新失败")
 
 @router.delete("/{server_id}")
 async def delete_server(
     server_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """删除服务器"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
         
         # 获取服务器信息用于审计日志
-        server = server_service.get_server(server_id)
+        server = await server_service.get_server_async(server_id)
         if not server:
             raise HTTPException(status_code=404, detail="服务器不存在")
         
         server_name = server.name
-        success = server_service.delete_server(server_id)
+        success = await server_service.delete_server_async(server_id)
         
         if not success:
             raise HTTPException(status_code=404, detail="服务器不存在")
         
         # 记录成功的服务器删除操作
-        audit_service.log_server_operation(
+        await audit_service.log_server_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.SERVER_DELETE,
@@ -248,28 +252,11 @@ async def delete_server(
         )
         
         return {"message": "服务器删除成功"}
-    except HTTPException:
-        # 记录失败的服务器删除操作
-        try:
-            audit_service_local = AuditLogService(db)
-            audit_service_local.log_server_operation(
-                user_id=current_user.id,
-                username=current_user.username,
-                action=AuditAction.SERVER_DELETE,
-                server_id=server_id,
-                success=False,
-                error_message="服务器不存在",
-                ip_address=get_client_ip(request),
-                user_agent=request.headers.get("user-agent", "unknown"),
-            )
-        except Exception as audit_error:
-            logger.warning(f"记录服务器删除失败操作失败: {str(audit_error)}")
-        raise
     except Exception as e:
         # 记录失败的服务器删除操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_server_operation(
+            await audit_service_local.log_server_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.SERVER_DELETE,
@@ -280,10 +267,10 @@ async def delete_server(
                 user_agent=request.headers.get("user-agent", "unknown"),
             )
         except Exception as audit_error:
-            logger.warning(f"记录服务器删除失败操作失败: {str(audit_error)}")
+            logger.error(f"记录审计日志失败: {audit_error}")
         
-        logger.error(f"服务器删除失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="服务器删除失败，请稍后重试")
+        logger.error(f"删除服务器失败: {e}")
+        raise HTTPException(status_code=500, detail="服务器删除失败")
 
 # 电源控制
 @router.post("/{server_id}/power/{action}")
@@ -291,26 +278,28 @@ async def power_control(
     server_id: int,
     action: str,  # on, off, restart, force_off
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """服务器电源控制"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
         
         # 获取服务器信息
-        server = server_service.get_server(server_id)
+        server = await server_service.get_server_async(server_id)
         if not server:
             raise HTTPException(status_code=404, detail="服务器不存在")
         
         client_ip = get_client_ip(request)
         user_agent = request.headers.get("user-agent", "unknown")
         
+        # 使用异步方法进行电源控制
         result = await server_service.power_control(server_id, action)
         
         # 记录成功的电源控制操作
-        audit_service.log_power_control(
+        await audit_service.log_power_control(
             user_id=current_user.id,
             username=current_user.username,
             server_id=server_id,
@@ -334,8 +323,8 @@ async def power_control(
         # 记录失败的电源控制操作
         try:
             audit_service_local = AuditLogService(db)
-            server = server_service.get_server(server_id)
-            audit_service_local.log_power_control(
+            server = await server_service.get_server_async(server_id)
+            await audit_service_local.log_power_control(
                 user_id=current_user.id,
                 username=current_user.username,
                 server_id=server_id,
@@ -356,8 +345,8 @@ async def power_control(
         # 记录失败的电源控制操作
         try:
             audit_service_local = AuditLogService(db)
-            server = server_service.get_server(server_id)
-            audit_service_local.log_power_control(
+            server = await server_service.get_server_async(server_id)
+            await audit_service_local.log_power_control(
                 user_id=current_user.id,
                 username=current_user.username,
                 server_id=server_id,
@@ -377,12 +366,14 @@ async def power_control(
 @router.post("/{server_id}/status")
 async def update_server_status(
     server_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """更新服务器状态"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
+        # 使用异步方法更新服务器状态
         result = await server_service.update_server_status(server_id)
         return result
     except ValidationError as e:
@@ -400,17 +391,18 @@ async def update_server_status(
 async def create_server_group(
     group_data: ServerGroupCreate,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """创建服务器分组"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
-        group = server_service.create_server_group(group_data)
+        group = await server_service.create_server_group_async(group_data)
         
         # 记录成功的分组创建操作
-        audit_service.log_group_operation(
+        await audit_service.log_group_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.GROUP_CREATE,
@@ -428,7 +420,7 @@ async def create_server_group(
         # 记录失败的分组创建操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_group_operation(
+            await audit_service_local.log_group_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.GROUP_CREATE,
@@ -447,7 +439,7 @@ async def create_server_group(
         # 记录失败的分组创建操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_group_operation(
+            await audit_service_local.log_group_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.GROUP_CREATE,
@@ -465,22 +457,24 @@ async def create_server_group(
 
 @router.get("/groups/", response_model=List[ServerGroupResponse])
 async def get_server_groups(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取服务器分组列表"""
     server_service = ServerService(db)
-    return server_service.get_server_groups()
+    await server_service.__init_async__(db)
+    return await server_service.get_server_groups_async()
 
 @router.get("/groups/{group_id}", response_model=ServerGroupResponse)
 async def get_server_group(
     group_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取指定服务器分组"""
     server_service = ServerService(db)
-    group = server_service.get_server_group(group_id)
+    await server_service.__init_async__(db)
+    group = await server_service.get_server_group_async(group_id)
     if not group:
         raise HTTPException(status_code=404, detail="服务器分组不存在")
     return group
@@ -490,19 +484,20 @@ async def update_server_group(
     group_id: int,
     group_data: ServerGroupCreate,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """更新服务器分组"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
-        group = server_service.update_server_group(group_id, group_data)
+        group = await server_service.update_server_group_async(group_id, group_data)
         if not group:
             raise HTTPException(status_code=404, detail="服务器分组不存在")
         
         # 记录成功的分组更新操作
-        audit_service.log_group_operation(
+        await audit_service.log_group_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.GROUP_UPDATE,
@@ -520,7 +515,7 @@ async def update_server_group(
         # 记录失败的分组更新操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_group_operation(
+            await audit_service_local.log_group_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.GROUP_UPDATE,
@@ -539,7 +534,7 @@ async def update_server_group(
         # 记录失败的分组更新操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_group_operation(
+            await audit_service_local.log_group_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.GROUP_UPDATE,
@@ -559,27 +554,28 @@ async def update_server_group(
 async def delete_server_group(
     group_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """删除服务器分组"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
         
         # 获取分组信息用于审计日志
-        group = server_service.get_server_group(group_id)
+        group = await server_service.get_server_group_async(group_id)
         if not group:
             raise HTTPException(status_code=404, detail="服务器分组不存在")
         
         group_name = group.name
-        success = server_service.delete_server_group(group_id)
+        success = await server_service.delete_server_group_async(group_id)
         
         if not success:
             raise HTTPException(status_code=404, detail="服务器分组不存在")
         
         # 记录成功的分组删除操作
-        audit_service.log_group_operation(
+        await audit_service.log_group_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.GROUP_DELETE,
@@ -596,7 +592,7 @@ async def delete_server_group(
         # 记录失败的分组删除操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_group_operation(
+            await audit_service_local.log_group_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.GROUP_DELETE,
@@ -613,7 +609,7 @@ async def delete_server_group(
         # 记录失败的分组删除操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_group_operation(
+            await audit_service_local.log_group_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.GROUP_DELETE,
@@ -634,13 +630,15 @@ async def delete_server_group(
 async def batch_power_control(
     request: BatchPowerRequest,
     http_request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """批量电源控制"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
+        # 使用异步方法进行批量电源控制
         results = await server_service.batch_power_control(
             server_ids=request.server_ids,
             action=request.action
@@ -664,7 +662,7 @@ async def batch_power_control(
                 logger.error(f"调度服务器刷新任务失败: {str(e)}")
         
         # 记录批量电源操作
-        audit_service.log_batch_operation(
+        await audit_service.log_batch_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.BATCH_POWER_CONTROL,
@@ -707,13 +705,15 @@ class BatchUpdateMonitoringRequest(BaseModel):
 async def batch_update_monitoring(
     request: BatchUpdateMonitoringRequest,
     http_request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """批量更新服务器监控状态"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         audit_service = AuditLogService(db)
+        # 使用异步方法进行批量更新监控状态
         results = await server_service.batch_update_monitoring(
             server_ids=request.server_ids,
             monitoring_enabled=request.monitoring_enabled
@@ -727,7 +727,7 @@ async def batch_update_monitoring(
         logger.info(f"批量更新监控状态完成: 总数{total_count}, 成功{success_count}, 失败{failed_count}")
         
         # 记录批量监控操作
-        audit_service.log_batch_operation(
+        await audit_service.log_batch_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.MONITORING_ENABLE if request.monitoring_enabled else AuditAction.MONITORING_DISABLE,
@@ -785,12 +785,13 @@ class LEDControlResponse(BaseModel):
 @router.post("/{server_id}/redfish-check", response_model=RedfishSupportResponse)
 async def check_redfish_support(
     server_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """检查服务器BMC是否支持Redfish"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         result = await server_service.check_redfish_support(server_id)
         return result
     except ValidationError as e:
@@ -806,12 +807,13 @@ async def check_redfish_support(
 @router.get("/{server_id}/led-status", response_model=LEDStatusResponse)
 async def get_led_status(
     server_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取服务器LED状态"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         result = await server_service.get_server_led_status(server_id)
         return result
     except ValidationError as e:
@@ -827,12 +829,13 @@ async def get_led_status(
 @router.post("/{server_id}/led-on", response_model=LEDControlResponse)
 async def turn_on_led(
     server_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """点亮服务器LED"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         result = await server_service.set_server_led_state(server_id, "On")
         return result
     except ValidationError as e:
@@ -848,12 +851,13 @@ async def turn_on_led(
 @router.post("/{server_id}/led-off", response_model=LEDControlResponse)
 async def turn_off_led(
     server_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """关闭服务器LED"""
     try:
         server_service = ServerService(db)
+        await server_service.__init_async__(db)
         result = await server_service.set_server_led_state(server_id, "Off")
         return result
     except ValidationError as e:
@@ -872,7 +876,7 @@ from app.services.scheduler_service import scheduler_service
 @router.post("/{server_id}/schedule-refresh")
 async def schedule_server_refresh(
     server_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """为特定服务器调度刷新任务，在1秒和4秒后执行两次刷新"""

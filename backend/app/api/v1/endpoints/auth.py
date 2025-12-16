@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.core.config import settings
 from app.schemas.auth import Token, UserLogin
 from app.schemas.user import UserResponse
@@ -27,7 +27,7 @@ def get_client_ip(request: Request) -> str:
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     request: Request = None,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """用户登录"""
     auth_service = AuthService(db)
@@ -37,10 +37,10 @@ async def login(
     client_ip = get_client_ip(request) if request else "unknown"
     user_agent = request.headers.get("user-agent", "unknown") if request else "unknown"
     
-    user = auth_service.authenticate_user(form_data.username, form_data.password)
+    user = await auth_service.authenticate_user(form_data.username, form_data.password)
     if not user:
         # 记录失败的登录尝试
-        audit_service.log_login(
+        await audit_service.log_login(
             username=form_data.username,
             ip_address=client_ip,
             user_agent=user_agent,
@@ -53,7 +53,7 @@ async def login(
         )
     
     # 记录成功的登录
-    audit_service.log_login(
+    await audit_service.log_login(
         username=user.username,
         user_id=user.id,
         ip_address=client_ip,
@@ -72,7 +72,7 @@ async def login(
 async def logout(
     request: Request = None,
     current_user = Depends(AuthService.get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """用户登出"""
     audit_service = AuditLogService(db)
@@ -82,7 +82,7 @@ async def logout(
     user_agent = request.headers.get("user-agent", "unknown") if request else "unknown"
     
     # 记录登出操作
-    audit_service.log_logout(
+    await audit_service.log_logout(
         user_id=current_user.id,
         username=current_user.username,
         ip_address=client_ip,

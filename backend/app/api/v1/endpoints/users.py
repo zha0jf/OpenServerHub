@@ -1,10 +1,10 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services.user import UserService
 from app.services.auth import AuthService
@@ -20,17 +20,17 @@ router = APIRouter()
 async def create_user(
     user_data: UserCreate,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_admin_user)
 ):
     """创建用户（仅管理员）"""
     try:
         user_service = UserService(db)
         audit_service = AuditLogService(db)
-        user = user_service.create_user(user_data)
+        user = await user_service.create_user(user_data)
         
         # 记录成功的用户创建操作
-        audit_service.log_user_operation(
+        await audit_service.log_user_operation(
             operator_id=current_user.id,
             operator_username=current_user.username,
             action=AuditAction.USER_CREATE,
@@ -48,7 +48,7 @@ async def create_user(
         # 记录失败的用户创建操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_user_operation(
+            await audit_service_local.log_user_operation(
                 operator_id=current_user.id,
                 operator_username=current_user.username,
                 action=AuditAction.USER_CREATE,
@@ -67,7 +67,7 @@ async def create_user(
         # 记录失败的用户创建操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_user_operation(
+            await audit_service_local.log_user_operation(
                 operator_id=current_user.id,
                 operator_username=current_user.username,
                 action=AuditAction.USER_CREATE,
@@ -87,22 +87,22 @@ async def create_user(
 async def get_users(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取用户列表"""
     user_service = UserService(db)
-    return user_service.get_users(skip=skip, limit=limit)
+    return await user_service.get_users(skip=skip, limit=limit)
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取指定用户"""
     user_service = UserService(db)
-    user = user_service.get_user(user_id)
+    user = await user_service.get_user(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     return user
@@ -112,19 +112,19 @@ async def update_user(
     user_id: int,
     user_data: UserUpdate,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """更新用户信息"""
     try:
         user_service = UserService(db)
         audit_service = AuditLogService(db)
-        user = user_service.update_user(user_id, user_data)
+        user = await user_service.update_user(user_id, user_data)
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
         
         # 记录成功的用户更新操作
-        audit_service.log_user_operation(
+        await audit_service.log_user_operation(
             operator_id=current_user.id,
             operator_username=current_user.username,
             action=AuditAction.USER_UPDATE,
@@ -142,7 +142,7 @@ async def update_user(
         # 记录失败的用户更新操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_user_operation(
+            await audit_service_local.log_user_operation(
                 operator_id=current_user.id,
                 operator_username=current_user.username,
                 action=AuditAction.USER_UPDATE,
@@ -163,7 +163,7 @@ async def update_user(
         # 记录失败的用户更新操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_user_operation(
+            await audit_service_local.log_user_operation(
                 operator_id=current_user.id,
                 operator_username=current_user.username,
                 action=AuditAction.USER_UPDATE,
@@ -183,7 +183,7 @@ async def update_user(
 async def delete_user(
     user_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_admin_user)
 ):
     """删除用户（仅管理员）"""
@@ -192,17 +192,17 @@ async def delete_user(
         audit_service = AuditLogService(db)
         
         # 获取用户信息用于审计日志
-        user = user_service.get_user(user_id)
+        user = await user_service.get_user(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
         
         user_username = user.username
-        success = user_service.delete_user(user_id)
+        success = await user_service.delete_user(user_id)
         if not success:
             raise HTTPException(status_code=404, detail="用户不存在")
         
         # 记录成功的用户删除操作
-        audit_service.log_user_operation(
+        await audit_service.log_user_operation(
             operator_id=current_user.id,
             operator_username=current_user.username,
             action=AuditAction.USER_DELETE,
@@ -219,7 +219,7 @@ async def delete_user(
         # 记录失败的用户删除操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_user_operation(
+            await audit_service_local.log_user_operation(
                 operator_id=current_user.id,
                 operator_username=current_user.username,
                 action=AuditAction.USER_DELETE,
@@ -236,7 +236,7 @@ async def delete_user(
         # 记录失败的用户删除操作
         try:
             audit_service_local = AuditLogService(db)
-            audit_service_local.log_user_operation(
+            await audit_service_local.log_user_operation(
                 operator_id=current_user.id,
                 operator_username=current_user.username,
                 action=AuditAction.USER_DELETE,

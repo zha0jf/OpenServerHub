@@ -4,10 +4,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.models.user import User, UserRole
 from app.services.user import UserService
 
@@ -15,7 +15,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 class AuthService:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.user_service = UserService(db)
 
@@ -27,9 +27,9 @@ class AuthService:
         """生成密码哈希"""
         return pwd_context.hash(password)
 
-    def authenticate_user(self, username: str, password: str) -> Optional[User]:
+    async def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """验证用户"""
-        user = self.user_service.get_user_by_username(username)
+        user = await self.user_service.get_user_by_username(username)
         if not user:
             return None
         if not self.verify_password(password, user.password_hash):
@@ -39,7 +39,7 @@ class AuthService:
         
         # 更新最后登录时间
         user.last_login_at = datetime.utcnow()
-        self.db.commit()
+        await self.db.commit()
         
         return user
 
@@ -51,9 +51,9 @@ class AuthService:
         return encoded_jwt
 
     @staticmethod
-    def get_current_user(
+    async def get_current_user(
         token: str = Depends(oauth2_scheme),
-        db: Session = Depends(get_db)
+        db: AsyncSession = Depends(get_async_db)
     ) -> User:
         """获取当前用户"""
         credentials_exception = HTTPException(
@@ -71,7 +71,7 @@ class AuthService:
             raise credentials_exception
         
         user_service = UserService(db)
-        user = user_service.get_user(int(user_id))
+        user = await user_service.get_user(int(user_id))
         if user is None:
             raise credentials_exception
         if not user.is_active:

@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import subprocess
 import logging
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import csv
 import io
 import struct

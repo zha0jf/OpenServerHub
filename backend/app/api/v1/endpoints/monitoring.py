@@ -1,14 +1,14 @@
 from app.models.monitoring import MonitoringRecord
 from typing import List
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 import httpx
 import logging
 import time
 from sqlalchemy import select
 
-from app.core.database import get_db, get_async_db
+from app.core.database import get_async_db
 from app.schemas.monitoring import MonitoringRecordResponse
 from app.services.monitoring import MonitoringService
 from app.services.server import ServerService
@@ -24,7 +24,7 @@ router = APIRouter()
 @router.get("/servers/{server_id}/dashboard")
 async def get_server_dashboard(
     server_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """获取服务器Grafana仪表板信息"""
@@ -136,7 +136,7 @@ async def collect_server_metrics(
 async def query_prometheus_metrics(
     query: str = Query(..., description="Prometheus查询表达式"),
     time: str = Query(None, description="查询时间点"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """查询Prometheus监控数据"""
@@ -180,7 +180,7 @@ async def query_prometheus_metrics_range(
     start: str = Query(..., description="开始时间"),
     end: str = Query(..., description="结束时间"),
     step: str = Query("60s", description="时间步长"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """查询Prometheus监控数据范围"""
@@ -227,7 +227,7 @@ async def query_prometheus_metrics_range(
 async def handle_alert_webhook(
     alert_data: dict,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """处理AlertManager告警Webhook"""
     try:

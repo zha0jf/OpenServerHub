@@ -2,10 +2,10 @@ import time
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import PlainTextResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.schemas.server import (
     NetworkScanRequest, NetworkScanResponse, DiscoveredDevice,
     BatchImportRequest, BatchImportResponse,
@@ -33,7 +33,7 @@ def get_client_ip(request: Request) -> str:
 async def scan_network(
     request: NetworkScanRequest,
     http_request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """
@@ -112,7 +112,7 @@ async def scan_network(
 async def batch_import_servers(
     request: BatchImportRequest,
     http_request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """
@@ -169,7 +169,7 @@ async def import_from_csv(
     csv_file: UploadFile = File(...),
     group_id: Optional[int] = None,
     http_request: Request = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """
@@ -238,7 +238,7 @@ async def import_from_csv(
 async def import_from_csv_text(
     request: CSVImportRequest,
     http_request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_user)
 ):
     """

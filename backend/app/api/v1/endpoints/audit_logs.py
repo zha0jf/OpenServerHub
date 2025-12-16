@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 from io import StringIO, BytesIO
 import csv
 import json
 import logging
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.services.auth import AuthService
 from app.schemas.audit_log import AuditLogListResponse, AuditLog
 from app.services.audit_log import AuditLogService
@@ -30,7 +30,7 @@ router = APIRouter()
 @router.get("/types")
 async def get_audit_types(
     current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     获取审计操作类型和资源类型
@@ -57,7 +57,7 @@ async def get_audit_types(
 async def get_audit_stats_summary(
     days: int = Query(7, ge=1, le=90),
     current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     获取审计日志统计摘要
@@ -67,40 +67,48 @@ async def get_audit_stats_summary(
     仅管理员用户可以访问。
     """
     logger.debug(f"用户 {current_user.username} 请求审计日志统计摘要，周期={days}天")
-    from sqlalchemy import func
+    from sqlalchemy import select, func
     
     start_date = datetime.now() - timedelta(days=days)
     
     # 统计各操作类型的数量
-    action_stats = db.query(
+    stmt = select(
         AuditLogModel.action,
         func.count(AuditLogModel.id).label('count')
-    ).filter(
+    ).where(
         AuditLogModel.created_at >= start_date
     ).group_by(
         AuditLogModel.action
-    ).all()
+    )
+    result = await db.execute(stmt)
+    action_stats = result.all()
     
     # 统计各操作者的活动
-    operator_stats = db.query(
+    stmt = select(
         AuditLogModel.operator_username,
         func.count(AuditLogModel.id).label('count')
-    ).filter(
+    ).where(
         AuditLogModel.created_at >= start_date
     ).group_by(
         AuditLogModel.operator_username
-    ).all()
+    )
+    result = await db.execute(stmt)
+    operator_stats = result.all()
     
     # 统计失败操作
-    failed_count = db.query(func.count(AuditLogModel.id)).filter(
+    stmt = select(func.count(AuditLogModel.id)).where(
         AuditLogModel.created_at >= start_date,
         AuditLogModel.status == 'failed'
-    ).scalar()
+    )
+    result = await db.execute(stmt)
+    failed_count = result.scalar()
     
     # 总操作数
-    total_count = db.query(func.count(AuditLogModel.id)).filter(
+    stmt = select(func.count(AuditLogModel.id)).where(
         AuditLogModel.created_at >= start_date
-    ).scalar()
+    )
+    result = await db.execute(stmt)
+    total_count = result.scalar()
     
     logger.info(f"审计日志统计摘要查询完成，周期={days}天，总操作数={total_count}")
     return {
@@ -138,7 +146,7 @@ async def export_audit_logs_csv(
     end_date: str = Query(None),
     http_request: Request = None,
     current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     导出审计日志为CSV格式
@@ -173,7 +181,7 @@ async def export_audit_logs_csv(
             # 如果action不是有效的枚举值，保持为None（不过滤）
             audit_action = None
     
-    logs, total = audit_service.get_logs(
+    logs, total = await audit_service.get_logs(
         skip=skip,
         limit=limit,
         action=audit_action,
@@ -181,7 +189,7 @@ async def export_audit_logs_csv(
         resource_type=resource_type,
         resource_id=resource_id,
         start_date=start_datetime,
-        end_date=end_datetime,
+        end_date=end_datetime
     )
     
     # 生成CSV
@@ -269,7 +277,7 @@ async def export_audit_logs_excel(
     end_date: str = Query(None),
     http_request: Request = None,
     current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     导出审计日志为Excel格式
@@ -312,7 +320,7 @@ async def export_audit_logs_excel(
             # 如果action不是有效的枚举值，保持为None（不过滤）
             audit_action = None
     
-    logs, total = audit_service.get_logs(
+    logs, total = await audit_service.get_logs(
         skip=skip,
         limit=limit,
         action=audit_action,
@@ -320,7 +328,7 @@ async def export_audit_logs_excel(
         resource_type=resource_type,
         resource_id=resource_id,
         start_date=start_datetime,
-        end_date=end_datetime,
+        end_date=end_datetime
     )
     
     # 生成Excel
@@ -426,7 +434,7 @@ async def cleanup_old_audit_logs(
     request_body: dict,
     http_request: Request,
     current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     清理过期审计日志
@@ -449,13 +457,18 @@ async def cleanup_old_audit_logs(
     
     try:
         # 删除过期的日志
-        delete_count = db.query(AuditLogModel).filter(
-            AuditLogModel.created_at < cutoff_date
-        ).delete()
-        db.commit()
+        from sqlalchemy import select
+        stmt = select(AuditLogModel).where(AuditLogModel.created_at < cutoff_date)
+        result = await db.execute(stmt)
+        logs_to_delete = result.scalars().all()
+        delete_count = len(logs_to_delete)
+        
+        for log in logs_to_delete:
+            await db.delete(log)
+        await db.commit()
         
         # 记录清理操作
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.AUDIT_LOG_CLEANUP,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -478,12 +491,12 @@ async def cleanup_old_audit_logs(
             "message": f"成功删除{delete_count}条{cutoff_date.strftime('%Y-%m-%d')}之前的审计日志"
         }
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         
         # 记录清理失败的操作
         try:
             audit_service = AuditLogService(db)
-            audit_service.create_log(
+            await audit_service.create_log(
                 action=AuditAction.AUDIT_LOG_CLEANUP,
                 operator_id=current_user.id,
                 operator_username=current_user.username,
@@ -513,7 +526,7 @@ async def cleanup_old_audit_logs(
 async def get_audit_log(
     log_id: int,
     current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     获取指定ID的审计日志详情
@@ -522,7 +535,7 @@ async def get_audit_log(
     """
     
     audit_service = AuditLogService(db)
-    log = audit_service.get_log_by_id(log_id)
+    log = await audit_service.get_log_by_id(log_id)
     
     if not log:
         raise HTTPException(
@@ -544,7 +557,7 @@ async def get_audit_logs(
     start_date: str = Query(None),  # ISO格式日期
     end_date: str = Query(None),    # ISO格式日期
     current_user = Depends(AuthService.get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     获取审计日志列表
@@ -588,7 +601,7 @@ async def get_audit_logs(
             # 如果action不是有效的枚举值，保持为None（不过滤）
             audit_action = None
     
-    logs, total = audit_service.get_logs(
+    logs, total = await audit_service.get_logs(
         skip=skip,
         limit=limit,
         action=audit_action,

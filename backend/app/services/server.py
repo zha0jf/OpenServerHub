@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import asyncio
 from concurrent.futures import as_completed
@@ -26,8 +27,17 @@ class ServerService:
         # 注意：这里传入的是同步会话，仅用于同步方法
         # 异步方法需要创建新的异步监控服务实例
         self.monitoring_service = MonitoringService(db) if hasattr(db, 'query') else None
-        self.server_monitoring_service = ServerMonitoringService(db)
-
+        self.server_monitoring_service = None  # 异步方法中动态创建
+        
+    def _get_async_server_monitoring_service(self, async_db: AsyncSession):
+        """获取异步服务器监控服务实例"""
+        return ServerMonitoringService(async_db)
+        
+    async def __init_async__(self, async_db: AsyncSession):
+        """异步初始化方法"""
+        self.async_db = async_db
+        self.server_monitoring_service = ServerMonitoringService(async_db)
+    
     def create_server(self, server_data: ServerCreate) -> Server:
         """创建服务器"""
         # 检查IPMI IP是否已存在
@@ -67,18 +77,81 @@ class ServerService:
         logger.info(f"服务器 {db_server.id} 创建成功，已调度状态刷新任务")
         
         return db_server
+    
+    async def create_server_async(self, server_data: ServerCreate) -> Server:
+        """异步创建服务器"""
+        # 检查IPMI IP是否已存在
+        stmt = select(Server).where(Server.ipmi_ip == server_data.ipmi_ip)
+        result = await self.async_db.execute(stmt)
+        if result.scalar_one_or_none():
+            raise ValidationError("IPMI IP地址已存在")
+        
+        # 检查服务器名是否已存在
+        stmt = select(Server).where(Server.name == server_data.name)
+        result = await self.async_db.execute(stmt)
+        if result.scalar_one_or_none():
+            raise ValidationError("服务器名称已存在")
+        
+        # 创建服务器
+        db_server = Server(
+            name=server_data.name,
+            ipmi_ip=server_data.ipmi_ip,
+            ipmi_username=server_data.ipmi_username,
+            ipmi_password=server_data.ipmi_password,
+            ipmi_port=server_data.ipmi_port,
+            monitoring_enabled=server_data.monitoring_enabled,
+            manufacturer=server_data.manufacturer,
+            model=server_data.model,
+            serial_number=server_data.serial_number,
+            description=server_data.description,
+            tags=server_data.tags,
+            group_id=server_data.group_id
+        )
+        
+        self.async_db.add(db_server)
+        await self.async_db.commit()
+        await self.async_db.refresh(db_server)
+        
+        # 异步处理监控配置（仅在启用监控时）
+        if settings.MONITORING_ENABLED and bool(db_server.monitoring_enabled):
+            server_monitoring_service = self._get_async_server_monitoring_service(self.async_db)
+            asyncio.create_task(server_monitoring_service.on_server_added(db_server))
+        
+        # 调度服务器状态刷新任务（在0.5秒后执行）
+        scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
+        logger.info(f"服务器 {db_server.id} 创建成功，已调度状态刷新任务")
+        
+        return db_server
 
     def get_server(self, server_id: int) -> Optional[Server]:
         """根据ID获取服务器"""
         return self.db.query(Server).filter(Server.id == server_id).first()
 
+    async def get_server_async(self, server_id: int) -> Optional[Server]:
+        """根据ID获取服务器（异步版本）"""
+        stmt = select(Server).where(Server.id == server_id)
+        result = await self.async_db.execute(stmt)
+        return result.scalar_one_or_none()
+
     def get_server_by_name(self, name: str) -> Optional[Server]:
         """根据名称获取服务器"""
         return self.db.query(Server).filter(Server.name == name).first()
 
+    async def get_server_by_name_async(self, name: str) -> Optional[Server]:
+        """根据名称获取服务器（异步版本）"""
+        stmt = select(Server).where(Server.name == name)
+        result = await self.async_db.execute(stmt)
+        return result.scalar_one_or_none()
+
     def get_server_by_ipmi_ip(self, ipmi_ip: str) -> Optional[Server]:
         """根据IPMI IP获取服务器"""
         return self.db.query(Server).filter(Server.ipmi_ip == ipmi_ip).first()
+
+    async def get_server_by_ipmi_ip_async(self, ipmi_ip: str) -> Optional[Server]:
+        """根据IPMI IP获取服务器（异步版本）"""
+        stmt = select(Server).where(Server.ipmi_ip == ipmi_ip)
+        result = await self.async_db.execute(stmt)
+        return result.scalar_one_or_none()
 
     def get_servers(self, skip: int = 0, limit: int = 100, group_id: Optional[int] = None) -> List[Server]:
         """获取服务器列表"""
@@ -88,6 +161,17 @@ class ServerService:
             query = query.filter(Server.group_id == group_id)
         
         return query.offset(skip).limit(limit).all()
+
+    async def get_servers_async(self, skip: int = 0, limit: int = 100, group_id: Optional[int] = None) -> List[Server]:
+        """获取服务器列表（异步版本）"""
+        stmt = select(Server)
+        
+        if group_id is not None:
+            stmt = stmt.where(Server.group_id == group_id)
+            
+        stmt = stmt.offset(skip).limit(limit)
+        result = await self.async_db.execute(stmt)
+        return result.scalars().all()
 
     def update_server(self, server_id: int, server_data: ServerUpdate) -> Optional[Server]:
         """更新服务器信息"""
@@ -150,6 +234,73 @@ class ServerService:
             asyncio.create_task(self.server_monitoring_service.on_server_updated(db_server, original_monitoring_enabled))
         
         return db_server
+    
+    async def update_server_async(self, server_id: int, server_data: ServerUpdate) -> Optional[Server]:
+        """异步更新服务器信息"""
+        db_server = await self.get_server_async(server_id)
+        if not db_server:
+            return None
+        
+        # 记录原始监控启用状态
+        original_monitoring_enabled = bool(db_server.monitoring_enabled)
+        
+        update_data = server_data.model_dump(exclude_unset=True)
+        
+        # 如果密码字段存在但为空，则从更新数据中移除
+        if "ipmi_password" in update_data and not update_data["ipmi_password"]:
+            del update_data["ipmi_password"]
+        
+        # 检查名称唯一性
+        if "name" in update_data and update_data["name"] != db_server.name:
+            stmt = select(Server).where(Server.name == update_data["name"])
+            result = await self.async_db.execute(stmt)
+            if result.scalar_one_or_none():
+                raise ValidationError("服务器名称已存在")
+        
+        # 检查IPMI IP唯一性
+        if "ipmi_ip" in update_data and update_data["ipmi_ip"] != db_server.ipmi_ip:
+            stmt = select(Server).where(Server.ipmi_ip == update_data["ipmi_ip"])
+            result = await self.async_db.execute(stmt)
+            if result.scalar_one_or_none():
+                raise ValidationError("IPMI IP地址已存在")
+        
+        # 记录原始值用于比较
+        original_ipmi_ip = str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else ""
+        original_ipmi_username = str(db_server.ipmi_username) if db_server.ipmi_username is not None else ""
+        original_ipmi_password = str(db_server.ipmi_password) if db_server.ipmi_password is not None else ""
+        original_ipmi_port = int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
+        
+        # 更新服务器信息
+        for field, value in update_data.items():
+            setattr(db_server, field, value)
+        
+        await self.async_db.commit()
+        await self.async_db.refresh(db_server)
+        
+        # 检查IPMI相关信息是否发生变化
+        new_ipmi_ip = str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else ""
+        new_ipmi_username = str(db_server.ipmi_username) if db_server.ipmi_username is not None else ""
+        new_ipmi_password = str(db_server.ipmi_password) if db_server.ipmi_password is not None else ""
+        new_ipmi_port = int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
+        
+        ipmi_changed = (
+            original_ipmi_ip != new_ipmi_ip or
+            original_ipmi_username != new_ipmi_username or
+            original_ipmi_password != new_ipmi_password or
+            original_ipmi_port != new_ipmi_port
+        )
+        
+        # 如果IPMI相关信息发生变化，调度服务器状态刷新任务
+        if ipmi_changed:
+            scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
+            logger.info(f"服务器 {db_server.id} IPMI信息已更新，已调度状态刷新任务")
+        
+        # 异步处理监控配置更新（仅在启用监控时）
+        if settings.MONITORING_ENABLED and (original_monitoring_enabled != bool(db_server.monitoring_enabled) or ipmi_changed):
+            server_monitoring_service = self._get_async_server_monitoring_service(self.async_db)
+            asyncio.create_task(server_monitoring_service.on_server_updated(db_server, original_monitoring_enabled))
+        
+        return db_server
 
     def delete_server(self, server_id: int) -> bool:
         """删除服务器"""
@@ -168,6 +319,61 @@ class ServerService:
             asyncio.create_task(self.server_monitoring_service.on_server_deleted(server_id))
         
         return True
+    
+    async def delete_server_async(self, server_id: int) -> bool:
+        """异步删除服务器"""
+        db_server = await self.get_server_async(server_id)
+        if not db_server:
+            return False
+        
+        # 记录服务器的监控启用状态
+        was_monitoring_enabled = bool(db_server.monitoring_enabled)
+        
+        await self.async_db.delete(db_server)
+        await self.async_db.commit()
+        
+        # 异步处理监控配置清理（仅在启用监控时）
+        if settings.MONITORING_ENABLED and was_monitoring_enabled:
+            server_monitoring_service = self._get_async_server_monitoring_service(self.async_db)
+            asyncio.create_task(server_monitoring_service.on_server_deleted(server_id))
+        
+        return True
+
+    async def get_cluster_statistics_async(self, group_id: Optional[int] = None) -> Dict[str, Any]:
+        """获取集群统计信息（异步版本）"""
+        # 构建查询
+        stmt = select(Server)
+        if group_id is not None:
+            stmt = stmt.where(Server.group_id == group_id)
+            
+        result = await self.async_db.execute(stmt)
+        servers = result.scalars().all()
+        
+        # 统计各类状态的服务器数量
+        status_counts = defaultdict(int)
+        power_state_counts = defaultdict(int)
+        total_count = len(servers)
+        
+        for server in servers:
+            status_counts[server.status.value] += 1
+            power_state_counts[server.power_state.value] += 1
+        
+        # 获取在线服务器的制造商分布
+        manufacturer_counts = defaultdict(int)
+        online_servers = [s for s in servers if s.status == ServerStatus.ONLINE]
+        for server in online_servers:
+            manufacturer = server.manufacturer or "Unknown"
+            manufacturer_counts[manufacturer] += 1
+        
+        return {
+            "total": total_count,
+            "status_distribution": dict(status_counts),
+            "power_state_distribution": dict(power_state_counts),
+            "manufacturer_distribution": dict(manufacturer_counts),
+            "online_count": len(online_servers),
+            "offline_count": status_counts.get("offline", 0),
+            "error_count": status_counts.get("error", 0)
+        }
 
     async def _sync_monitoring_config(self):
         """同步监控配置"""
@@ -202,7 +408,8 @@ class ServerService:
 
     async def power_control(self, server_id: int, action: str) -> Dict[str, Any]:
         """服务器电源控制"""
-        db_server = self.get_server(server_id)
+        # 使用异步方法获取服务器
+        db_server = await self.get_server_async(server_id)
         if not db_server:
             raise ValidationError("服务器不存在")
         
@@ -215,27 +422,28 @@ class ServerService:
                 port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
             )
             
-            # 更新服务器最后操作时间
+            # 使用异步方式更新服务器最后操作时间
             stmt = update(Server).where(Server.id == server_id).values(
                 last_seen=datetime.utcnow()
             )
-            self.db.execute(stmt)
-            self.db.commit()
+            await self.async_db.execute(stmt)
+            await self.async_db.commit()
             
             return result
             
         except IPMIError as e:
-            # 更新服务器状态为错误
+            # 使用异步方式更新服务器状态为错误
             stmt = update(Server).where(Server.id == server_id).values(
                 status=ServerStatus.ERROR
             )
-            self.db.execute(stmt)
-            self.db.commit()
+            await self.async_db.execute(stmt)
+            await self.async_db.commit()
             raise e
 
     async def update_server_status(self, server_id: int) -> Dict[str, Any]:
         """更新服务器状态"""
-        db_server = self.get_server(server_id)
+        # 使用异步方法获取服务器
+        db_server = await self.get_server_async(server_id)
         if not db_server:
             raise ValidationError("服务器不存在")
         
@@ -273,10 +481,10 @@ class ServerService:
                 update_values["redfish_supported"] = redfish_info.get("supported")
                 update_values["redfish_version"] = redfish_info.get("version") if redfish_info.get("supported") else None
             
-            # 更新服务器状态
+            # 使用异步方式更新服务器状态
             stmt = update(Server).where(Server.id == server_id).values(**update_values)
-            self.db.execute(stmt)
-            self.db.commit()
+            await self.async_db.execute(stmt)
+            await self.async_db.commit()
             
             return {
                 "status": "success",
@@ -292,8 +500,8 @@ class ServerService:
                 power_state=PowerState.UNKNOWN
                 # 不更新redfish相关字段
             )
-            self.db.execute(stmt)
-            self.db.commit()
+            await self.async_db.execute(stmt)
+            await self.async_db.commit()
             
             return {
                 "status": "error",
@@ -324,62 +532,121 @@ class ServerService:
         self.db.refresh(db_group)
         return db_group
 
+    async def create_server_group_async(self, group_data: ServerGroupCreate) -> ServerGroup:
+        """创建服务器分组（异步版本）"""
+        # 检查分组名是否已存在
+        stmt = select(ServerGroup).where(ServerGroup.name == group_data.name)
+        result = await self.async_db.execute(stmt)
+        if result.scalar_one_or_none():
+            raise ValidationError("分组名称已存在")
+        
+        db_group = ServerGroup(
+            name=group_data.name,
+            description=group_data.description
+        )
+        
+        self.async_db.add(db_group)
+        await self.async_db.commit()
+        await self.async_db.refresh(db_group)
+        return db_group
+
     def get_server_group(self, group_id: int) -> Optional[ServerGroup]:
         """根据ID获取服务器分组"""
         return self.db.query(ServerGroup).filter(ServerGroup.id == group_id).first()
+
+    async def get_server_group_async(self, group_id: int) -> Optional[ServerGroup]:
+        """根据ID获取服务器分组（异步版本）"""
+        stmt = select(ServerGroup).where(ServerGroup.id == group_id)
+        result = await self.async_db.execute(stmt)
+        return result.scalar_one_or_none()
 
     def get_server_group_by_name(self, name: str) -> Optional[ServerGroup]:
         """根据名称获取服务器分组"""
         return self.db.query(ServerGroup).filter(ServerGroup.name == name).first()
 
-    def get_server_groups(self) -> List[ServerGroup]:
-        """获取所有服务器分组"""
-        return self.db.query(ServerGroup).all()
+    async def get_server_group_by_name_async(self, name: str) -> Optional[ServerGroup]:
+        """根据名称获取服务器分组（异步版本）"""
+        stmt = select(ServerGroup).where(ServerGroup.name == name)
+        result = await self.async_db.execute(stmt)
+        return result.scalar_one_or_none()
 
-    def delete_server_group(self, group_id: int) -> bool:
-        """删除服务器分组"""
-        db_group = self.get_server_group(group_id)
-        if not db_group:
-            return False
-        
-        # 将分组下的服务器移除分组
-        self.db.query(Server).filter(Server.group_id == group_id).update({"group_id": None})
-        
-        # 删除分组
-        self.db.delete(db_group)
-        self.db.commit()
-        return True
+    def get_server_groups(self, skip: int = 0, limit: int = 100) -> List[ServerGroup]:
+        """获取服务器分组列表"""
+        return self.db.query(ServerGroup).offset(skip).limit(limit).all()
+
+    async def get_server_groups_async(self, skip: int = 0, limit: int = 100) -> List[ServerGroup]:
+        """获取服务器分组列表（异步版本）"""
+        stmt = select(ServerGroup).offset(skip).limit(limit)
+        result = await self.async_db.execute(stmt)
+        return result.scalars().all()
 
     def update_server_group(self, group_id: int, group_data: ServerGroupCreate) -> Optional[ServerGroup]:
         """更新服务器分组"""
         db_group = self.get_server_group(group_id)
         if not db_group:
             return None
-        
-        # 检查名称唯一性（排除自己）
+            
+        # 检查分组名唯一性
         if group_data.name != db_group.name:
             if self.get_server_group_by_name(group_data.name):
                 raise ValidationError("分组名称已存在")
         
-        # 更新分组信息
-        stmt = update(ServerGroup).where(ServerGroup.id == group_id).values(
-            name=group_data.name,
-            description=group_data.description
-        )
-        self.db.execute(stmt)
-        self.db.commit()
+        db_group.name = group_data.name
+        db_group.description = group_data.description
         
-        # 刷新对象
+        self.db.commit()
         self.db.refresh(db_group)
         return db_group
+
+    async def update_server_group_async(self, group_id: int, group_data: ServerGroupCreate) -> Optional[ServerGroup]:
+        """更新服务器分组（异步版本）"""
+        db_group = await self.get_server_group_async(group_id)
+        if not db_group:
+            return None
+            
+        # 检查分组名唯一性
+        if group_data.name != db_group.name:
+            stmt = select(ServerGroup).where(ServerGroup.name == group_data.name)
+            result = await self.async_db.execute(stmt)
+            if result.scalar_one_or_none():
+                raise ValidationError("分组名称已存在")
+        
+        db_group.name = group_data.name
+        db_group.description = group_data.description
+        
+        await self.async_db.commit()
+        await self.async_db.refresh(db_group)
+        return db_group
+
+    def delete_server_group(self, group_id: int) -> bool:
+        """删除服务器分组"""
+        db_group = self.get_server_group(group_id)
+        if not db_group:
+            return False
+            
+        self.db.delete(db_group)
+        self.db.commit()
+        return True
+
+    async def delete_server_group_async(self, group_id: int) -> bool:
+        """删除服务器分组（异步版本）"""
+        db_group = await self.get_server_group_async(group_id)
+        if not db_group:
+            return False
+            
+        await self.async_db.delete(db_group)
+        await self.async_db.commit()
+        return True
 
     # 批量操作功能
     async def batch_power_control(self, server_ids: List[int], action: str) -> List[BatchOperationResult]:
         """批量电源控制"""
         results = []
         
-        # 获取所有有效的服务器
-        servers = self.db.query(Server).filter(Server.id.in_(server_ids)).all()
+        # 使用异步方式获取所有有效的服务器
+        stmt = select(Server).where(Server.id.in_(server_ids))
+        result = await self.async_db.execute(stmt)
+        servers = result.scalars().all()
         
         # 检查是否有不存在的服务器ID
         found_ids = {int(str(server.id)) for server in servers}
@@ -398,7 +665,7 @@ class ServerService:
         # 创建并发任务列表
         tasks = []
         for server in servers:
-            task = self._single_power_control(server, action)
+            task = self._single_power_control_async(server, action)  # 使用异步版本
             tasks.append(task)
         
         # 并发执行所有任务，最大并发数为10
@@ -406,7 +673,7 @@ class ServerService:
         
         async def limited_task(server, action):
             async with semaphore:
-                return await self._single_power_control(server, action)
+                return await self._single_power_control_async(server, action)  # 使用异步版本
         
         # 执行所有任务
         task_results = await asyncio.gather(
@@ -434,8 +701,10 @@ class ServerService:
         """批量更新服务器监控状态"""
         results = []
         
-        # 获取所有有效的服务器
-        servers = self.db.query(Server).filter(Server.id.in_(server_ids)).all()
+        # 使用异步方式获取所有有效的服务器
+        stmt = select(Server).where(Server.id.in_(server_ids))
+        result = await self.async_db.execute(stmt)
+        servers = result.scalars().all()
         
         # 检查是否有不存在的服务器ID
         found_ids = {int(str(server.id)) for server in servers}
@@ -459,12 +728,13 @@ class ServerService:
                 
                 # 更新监控状态
                 setattr(server, 'monitoring_enabled', monitoring_enabled)
-                self.db.commit()
-                self.db.refresh(server)
+                await self.async_db.commit()
+                await self.async_db.refresh(server)
                 
                 # 异步处理监控配置更新（仅在启用监控时）
                 if settings.MONITORING_ENABLED and original_monitoring_enabled != monitoring_enabled:
-                    asyncio.create_task(self.server_monitoring_service.on_server_updated(server, original_monitoring_enabled))
+                    server_monitoring_service = self._get_async_server_monitoring_service(self.async_db)
+                    asyncio.create_task(server_monitoring_service.on_server_updated(server, original_monitoring_enabled))
                 
                 results.append(BatchOperationResult(
                     server_id=int(str(server.id)),
@@ -474,7 +744,7 @@ class ServerService:
                 ))
                 
             except Exception as e:
-                self.db.rollback()
+                await self.async_db.rollback()
                 results.append(BatchOperationResult(
                     server_id=int(str(server.id)),
                     server_name=str(server.name),
@@ -485,8 +755,8 @@ class ServerService:
         
         return results
     
-    async def _single_power_control(self, server: Server, action: str) -> BatchOperationResult:
-        """单个服务器电源控制"""
+    async def _single_power_control_async(self, server: Server, action: str) -> BatchOperationResult:
+        """单个服务器电源控制（异步版本）"""
         try:
             await self.ipmi_service.power_control(
                 ip=str(server.ipmi_ip) if server.ipmi_ip is not None else "",
@@ -496,12 +766,12 @@ class ServerService:
                 port=int(str(server.ipmi_port)) if server.ipmi_port is not None else 623
             )
             
-            # 更新服务器最后操作时间
+            # 使用异步方式更新服务器最后操作时间
             stmt = update(Server).where(Server.id == server.id).values(
                 last_seen=datetime.utcnow()
             )
-            self.db.execute(stmt)
-            self.db.commit()
+            await self.async_db.execute(stmt)
+            await self.async_db.commit()
             
             return BatchOperationResult(
                 server_id=int(str(server.id)),
@@ -511,12 +781,12 @@ class ServerService:
             )
             
         except IPMIError as e:
-            # 更新服务器状态为错误
+            # 使用异步方式更新服务器状态为错误
             stmt = update(Server).where(Server.id == server.id).values(
                 status=ServerStatus.ERROR
             )
-            self.db.execute(stmt)
-            self.db.commit()
+            await self.async_db.execute(stmt)
+            await self.async_db.commit()
             
             return BatchOperationResult(
                 server_id=int(str(server.id)),
@@ -534,10 +804,11 @@ class ServerService:
                 message="失败",
                 error=f"内部错误: {str(e)}"
             )
-    
+
     async def check_redfish_support(self, server_id: int) -> Dict[str, Any]:
         """检查服务器BMC是否支持Redfish"""
-        db_server = self.get_server(server_id)
+        # 使用异步方法获取服务器
+        db_server = await self.get_server_async(server_id)
         if not db_server:
             raise ValidationError("服务器不存在")
         
@@ -567,7 +838,8 @@ class ServerService:
         Returns:
             Dict[str, Any]: 包含LED状态信息的字典
         """
-        db_server = self.get_server(server_id)
+        # 使用异步方法获取服务器
+        db_server = await self.get_server_async(server_id)
         if not db_server:
             raise ValidationError("服务器不存在")
         
@@ -617,7 +889,8 @@ class ServerService:
         Returns:
             Dict[str, Any]: 包含操作结果的字典
         """
-        db_server = self.get_server(server_id)
+        # 使用异步方法获取服务器
+        db_server = await self.get_server_async(server_id)
         if not db_server:
             raise ValidationError("服务器不存在")
         

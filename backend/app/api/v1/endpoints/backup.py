@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.schemas.backup import (
     BackupCreate, BackupResponse, BackupListResponse, 
     BackupDeleteRequest, BackupRestoreRequest, BackupVerifyResponse
@@ -28,7 +28,7 @@ def get_client_ip(request: Request) -> str:
 @router.post("/create", response_model=BackupResponse)
 async def create_backup(
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_admin_user)
 ):
     """创建数据库备份（仅管理员）"""
@@ -45,7 +45,7 @@ async def create_backup(
         
         if backup_info:
             # 记录审计日志
-            audit_service.create_log(
+            await audit_service.create_log(
                 action=AuditAction.BACKUP_CREATE,
                 operator_id=current_user.id,
                 operator_username=current_user.username,
@@ -66,7 +66,7 @@ async def create_backup(
             return BackupResponse(**backup_info)
         else:
             # 记录审计日志（失败）
-            audit_service.create_log(
+            await audit_service.create_log(
                 action=AuditAction.BACKUP_CREATE,
                 operator_id=current_user.id,
                 operator_username=current_user.username,
@@ -82,7 +82,7 @@ async def create_backup(
         logger.error(f"创建数据库备份失败: {e}")
         
         # 记录审计日志（失败）
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_CREATE,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -98,7 +98,7 @@ async def create_backup(
 @router.get("/list", response_model=BackupListResponse)
 async def list_backups(
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_admin_user)
 ):
     """列出所有备份文件（仅管理员）"""
@@ -118,7 +118,7 @@ async def list_backups(
 async def delete_backup(
     request: Request,
     delete_request: BackupDeleteRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_admin_user)
 ):
     """删除备份文件（仅管理员）"""
@@ -130,7 +130,7 @@ async def delete_backup(
         result = backup_service.delete_backup(delete_request.filename)
         
         # 记录审计日志
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_DELETE,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -149,7 +149,7 @@ async def delete_backup(
         logger.error(f"删除备份文件失败: {e}")
         
         # 记录审计日志（失败）
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_DELETE,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -168,7 +168,7 @@ async def delete_backup(
 async def restore_backup(
     request: Request,
     restore_request: BackupRestoreRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_admin_user)
 ):
     """恢复数据库备份（仅管理员）"""
@@ -180,7 +180,7 @@ async def restore_backup(
         result = backup_service.restore_backup(restore_request.filename)
         
         # 记录审计日志
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_RESTORE,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -199,7 +199,7 @@ async def restore_backup(
         logger.error(f"恢复数据库备份失败: {e}")
         
         # 记录审计日志（失败）
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_RESTORE,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -218,7 +218,7 @@ async def restore_backup(
 async def verify_backup(
     request: Request,
     verify_request: BackupRestoreRequest,  # 重用RestoreRequest，因为只需要filename
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_admin_user)
 ):
     """验证备份文件完整性（仅管理员）"""
@@ -230,7 +230,7 @@ async def verify_backup(
         result = backup_service.verify_backup(verify_request.filename)
         
         # 记录审计日志
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_VERIFY,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -249,7 +249,7 @@ async def verify_backup(
         logger.error(f"验证备份文件失败: {e}")
         
         # 记录审计日志（失败）
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_VERIFY,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -268,7 +268,7 @@ async def verify_backup(
 async def download_backup(
     filename: str,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user = Depends(AuthService.get_current_admin_user)
 ):
     """下载备份文件（仅管理员）"""
@@ -285,7 +285,7 @@ async def download_backup(
             raise HTTPException(status_code=404, detail="备份文件不存在")
         
         # 记录审计日志
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_DOWNLOAD,
             operator_id=current_user.id,
             operator_username=current_user.username,
@@ -309,7 +309,7 @@ async def download_backup(
         logger.error(f"下载备份文件失败: {e}")
         
         # 记录审计日志（失败）
-        audit_service.create_log(
+        await audit_service.create_log(
             action=AuditAction.BACKUP_DOWNLOAD,
             operator_id=current_user.id,
             operator_username=current_user.username,

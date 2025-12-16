@@ -7,48 +7,46 @@ from apscheduler.jobstores.base import JobLookupError
 
 from ..core.config import settings
 from .ipmi import IPMIService
-from ..core.database import async_engine
+from ..core.database import async_engine, AsyncSessionLocal  # 导入统一的AsyncSessionLocal
 from ..models.server import Server, PowerState, ServerStatus
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, DisconnectionError
 from sqlalchemy import update, select
 
 logger = logging.getLogger(__name__)
 
-# 创建异步会话工厂 - 添加更多配置
-AsyncSessionLocal = async_sessionmaker(
-    autocommit=False, 
-    autoflush=False, 
-    bind=async_engine, 
-    expire_on_commit=False
-)
+# [关键优化] 删除重复定义的 AsyncSessionLocal，使用从 database.py 导入的统一工厂
 
 class PowerStateSchedulerService:
     """电源状态定时刷新服务"""
     
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
-        self.ipmi_service = IPMIService()
         self.is_running = False
-        self._job_id = "power_state_refresh"
-        self._is_refreshing = False  # 添加标志位，防止任务重叠执行
+        self._refresh_job_id = "power_state_refresh"
+        self.ipmi_service = IPMIService()  # 创建IPMI服务实例
+        self._is_refreshing = False
+        
+        # 限制并发数量，防止瞬间创建过多数据库连接导致连接池耗尽
+        # 建议值：数据库连接池大小 (pool_size) 的 50% ~ 80%
+        self._concurrency_limit = 10  # 降低并发数至10，避免数据库连接池耗尽
+        self._semaphore = asyncio.Semaphore(self._concurrency_limit)
         
     async def start(self):
         """启动定时任务"""
         if self.is_running:
-            logger.warning("定时任务已经运行")
+            logger.warning("电源状态定时刷新服务已经运行")
             return
             
         try:
-            # 添加定时任务，每分钟执行一次
+            # 添加定时刷新任务
             self.scheduler.add_job(
-                self.refresh_all_servers_power_state,
+                self.refresh_all_power_states,
                 "interval",
-                minutes=settings.POWER_STATE_REFRESH_INTERVAL,  # 使用配置的间隔
-                id=self._job_id,
+                minutes=settings.POWER_STATE_REFRESH_INTERVAL,
+                id=self._refresh_job_id,
                 replace_existing=True,
-                max_instances=1,
-                coalesce=True
+                max_instances=1,  # 防止任务重叠执行
+                coalesce=True      # 如果任务积压，只执行最后一次
             )
             
             self.scheduler.start()
@@ -56,360 +54,158 @@ class PowerStateSchedulerService:
             logger.info(f"电源状态定时刷新服务已启动，刷新间隔：{settings.POWER_STATE_REFRESH_INTERVAL}分钟")
             
             # 立即执行一次
-            asyncio.create_task(self.refresh_all_servers_power_state())
+            asyncio.create_task(self.refresh_all_power_states())
             
         except Exception as e:
-            logger.error(f"启动定时任务失败: {e}")
-            # 即使启动失败，也要确保状态正确
+            logger.error(f"启动电源状态定时任务失败: {e}")
             self.is_running = False
             raise
     
     async def stop(self):
         """停止定时任务"""
         if not self.is_running:
-            logger.info("电源状态定时刷新服务未运行，无需停止")
             return
             
         try:
+            # 关闭IPMI服务，释放资源
+            if hasattr(self, 'ipmi_service') and self.ipmi_service:
+                self.ipmi_service.close()
+            
             self.scheduler.shutdown(wait=False)
             self.is_running = False
             logger.info("电源状态定时刷新服务已停止")
         except Exception as e:
-            logger.error(f"停止定时任务失败: {e}")
-            # 即使停止失败，也要确保状态正确
+            logger.error(f"停止电源状态定时任务失败: {e}")
             self.is_running = False
     
-    async def refresh_all_servers_power_state(self):
+    async def refresh_all_power_states(self):
         """刷新所有服务器的电源状态"""
-        # 检查是否已经有任务在运行，防止重叠执行
+        # 防止上一轮任务执行时间过长导致重叠
         if self._is_refreshing:
-            logger.warning("电源状态刷新任务已在运行中，跳过本次执行")
+            logger.warning("上一轮电源状态刷新任务尚未完成，跳过本次执行")
             return
             
         try:
-            self._is_refreshing = True  # 设置标志位
-            logger.info("开始刷新所有服务器电源状态")
+            self._is_refreshing = True
             start_time = datetime.now()
             
-            # 使用异步上下文管理器正确处理会话
+            # 1. 快速获取目标服务器ID列表 (只读操作，用完即释放Session)
+            target_server_ids = []
             async with AsyncSessionLocal() as session:
-                # 获取所有服务器
-                stmt = select(Server)
+                # 仅查询 ID，避免加载整个对象导致 Detached 错误
+                stmt = select(Server.id).where(Server.status == ServerStatus.ONLINE)
                 result = await session.execute(stmt)
-                servers = result.scalars().all()
-                
-                if not servers:
-                    logger.info("没有需要刷新的服务器")
-                    return
-                
-                logger.info(f"找到 {len(servers)} 台服务器需要刷新电源状态")
-                
-                # 并发刷新电源状态，但限制并发数量以避免资源耗尽
-                semaphore = asyncio.Semaphore(20)  # 限制并发数为20
-                
-                async def refresh_with_semaphore(server):
-                    async with semaphore:
-                        return await self._refresh_single_server_power_state(server)
-                
-                # 并发刷新电源状态
-                tasks = []
-                for server in servers:
-                    task = asyncio.create_task(refresh_with_semaphore(server))
-                    tasks.append(task)
-                
-                # 等待所有任务完成，设置超时以防止任务无限期挂起
-                try:
-                    results = await asyncio.wait_for(
-                        asyncio.gather(*tasks, return_exceptions=True),
-                        timeout=len(servers) * 10  # 设置超时时间为服务器数量*10秒
-                    )
-                except asyncio.TimeoutError:
-                    logger.error("电源状态刷新任务超时")
-                    return
-                except asyncio.CancelledError:
-                    logger.warning("电源状态刷新任务被取消")
-                    return
-                
-                # 统计结果
-                success_count = sum(1 for r in results if r is True)
-                failed_count = sum(1 for r in results if r is False)
-                error_count = sum(1 for r in results if isinstance(r, Exception))
-                
-                elapsed_time = (datetime.now() - start_time).total_seconds()
-                logger.info(
-                    f"电源状态刷新完成 - 成功: {success_count}, 失败: {failed_count + error_count}, "
-                    f"总计: {len(servers)}, 耗时: {elapsed_time:.2f}秒"
-                )
-                
-        except asyncio.CancelledError:
-            logger.warning("电源状态刷新任务被取消")
-        except Exception as e:
-            logger.error(f"刷新所有服务器电源状态失败: {e}")
-        finally:
-            self._is_refreshing = False  # 重置标志位
-    
-    async def _refresh_single_server_power_state(self, server: Server) -> bool:
-        """刷新单个服务器的电源状态"""
-        try:
-            # 获取电源状态（确保传递正确的类型）
-            # 从数据库模型中提取值并转换为正确的类型
-            ip = str(server.ipmi_ip) if server.ipmi_ip is not None else ""
-            username = str(server.ipmi_username) if server.ipmi_username is not None else ""
-            password = str(server.ipmi_password) if server.ipmi_password is not None else ""
+                target_server_ids = result.scalars().all()
             
-            # 处理端口，确保是整数类型
-            port = 623  # 默认端口
-            if server.ipmi_port is not None:
-                try:
-                    # 尝试转换为整数，如果失败则使用默认值
-                    port = int(str(server.ipmi_port))
-                except (ValueError, TypeError):
-                    port = 623
+            if not target_server_ids:
+                logger.info("当前没有在线服务器，跳过电源状态刷新")
+                return
+
+            logger.info(f"开始刷新 {len(target_server_ids)} 台服务器的电源状态")
+
+            # 2. 并发刷新 (使用 Semaphore 限制并发)
+            tasks = []
+            for server_id in target_server_ids:
+                # 为每个任务创建协程
+                task = asyncio.create_task(self._refresh_single_server_safe(server_id))
+                tasks.append(task)
             
-            power_state = await self.ipmi_service.get_power_state(
-                ip=ip,
-                username=username,
-                password=password,
-                port=port
-            )
+            # 3. 等待所有任务完成
+            # 设置总超时时间，防止任务无限挂起 (假设单台超时30s，计算总缓冲时间)
+            # 如果是并发执行，理论最大耗时 = (总数 / 并发数) * 单台超时
+            timeout = max(30, (len(target_server_ids) / self._concurrency_limit + 1.5) * 30)
             
-            if power_state is not None:
-                # 转换power_state为枚举类型
-                try:
-                    power_state_enum = PowerState(power_state.lower())
-                except ValueError:
-                    power_state_enum = PowerState.UNKNOWN
-                
-                # 根据电源状态确定BMC状态
-                # 如果电源状态检测成功，说明BMC是在线的
-                bmc_status = ServerStatus.ONLINE
-                
-                # 更新数据库中的电源状态和BMC状态
-                try:
-                    async with AsyncSessionLocal() as session:
-                        stmt = update(Server).where(Server.id == server.id).values(
-                            power_state=power_state_enum,
-                            status=bmc_status,
-                            last_seen=datetime.utcnow()
-                        )
-                        await session.execute(stmt)
-                        await session.commit()
-                        
-                    logger.debug(
-                        f"服务器 {server.name} ({server.ipmi_ip}) 电源状态已更新: {power_state_enum.value}, "
-                        f"BMC状态已更新: {bmc_status.value}"
-                    )
-                    return True
-                except (SQLAlchemyError, DisconnectionError) as db_error:
-                    logger.error(
-                        f"更新服务器 {server.name} ({server.ipmi_ip}) 数据库状态失败: {db_error}"
-                    )
-                    # 尝试重新建立连接后重试一次
-                    try:
-                        async with AsyncSessionLocal() as session:
-                            stmt = update(Server).where(Server.id == server.id).values(
-                                power_state=power_state_enum,
-                                status=bmc_status,
-                                last_seen=datetime.utcnow()
-                            )
-                            await session.execute(stmt)
-                            await session.commit()
-                            
-                        logger.debug(
-                            f"服务器 {server.name} ({server.ipmi_ip}) 电源状态已更新（重试成功）: {power_state_enum.value}"
-                        )
-                        return True
-                    except Exception as retry_error:
-                        logger.error(
-                            f"重试更新服务器 {server.name} ({server.ipmi_ip}) 数据库状态失败: {retry_error}"
-                        )
-                        return False
-                except Exception as e:
-                    logger.error(
-                        f"更新服务器 {server.name} ({server.ipmi_ip}) 数据库状态时发生未知错误: {e}"
-                    )
-                    return False
-                    
-            else:
-                logger.warning(
-                    f"无法获取服务器 {server.name} ({server.ipmi_ip}) 的电源状态"
-                )
-                return False
-                
-        except Exception as e:
-            logger.error(
-                f"刷新服务器 {server.name} ({server.ipmi_ip}) 电源状态失败: {e}"
-            )
-            
-            # 连接失败时更新服务器状态为离线，电源状态为未知
             try:
-                async with AsyncSessionLocal() as session:
-                    stmt = update(Server).where(Server.id == server.id).values(
-                        status=ServerStatus.OFFLINE,
-                        power_state=PowerState.UNKNOWN
+                results = await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True), 
+                    timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"电源状态刷新任务整体超时 ({timeout}s)，部分服务器状态可能未更新")
+                return
+
+            # 统计结果
+            success_cnt = sum(1 for r in results if r is True)
+            error_cnt = len(target_server_ids) - success_cnt
+            
+            elapsed = (datetime.now() - start_time).total_seconds()
+            logger.info(f"电源状态刷新完成: 成功 {success_cnt}, 失败 {error_cnt}, 耗时 {elapsed:.2f}s")
+                
+        except Exception as e:
+            logger.error(f"定时刷新电源状态全局异常: {e}")
+        finally:
+            self._is_refreshing = False
+
+    async def _refresh_single_server_safe(self, server_id: int) -> bool:
+        """
+        单个服务器刷新包装函数
+        包含: 并发控制 + 独立的 Session 管理 + 异常处理
+        """
+        async with self._semaphore:  # 限制并发数
+            # [关键] 每个并发任务必须使用独立的 Session，严禁共享 Session
+            async with AsyncSessionLocal() as session:
+                try:
+                    # 1. 获取服务器信息
+                    stmt = select(Server).where(Server.id == server_id)
+                    result = await session.execute(stmt)
+                    server = result.scalar_one_or_none()
+                    
+                    if not server:
+                        logger.warning(f"服务器不存在 (ID: {server_id})")
+                        return False
+                    
+                    # 2. 调用 IPMI 服务获取电源状态
+                    power_state_str = await self.ipmi_service.get_power_state(
+                        ip=server.ipmi_ip,
+                        username=server.ipmi_username,
+                        password=server.ipmi_password,
+                        port=server.ipmi_port
+                    )
+                    
+                    # 3. 转换电源状态
+                    try:
+                        new_power_state = PowerState(power_state_str.lower())
+                    except ValueError:
+                        logger.warning(f"无效的电源状态值: {power_state_str}")
+                        new_power_state = PowerState.UNKNOWN
+                    
+                    # 4. 更新数据库
+                    stmt = update(Server).where(Server.id == server_id).values(
+                        power_state=new_power_state,
+                        last_power_refresh=datetime.now()
                     )
                     await session.execute(stmt)
                     await session.commit()
-            except (SQLAlchemyError, DisconnectionError) as db_error:
-                logger.error(
-                    f"更新服务器 {server.name} ({server.ipmi_ip}) 离线状态失败: {db_error}"
-                )
-                # 尝试重新建立连接后重试一次
-                try:
-                    async with AsyncSessionLocal() as session:
-                        stmt = update(Server).where(Server.id == server.id).values(
-                            status=ServerStatus.OFFLINE,
-                            power_state=PowerState.UNKNOWN
-                        )
-                        await session.execute(stmt)
-                        await session.commit()
-                    logger.debug(
-                        f"服务器 {server.name} ({server.ipmi_ip}) 离线状态已更新（重试成功）"
-                    )
-                except Exception as retry_error:
-                    logger.error(
-                        f"重试更新服务器 {server.name} ({server.ipmi_ip}) 离线状态失败: {retry_error}"
-                    )
-            except Exception as update_error:
-                logger.error(
-                    f"更新服务器 {server.name} ({server.ipmi_ip}) 离线状态时发生未知错误: {update_error}"
-                )
-            
-            return False
-    
+                    
+                    logger.debug(f"服务器 {server_id} 电源状态更新成功: {new_power_state.value}")
+                    return True
+                    
+                except Exception as e:
+                    await session.rollback()
+                    logger.error(f"刷新服务器 {server_id} 电源状态失败: {e}")
+                    return False
+
     def get_status(self) -> Dict[str, Any]:
         """获取定时任务状态"""
         try:
-            job = self.scheduler.get_job(self._job_id)
-            if job:
-                return {
-                    "running": self.is_running,
-                    "job_id": self._job_id,
-                    "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
-                    "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL
-                }
-            else:
-                return {
-                    "running": self.is_running,
-                    "job_id": self._job_id,
-                    "next_run_time": None,
-                    "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL
-                }
-        except JobLookupError:
-            return {
-                "running": self.is_running,
-                "job_id": self._job_id,
-                "next_run_time": None,
-                "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL
-            }
-        except Exception as e:
-            logger.error(f"获取定时任务状态失败: {e}")
-            return {
-                "running": self.is_running,
-                "job_id": self._job_id,
-                "next_run_time": None,
-                "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL,
-                "error": str(e)
-            }
-    
-    def schedule_server_refresh(self, server_id: int):
-        """
-        为特定服务器调度刷新任务，在1秒和4秒后执行两次刷新
-        :param server_id: 服务器ID
-        """
-        # 生成唯一的任务ID
-        job_id_base = f"server_refresh_{server_id}"
-        
-        # 先移除可能存在的旧任务
-        try:
-            self.scheduler.remove_job(job_id_base + "_1")
-        except JobLookupError:
-            pass  # 任务不存在，忽略错误
-        
-        try:
-            self.scheduler.remove_job(job_id_base + "_2")
-        except JobLookupError:
-            pass  # 任务不存在，忽略错误
-        
-        # 添加第一次刷新任务（1秒后执行）
-        self.scheduler.add_job(
-            self._execute_single_server_refresh,
-            'date',
-            run_date=datetime.now() + timedelta(seconds=1),
-            id=job_id_base + "_1",
-            replace_existing=True,
-            args=[server_id]
-        )
-        
-        # 添加第二次刷新任务（4秒后执行）
-        self.scheduler.add_job(
-            self._execute_single_server_refresh,
-            'date',
-            run_date=datetime.now() + timedelta(seconds=4),
-            id=job_id_base + "_2",
-            replace_existing=True,
-            args=[server_id]
-        )
-        
-        logger.info(f"已为服务器 {server_id} 调度刷新任务，在1秒和4秒后分别执行刷新")
-    
-    def schedule_single_refresh(self, server_id: int, delay: float = 0.5):
-        """
-        为特定服务器调度单次刷新任务
-        :param server_id: 服务器ID
-        :param delay: 延迟时间（秒），默认0.5秒
-        """
-        # 生成唯一的任务ID
-        job_id = f"single_refresh_{server_id}"
-        
-        # 先移除可能存在的旧任务
-        try:
-            self.scheduler.remove_job(job_id)
-        except JobLookupError:
-            pass  # 任务不存在，忽略错误
-        
-        # 添加刷新任务
-        self.scheduler.add_job(
-            self._execute_single_server_refresh,
-            'date',
-            run_date=datetime.now() + timedelta(seconds=delay),
-            id=job_id,
-            replace_existing=True,
-            args=[server_id]
-        )
-        
-        logger.info(f"已为服务器 {server_id} 调度单次刷新任务，在 {delay} 秒后执行")
-    
-    async def _execute_single_server_refresh(self, server_id: int):
-        """
-        执行单个服务器的电源状态刷新
-        :param server_id: 服务器ID
-        """
-        try:
-            logger.info(f"开始刷新服务器 {server_id} 的电源状态")
+            refresh_job = self.scheduler.get_job(self._refresh_job_id)
             
-            # 使用异步上下文管理器正确处理会话
-            async with AsyncSessionLocal() as session:
-                # 获取指定服务器
-                stmt = select(Server).where(Server.id == server_id)
-                result = await session.execute(stmt)
-                server = result.scalar_one_or_none()
+            status = {
+                "running": self.is_running,
+                "power_refresh_enabled": settings.POWER_STATE_REFRESH_ENABLED,
+                "refresh_job": None
+            }
+            
+            if refresh_job:
+                status["refresh_job"] = {
+                    "next_run": refresh_job.next_run_time.isoformat() if refresh_job.next_run_time else None,
+                    "interval_minutes": settings.POWER_STATE_REFRESH_INTERVAL
+                }
                 
-                if not server:
-                    logger.warning(f"未找到ID为 {server_id} 的服务器")
-                    return
-                
-                # 刷新服务器电源状态
-                success = await self._refresh_single_server_power_state(server)
-                
-                if success:
-                    logger.info(f"服务器 {server_id} 电源状态刷新成功")
-                else:
-                    logger.warning(f"服务器 {server_id} 电源状态刷新失败")
-                    
+            return status
         except Exception as e:
-            logger.error(f"刷新服务器 {server_id} 电源状态时发生错误: {e}")
+            logger.error(f"获取状态失败: {e}")
+            return {"error": str(e)}
 
-
-# 创建全局实例
-scheduler_service = PowerStateSchedulerService()
+# 全局变量
+scheduler_service: Optional[PowerStateSchedulerService] = None

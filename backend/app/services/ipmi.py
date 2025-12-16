@@ -168,9 +168,10 @@ def _mp_get_system_info(ip, username, password, port, initial_ip):
         if bmc_version == 'Unknown':
             try:
                 bmc_conf = conn.get_bmc_configuration()
-                if bmc_conf:
+                if bmc_conf and isinstance(bmc_conf, dict):
                     bmc_version = bmc_conf.get('firmware_version', 'Unknown')
-            except: pass
+            except Exception:
+                pass
 
         return {
             "status": "success",
@@ -183,7 +184,6 @@ def _mp_get_system_info(ip, username, password, port, initial_ip):
                 "bmc_version": bmc_version
             }
         }
-
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -356,7 +356,18 @@ class IPMIService:
         """获取电源状态"""
         port = self._ensure_port_is_int(port)
         result = await self._run_in_process(_mp_get_power, ip, username, password, port)
-        return result
+        
+        # 处理返回的字典结果，提取电源状态字符串
+        if isinstance(result, dict):
+            if result.get("status") == "success":
+                return result.get("data", "unknown")
+            else:
+                # 如果操作失败，抛出异常
+                raise IPMIError(f"获取电源状态失败: {result.get('error', '未知错误')}")
+        else:
+            # 如果返回的不是字典（理论上不应该发生），记录警告并返回unknown
+            logger.warning(f"IPMI电源状态返回了非字典类型: {type(result)}, 值: {result}")
+            return "unknown"
 
     async def power_control(self, ip: str, username: str, password: str, action: str, port: int = 623) -> Dict[str, Any]:
         """电源控制"""
@@ -364,10 +375,11 @@ class IPMIService:
         result = await self._run_in_process(_mp_set_power, ip, username, password, port, action)
         return {"action": action, "result": "success", "message": f"电源{action}操作成功", "data": result}
 
-    async def get_system_info(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
+    async def get_system_info(self, ip: str, username: str, password: str, port: int = 623, timeout: int = None) -> Dict[str, Any]:
         """获取系统信息"""
         port = self._ensure_port_is_int(port)
-        result = await self._run_in_process(_mp_get_system_info, ip, username, password, port, ip)
+        # 传递timeout参数给_run_in_process
+        result = await self._run_in_process(_mp_get_system_info, ip, username, password, port, ip, timeout=timeout)
         return result
 
     async def get_sensor_data(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
@@ -447,93 +459,95 @@ class IPMIService:
                 - error: str, 错误信息（如果不支持或发生错误）
                 - check_success: bool, 检查是否成功执行（用于区分明确结果和检查失败）
         """
-        import json
-        import httpx
-        start_time = time.time()
-        try:
-            logger.debug(f"[Redfish检查] 开始检查Redfish支持: {bmc_ip}")
-            
-            # 构建Redfish服务根URL
-            redfish_url = f"https://{bmc_ip}/redfish/v1/"
-            
-            # 创建httpx异步客户端
-            async with httpx.AsyncClient(
-                verify=False,  # 忽略SSL证书验证（类似于curl -k参数）
-                timeout=timeout
-            ) as client:
-                # 发送GET请求到Redfish服务根端点
-                response = await client.get(redfish_url)
+        # 使用信号量控制并发
+        async with self._semaphore:
+            import json
+            import httpx
+            start_time = time.time()
+            try:
+                logger.debug(f"[Redfish检查] 开始检查Redfish支持: {bmc_ip}")
                 
-                execution_time = time.time() - start_time
-                logger.debug(f"[Redfish检查] 请求完成: {bmc_ip}, 状态码: {response.status_code}, 耗时: {execution_time:.3f}秒")
+                # 构建Redfish服务根URL
+                redfish_url = f"https://{bmc_ip}/redfish/v1/"
                 
-                # 检查响应状态码
-                if response.status_code == 200:
-                    try:
-                        # 解析JSON响应
-                        service_root = response.json()
-                        
-                        # 提取Redfish版本信息
-                        redfish_version = service_root.get("RedfishVersion", "Unknown")
-                        
-                        logger.info(f"[Redfish检查] BMC支持Redfish: {bmc_ip}, 版本: {redfish_version}")
-                        
-                        return {
-                            "supported": True,
-                            "version": redfish_version,
-                            "service_root": service_root,
-                            "error": None,
-                            "check_success": True  # 明确的成功结果
-                        }
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"[Redfish检查] JSON解析失败: {bmc_ip}, 错误: {e}")
+                # 创建httpx异步客户端
+                async with httpx.AsyncClient(
+                    verify=False,  # 忽略SSL证书验证（类似于curl -k参数）
+                    timeout=timeout
+                ) as client:
+                    # 发送GET请求到Redfish服务根端点
+                    response = await client.get(redfish_url)
+                    
+                    execution_time = time.time() - start_time
+                    logger.debug(f"[Redfish检查] 请求完成: {bmc_ip}, 状态码: {response.status_code}, 耗时: {execution_time:.3f}秒")
+                    
+                    # 检查响应状态码
+                    if response.status_code == 200:
+                        try:
+                            # 解析JSON响应
+                            service_root = response.json()
+                            
+                            # 提取Redfish版本信息
+                            redfish_version = service_root.get("RedfishVersion", "Unknown")
+                            
+                            logger.info(f"[Redfish检查] BMC支持Redfish: {bmc_ip}, 版本: {redfish_version}")
+                            
+                            return {
+                                "supported": True,
+                                "version": redfish_version,
+                                "service_root": service_root,
+                                "error": None,
+                                "check_success": True  # 明确的成功结果
+                            }
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"[Redfish检查] JSON解析失败: {bmc_ip}, 错误: {e}")
+                            return {
+                                "supported": False,
+                                "version": None,
+                                "service_root": None,
+                                "error": f"JSON解析失败: {str(e)}",
+                                "check_success": True  # 明确的失败结果（BMC返回了非JSON响应）
+                            }
+                    else:
+                        logger.info(f"[Redfish检查] BMC不支持Redfish或访问被拒绝: {bmc_ip}, 状态码: {response.status_code}")
                         return {
                             "supported": False,
                             "version": None,
                             "service_root": None,
-                            "error": f"JSON解析失败: {str(e)}",
-                            "check_success": True  # 明确的失败结果（BMC返回了非JSON响应）
+                            "error": f"HTTP状态码: {response.status_code}",
+                            "check_success": True  # 明确的失败结果（BMC返回了明确的错误码）
                         }
-                else:
-                    logger.info(f"[Redfish检查] BMC不支持Redfish或访问被拒绝: {bmc_ip}, 状态码: {response.status_code}")
-                    return {
-                        "supported": False,
-                        "version": None,
-                        "service_root": None,
-                        "error": f"HTTP状态码: {response.status_code}",
-                        "check_success": True  # 明确的失败结果（BMC返回了明确的错误码）
-                    }
-                    
-        except httpx.TimeoutException:
-            execution_time = time.time() - start_time
-            logger.error(f"[Redfish检查] 请求超时: {bmc_ip}, 超时时间: {timeout}秒, 耗时: {execution_time:.3f}秒")
-            return {
-                "supported": False,
-                "version": None,
-                "service_root": None,
-                "error": f"请求超时 ({timeout}秒)",
-                "check_success": False  # 检查失败（网络问题）
-            }
-        except httpx.RequestError as e:
-            execution_time = time.time() - start_time
-            logger.error(f"[Redfish检查] 请求错误: {bmc_ip}, 错误: {e}, 耗时: {execution_time:.3f}秒")
-            return {
-                "supported": False,
-                "version": None,
-                "service_root": None,
-                "error": f"请求错误: {str(e)}",
-                "check_success": False  # 检查失败（网络问题）
-            }
-        except Exception as e:
-            execution_time = time.time() - start_time
-            logger.error(f"[Redfish检查] 未知错误: {bmc_ip}, 错误: {e}, 耗时: {execution_time:.3f}秒")
-            return {
-                "supported": False,
-                "version": None,
-                "service_root": None,
-                "error": f"未知错误: {str(e)}",
-                "check_success": False  # 检查失败（其他异常）
-            }
+                        
+            except httpx.TimeoutException:
+                execution_time = time.time() - start_time
+                logger.error(f"[Redfish检查] 请求超时: {bmc_ip}, 超时时间: {timeout}秒, 耗时: {execution_time:.3f}秒")
+                return {
+                    "supported": False,
+                    "version": None,
+                    "service_root": None,
+                    "error": f"请求超时 ({timeout}秒)",
+                    "check_success": False  # 检查失败（网络问题）
+                }
+            except httpx.RequestError as e:
+                execution_time = time.time() - start_time
+                logger.error(f"[Redfish检查] 请求错误: {bmc_ip}, 错误: {e}, 耗时: {execution_time:.3f}秒")
+                return {
+                    "supported": False,
+                    "version": None,
+                    "service_root": None,
+                    "error": f"请求错误: {str(e)}",
+                    "check_success": False  # 检查失败（网络问题）
+                }
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"[Redfish检查] 未知错误: {bmc_ip}, 错误: {e}, 耗时: {execution_time:.3f}秒")
+                return {
+                    "supported": False,
+                    "version": None,
+                    "service_root": None,
+                    "error": f"未知错误: {str(e)}",
+                    "check_success": False  # 检查失败（其他异常）
+                }
     
     async def get_redfish_led_status(self, bmc_ip: str, username: str, password: str, timeout: int = 10) -> Dict[str, Any]:
         """
@@ -551,78 +565,79 @@ class IPMIService:
                 - led_state: str, LED状态（"On", "Off" 或 "Unknown"）
                 - error: str, 错误信息（如果发生错误）
         """
-        import redfish
-        loop = asyncio.get_running_loop()
-        
-        def _get_led_status_sync():
-            """同步函数，在线程池中执行Redfish操作"""
-            try:
-                # 创建Redfish客户端
-                redfish_client = redfish.redfish_client(
-                    base_url=f"https://{bmc_ip}",
-                    username=username,
-                    password=password,
-                    default_prefix='/redfish/v1'
-                )
-                
-                # 登录
-                redfish_client.login(auth="session")
-                
-                # 获取系统信息
-                systems_response = redfish_client.get("/redfish/v1/Systems")
-                systems_data = systems_response.dict
-                
-                # 获取第一个系统
-                if systems_data.get("Members"):
-                    system_url = systems_data["Members"][0]["@odata.id"]
-                    system_response = redfish_client.get(system_url)
-                    system_data = system_response.dict
+        # 使用信号量控制并发
+        async with self._semaphore:
+            loop = asyncio.get_running_loop()
+            
+            def _get_led_status_sync():
+                """同步函数，在线程池中执行Redfish操作"""
+                try:
+                    # 创建Redfish客户端
+                    redfish_client = redfish.redfish_client(
+                        base_url=f"https://{bmc_ip}",
+                        username=username,
+                        password=password,
+                        default_prefix='/redfish/v1'
+                    )
                     
-                    # 获取LED状态
-                    indicator_led = system_data.get("IndicatorLED", "Unknown")
+                    # 登录
+                    redfish_client.login(auth="session")
                     
-                    # 登出
-                    redfish_client.logout()
+                    # 获取系统信息
+                    systems_response = redfish_client.get("/redfish/v1/Systems")
+                    systems_data = systems_response.dict
                     
-                    return {
-                        "supported": True,
-                        "led_state": indicator_led,
-                        "error": None
-                    }
-                else:
-                    # 登出
-                    redfish_client.logout()
-                    
+                    # 获取第一个系统
+                    if systems_data.get("Members"):
+                        system_url = systems_data["Members"][0]["@odata.id"]
+                        system_response = redfish_client.get(system_url)
+                        system_data = system_response.dict
+                        
+                        # 获取LED状态
+                        indicator_led = system_data.get("IndicatorLED", "Unknown")
+                        
+                        # 登出
+                        redfish_client.logout()
+                        
+                        return {
+                            "supported": True,
+                            "led_state": indicator_led,
+                            "error": None
+                        }
+                    else:
+                        # 登出
+                        redfish_client.logout()
+                        
+                        return {
+                            "supported": False,
+                            "led_state": "Unknown",
+                            "error": "未找到系统信息"
+                        }
+                        
+                except Exception as e:
+                    logger.error(f"[Redfish LED状态] 获取LED状态失败: {bmc_ip}, 错误: {e}")
                     return {
                         "supported": False,
                         "led_state": "Unknown",
-                        "error": "未找到系统信息"
+                        "error": str(e)
                     }
-                    
+        
+            try:
+                logger.debug(f"[Redfish LED状态] 开始获取LED状态: {bmc_ip}")
+                
+                # 在线程池中执行同步的Redfish操作
+                result = await loop.run_in_executor(self._executor, _get_led_status_sync)
+                
+                logger.info(f"[Redfish LED状态] 获取LED状态完成: {bmc_ip}, 状态: {result.get('led_state')}")
+                return result
+                
             except Exception as e:
-                logger.error(f"[Redfish LED状态] 获取LED状态失败: {bmc_ip}, 错误: {e}")
+                logger.error(f"[Redfish LED状态] 未知错误: {bmc_ip}, 错误: {e}")
                 return {
                     "supported": False,
                     "led_state": "Unknown",
-                    "error": str(e)
+                    "error": f"未知错误: {str(e)}"
                 }
-        
-        try:
-            logger.debug(f"[Redfish LED状态] 开始获取LED状态: {bmc_ip}")
-            
-            # 在线程池中执行同步的Redfish操作
-            result = await loop.run_in_executor(None, _get_led_status_sync)
-            
-            logger.info(f"[Redfish LED状态] 获取LED状态完成: {bmc_ip}, 状态: {result.get('led_state')}")
-            return result
-            
-        except Exception as e:
-            logger.error(f"[Redfish LED状态] 未知错误: {bmc_ip}, 错误: {e}")
-            return {
-                "supported": False,
-                "led_state": "Unknown",
-                "error": f"未知错误: {str(e)}"
-            }
     
     async def set_redfish_led_state(self, bmc_ip: str, username: str, password: str, led_state: str, timeout: int = 10) -> Dict[str, Any]:
         """
@@ -641,122 +656,123 @@ class IPMIService:
                 - message: str, 操作结果信息
                 - error: str, 错误信息（如果发生错误）
         """
-        import redfish
-        # 定义不同厂商可能使用的LED状态命令，按优先级排序
-        LED_STATE_COMMANDS = {
-            "On": ["On", "Lit"],
-            "Off": ["Off"],
-            "Unknown": ["Unknown"]
-        }
+        # 使用信号量控制并发
+        async with self._semaphore:
+            # 定义不同厂商可能使用的LED状态命令，按优先级排序
+            LED_STATE_COMMANDS = {
+                "On": ["On", "Lit"],
+                "Off": ["Off"],
+                "Unknown": ["Unknown"]
+            }
 
-        loop = asyncio.get_running_loop()
-        
-        def _set_led_state_sync(led_command):
-            """同步函数，在线程池中执行Redfish操作"""
-            try:
-                # 创建Redfish客户端
-                redfish_client = redfish.redfish_client(
-                    base_url=f"https://{bmc_ip}",
-                    username=username,
-                    password=password,
-                    default_prefix='/redfish/v1'
-                )
-                
-                # 登录
-                redfish_client.login(auth="session")
-                
-                # 获取系统信息
-                systems_response = redfish_client.get("/redfish/v1/Systems")
-                systems_data = systems_response.dict
-                
-                # 获取第一个系统
-                if systems_data.get("Members"):
-                    system_url = systems_data["Members"][0]["@odata.id"]
+            loop = asyncio.get_running_loop()
+            
+            def _set_led_state_sync(led_command):
+                """同步函数，在线程池中执行Redfish操作"""
+                try:
+                    # 创建Redfish客户端
+                    redfish_client = redfish.redfish_client(
+                        base_url=f"https://{bmc_ip}",
+                        username=username,
+                        password=password,
+                        default_prefix='/redfish/v1'
+                    )
                     
-                    # 构建PATCH请求数据
-                    patch_data = {
-                        "IndicatorLED": led_command
-                    }
+                    # 登录
+                    redfish_client.login(auth="session")
                     
-                    # 发送PATCH请求设置LED状态
-                    response = redfish_client.patch(system_url, body=patch_data)
+                    # 获取系统信息
+                    systems_response = redfish_client.get("/redfish/v1/Systems")
+                    systems_data = systems_response.dict
                     
-                    # 登出
-                    redfish_client.logout()
+                    # 获取第一个系统
+                    if systems_data.get("Members"):
+                        system_url = systems_data["Members"][0]["@odata.id"]
+                        
+                        # 构建PATCH请求数据
+                        patch_data = {
+                            "IndicatorLED": led_command
+                        }
+                        
+                        # 发送PATCH请求设置LED状态
+                        response = redfish_client.patch(system_url, body=patch_data)
+                        
+                        # 登出
+                        redfish_client.logout()
+                        
+                        return {
+                            "success": response.status in [200, 204],
+                            "status_code": response.status,
+                            "error": None if response.status in [200, 204] else f"状态码: {response.status}"
+                        }
+                    else:
+                        # 登出
+                        redfish_client.logout()
+                        
+                        return {
+                            "success": False,
+                            "status_code": None,
+                            "error": "未找到系统信息"
+                        }
                     
-                    return {
-                        "success": response.status in [200, 204],
-                        "status_code": response.status,
-                        "error": None if response.status in [200, 204] else f"状态码: {response.status}"
-                    }
-                else:
-                    # 登出
-                    redfish_client.logout()
-                    
+                except Exception as e:
+                    logger.error(f"[Redfish LED控制] 设置LED状态失败: {bmc_ip}, 错误: {e}")
                     return {
                         "success": False,
                         "status_code": None,
-                        "error": "未找到系统信息"
+                        "error": str(e)
                     }
-                    
-            except Exception as e:
-                logger.error(f"[Redfish LED控制] 设置LED状态失败: {bmc_ip}, 错误: {e}")
-                return {
-                    "success": False,
-                    "status_code": None,
-                    "error": str(e)
-                }
         
-        try:
-            logger.debug(f"[Redfish LED控制] 开始设置LED状态: {bmc_ip}, 状态: {led_state}")
-            
-            # 验证LED状态参数
-            if led_state not in LED_STATE_COMMANDS:
-                logger.warning(f"[Redfish LED控制] 无效的LED状态: {led_state}")
-                return {
-                    "success": False,
-                    "message": "无效的LED状态",
-                    "error": f"LED状态必须是 'On' 或 'Off'，当前值: {led_state}"
-                }
-            
-            # 按顺序尝试不同的LED状态命令
-            commands_to_try = LED_STATE_COMMANDS.get(led_state, [led_state])
-            last_error = None
-            
-            for cmd in commands_to_try:
-                logger.debug(f"[Redfish LED控制] 尝试使用命令 '{cmd}': {bmc_ip}")
+            try:
+                logger.debug(f"[Redfish LED控制] 开始设置LED状态: {bmc_ip}, 状态: {led_state}")
                 
-                # 在线程池中执行同步的Redfish操作
-                result = await loop.run_in_executor(None, _set_led_state_sync, cmd)
-                
-                # 如果成功（200或204），直接返回成功结果
-                if result.get("success"):
-                    logger.info(f"[Redfish LED控制] 设置LED状态成功: {bmc_ip}, 状态: {led_state} (使用命令: {cmd})")
+                # 验证LED状态参数
+                if led_state not in LED_STATE_COMMANDS:
+                    logger.warning(f"[Redfish LED控制] 无效的LED状态: {led_state}")
                     return {
-                        "success": True,
-                        "message": f"LED状态已设置为 {led_state}",
-                        "error": None
+                        "success": False,
+                        "message": "无效的LED状态",
+                        "error": f"LED状态必须是 'On' 或 'Off'，当前值: {led_state}"
                     }
                 
-                # 记录错误信息，继续尝试下一个命令
-                last_error = result.get("error")
-                logger.debug(f"[Redfish LED控制] 使用命令 '{cmd}' 失败，错误: {last_error}")
-            
-            # 如果所有命令都失败了，返回最后一个错误
-            logger.warning(f"[Redfish LED控制] 设置LED状态失败: {bmc_ip}, 最后错误: {last_error}")
-            return {
-                "success": False,
-                "message": "设置LED状态失败",
-                "error": last_error
-            }
-            
-        except Exception as e:
-            logger.error(f"[Redfish LED控制] 未知错误: {bmc_ip}, 错误: {e}")
-            return {
-                "success": False,
-                "message": "操作失败",
-                "error": f"未知错误: {str(e)}"
-            }
+                # 按顺序尝试不同的LED状态命令
+                commands_to_try = LED_STATE_COMMANDS.get(led_state, [led_state])
+                last_error = None
+                
+                for cmd in commands_to_try:
+                    logger.debug(f"[Redfish LED控制] 尝试使用命令 '{cmd}': {bmc_ip}")
+                    
+                    # 在线程池中执行同步的Redfish操作
+                    result = await loop.run_in_executor(self._executor, _set_led_state_sync, cmd)
+                    
+                    # 如果成功（200或204），直接返回成功结果
+                    if result.get("success"):
+                        logger.info(f"[Redfish LED控制] 设置LED状态成功: {bmc_ip}, 状态: {led_state} (使用命令: {cmd})")
+                        return {
+                            "success": True,
+                            "message": f"LED状态已设置为 {led_state}",
+                            "error": None
+                        }
+                    
+                    # 记录错误信息，继续尝试下一个命令
+                    last_error = result.get("error")
+                    logger.debug(f"[Redfish LED控制] 使用命令 '{cmd}' 失败，错误: {last_error}")
+                
+                # 如果所有命令都失败了，返回最后一个错误
+                logger.warning(f"[Redfish LED控制] 设置LED状态失败: {bmc_ip}, 最后错误: {last_error}")
+                return {
+                    "success": False,
+                    "message": "设置LED状态失败",
+                    "error": last_error
+                }
+                
+            except Exception as e:
+                logger.error(f"[Redfish LED控制] 未知错误: {bmc_ip}, 错误: {e}")
+                return {
+                    "success": False,
+                    "message": "操作失败",
+                    "error": f"未知错误: {str(e)}"
+                }
     
     async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = 623) -> bool:
         """确保openshub监控用户存在且配置正确，强制更新密码为新密码"""

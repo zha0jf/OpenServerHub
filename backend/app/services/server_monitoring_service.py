@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.server import Server
 from app.services.ipmi import IPMIService
 from app.services.server_monitoring import PrometheusConfigManager, GrafanaService
@@ -12,8 +13,11 @@ logger = logging.getLogger(__name__)
 class ServerMonitoringService:
     """服务器监控服务，处理服务器变更时的监控配置同步"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
+        # [修改点 1] 类型提示改为 AsyncSession
         self.db = db
+        # 注意：如果 IPMIService 初始化开销很大（创建线程池），
+        # 建议将其作为依赖注入传入，而不是在这里每次 new 一个
         self.ipmi_service = IPMIService()
         self.prometheus_manager = PrometheusConfigManager()
         self.grafana_service = GrafanaService(
@@ -34,13 +38,12 @@ class ServerMonitoringService:
                 )
             
             # 2. 同步Prometheus目标配置（仅包含启用监控的服务器）
-            servers = self.db.query(Server).filter(Server.monitoring_enabled == True).all()
-            await self.prometheus_manager.sync_ipmi_targets(servers)
+            # [修改点 2] 使用异步查询语法
+            stmt = select(Server).where(Server.monitoring_enabled == True)
+            result = await self.db.execute(stmt)
+            servers = result.scalars().all()
             
-            # 3. 不再创建Grafana仪表板，因为前端使用固定的完整IPMI仪表板
-            # 保留此注释以备将来可能切换回基于服务器的专用仪表板
-            # if bool(server.monitoring_enabled):
-            #     await self.grafana_service.create_server_dashboard(server)
+            await self.prometheus_manager.sync_ipmi_targets(servers)
             
             logger.info(f"服务器 {server.id} 监控配置已更新")
             return True
@@ -52,14 +55,15 @@ class ServerMonitoringService:
         """服务器删除时的监控配置处理"""
         try:
             # 1. 同步Prometheus目标配置（排除已删除的服务器）
-            servers = self.db.query(Server).filter(
+            # [修改点 3] 使用异步查询语法
+            stmt = select(Server).where(
                 Server.monitoring_enabled == True,
                 Server.id != server_id
-            ).all()
-            await self.prometheus_manager.sync_ipmi_targets(servers)
+            )
+            result = await self.db.execute(stmt)
+            servers = result.scalars().all()
             
-            # 2. 不再删除Grafana仪表板，因为前端使用固定的完整IPMI仪表板
-            # 保留此注释以备将来可能切换回基于服务器的专用仪表板
+            await self.prometheus_manager.sync_ipmi_targets(servers)
             
             logger.info(f"服务器 {server_id} 监控配置已清理")
             return True
@@ -79,13 +83,13 @@ class ServerMonitoringService:
                     admin_password=str(server.ipmi_password) if server.ipmi_password is not None else "",
                     port=int(str(server.ipmi_port)) if server.ipmi_port is not None else 623
                 )
-                
-                # 不再创建Grafana仪表板，因为前端使用固定的完整IPMI仪表板
-                # 保留此注释以备将来可能切换回基于服务器的专用仪表板
-                # await self.grafana_service.create_server_dashboard(server)
             
             # 如果监控状态发生变化，则同步配置
-            servers = self.db.query(Server).filter(Server.monitoring_enabled == True).all()
+            # [修改点 4] 使用异步查询语法
+            stmt = select(Server).where(Server.monitoring_enabled == True)
+            result = await self.db.execute(stmt)
+            servers = result.scalars().all()
+            
             await self.prometheus_manager.sync_ipmi_targets(servers)
             
             logger.info(f"服务器 {server.id} 监控配置已同步")
