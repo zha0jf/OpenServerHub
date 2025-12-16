@@ -1,6 +1,9 @@
 import time
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional
+from pydantic import ValidationError
 import logging
 import ipaddress
 import csv
@@ -63,6 +66,7 @@ async def scan_network(
         scan_duration = time.time() - start_time
         
         # 计算扫描的IP总数
+        # TODO: 应该在DiscoveryService中提供一个公共方法来计算IP数量，而不是直接调用内部方法
         total_scanned = len(discovery_service._parse_network_range(request.network))
         
         # 转换为响应格式
@@ -80,7 +84,7 @@ async def scan_network(
         logger.info(f"网络扫描完成: 扫描{total_scanned}个IP，发现{len(devices)}个设备，耗时{scan_duration:.2f}秒")
         
         # 记录扫描操作
-        audit_service.log_discovery_operation(
+        await audit_service.log_discovery_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.DISCOVERY_START,
@@ -88,16 +92,14 @@ async def scan_network(
                 "network": request.network,
                 "port": request.port,
                 "timeout": request.timeout,
-                "max_workers": request.max_workers
-            },
-            result={
+                "max_workers": request.max_workers,
                 "total_scanned": total_scanned,
                 "devices_found": len(devices),
                 "scan_duration": round(scan_duration, 2)
             },
-            success=True,
-            ip_address=get_client_ip(http_request),
-            user_agent=http_request.headers.get("user-agent", "unknown"),
+            ip_address=get_client_ip(http_request) if http_request else "unknown",
+            user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
+            status="success" if len(devices) > 0 else "warning",
         )
         
         return response
@@ -139,22 +141,20 @@ async def batch_import_servers(
         logger.info(f"批量导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
         
         # 记录批量导入操作
-        audit_service.log_discovery_operation(
+        await audit_service.log_discovery_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.DISCOVERY_COMPLETE,
             action_details={
                 "devices_count": len(request.devices),
-                "group_id": request.group_id
+                "group_id": request.group_id,
+                "total_count": result['total_count'],
+                "success_count": result['success_count'],
+                "failed_count": result['failed_count']
             },
-            result={
-                "total_count": result["total_count"],
-                "success_count": result["success_count"],
-                "failed_count": result["failed_count"]
-            },
-            success=(result["failed_count"] == 0),
-            ip_address=get_client_ip(http_request),
-            user_agent=http_request.headers.get("user-agent", "unknown"),
+            ip_address=get_client_ip(http_request) if http_request else "unknown",
+            user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
+            status="success" if result['failed_count'] == 0 else "warning",
         )
         
         return response
@@ -207,22 +207,21 @@ async def import_from_csv(
         
         # 记录CSV导入操作
         if http_request:
-            audit_service.log_discovery_operation(
+            await audit_service.log_discovery_operation(
                 user_id=current_user.id,
                 username=current_user.username,
                 action=AuditAction.SERVER_IMPORT,
                 action_details={
                     "filename": csv_file.filename,
                     "import_type": "csv_file",
-                    "group_id": group_id
+                    "group_id": group_id,
+                    "total_count": result['total_count'],
+                    "success_count": result['success_count'],
+                    "failed_count": result['failed_count']
                 },
-                result={
-                    "success_count": result["success_count"],
-                    "failed_count": result["failed_count"]
-                },
-                success=(result["failed_count"] == 0),
                 ip_address=get_client_ip(http_request),
                 user_agent=http_request.headers.get("user-agent", "unknown"),
+                status="success" if result['failed_count'] == 0 else "warning",
             )
         
         return response
@@ -238,7 +237,7 @@ async def import_from_csv(
         raise HTTPException(status_code=500, detail="CSV导入失败，请检查文件格式或稍后重试")
 
 
-@router.post("/csv-import-text", response_model=ImportResult)
+@router.post("/csv-import-text", response_model=BatchImportResponse)
 async def import_from_csv_text(
     request: CSVImportRequest,
     http_request: Request,
@@ -265,22 +264,21 @@ async def import_from_csv_text(
         logger.info(f"CSV文本导入完成: 成功{result['success_count']}台，失败{result['failed_count']}台")
         
         # 记录CSV文本导入操作
-        audit_service.log_discovery_operation(
+        await audit_service.log_discovery_operation(
             user_id=current_user.id,
             username=current_user.username,
             action=AuditAction.SERVER_IMPORT,
             action_details={
                 "import_type": "csv_text",
                 "group_id": request.group_id,
-                "lines": len(request.csv_content.splitlines())
+                "lines": len(request.csv_content.splitlines()),
+                "total_count": result['total_count'],
+                "success_count": result['success_count'],
+                "failed_count": result['failed_count']
             },
-            result={
-                "success_count": result["success_count"],
-                "failed_count": result["failed_count"]
-            },
-            success=(result["failed_count"] == 0),
-            ip_address=get_client_ip(http_request),
-            user_agent=http_request.headers.get("user-agent", "unknown"),
+            ip_address=get_client_ip(http_request) if http_request else "unknown",
+            user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
+            status="success" if result['failed_count'] == 0 else "warning",
         )
         
         return response
