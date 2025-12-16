@@ -1,19 +1,21 @@
 from app.models.monitoring import MonitoringRecord
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 import logging
 import time
-import requests
+import httpx
 from typing import Optional
 
 from app.core.database import get_async_db
 from app.services.monitoring import MonitoringService
 from app.services.server import ServerService
 from app.services.auth import get_current_user
-from app.services.audit_log import AuditLogService
-from app.models.audit_log import AuditAction, AuditStatus
 from app.core.config import settings
+from app.schemas.monitoring import MonitoringRecordResponse
+from app.models.server import Server
+from app.services.grafana import GrafanaService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,7 +32,7 @@ async def get_server_dashboard(
         
         # 检查服务器是否存在
         server_service = ServerService(db)
-        server = server_service.get_server(server_id)
+        server = await server_service.get_server_async(server_id)
         if not server:
             raise HTTPException(status_code=404, detail="服务器不存在")
         
@@ -132,7 +134,7 @@ async def collect_server_metrics(
 @router.get("/prometheus/query")
 async def query_prometheus_metrics(
     query: str = Query(..., description="Prometheus查询表达式"),
-    time: str = Query(None, description="查询时间点"),
+    time_param: str = Query(None, description="查询时间点"),  # 重命名参数以避免与time模块冲突
     db: AsyncSession = Depends(get_async_db),
     current_user = Depends(get_current_user)
 ):
@@ -149,8 +151,8 @@ async def query_prometheus_metrics(
         
         # 构建查询参数
         params = {"query": query}
-        if time:
-            params["time"] = time
+        if time_param:
+            params["time"] = time_param
             
         # 发送查询请求
         async with httpx.AsyncClient(timeout=30.0) as client:
