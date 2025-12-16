@@ -42,7 +42,9 @@ def _mp_get_power(ip, username, password, port):
         res = conn.get_power()
         return {"status": "success", "data": res.get('powerstate', 'unknown')}
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        # 确保即使e为None也能正确处理
+        error_str = str(e) if e is not None else "未知错误"
+        return {"status": "error", "error": error_str}
 
 def _mp_set_power(ip, username, password, port, action):
     """进程内执行：设置电源"""
@@ -55,7 +57,9 @@ def _mp_set_power(ip, username, password, port, action):
         res = conn.set_power(power_actions[action])
         return {"status": "success", "data": res}
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        # 确保即使e为None也能正确处理
+        error_str = str(e) if e is not None else "未知错误"
+        return {"status": "error", "error": error_str}
 
 def _mp_get_users(ip, username, password, port):
     """进程内执行：获取用户列表"""
@@ -363,7 +367,10 @@ class IPMIService:
                 return result.get("data", "unknown")
             else:
                 # 如果操作失败，抛出异常
-                raise IPMIError(f"获取电源状态失败: {result.get('error', '未知错误')}")
+                error_msg = result.get('error', '未知错误')
+                # 提供更多信息以便诊断
+                detailed_error = f"获取电源状态失败: {error_msg} (IP: {ip}, Username: {username}, Port: {port})"
+                raise IPMIError(detailed_error)
         else:
             # 如果返回的不是字典（理论上不应该发生），记录警告并返回unknown
             logger.warning(f"IPMI电源状态返回了非字典类型: {type(result)}, 值: {result}")
