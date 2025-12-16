@@ -374,7 +374,7 @@ class ServerService:
         group_stats = defaultdict(int)
         for server in servers:
             if server.group_id:
-                group_stats[server.group_id] += 1
+                group_stats[str(server.group_id)] += 1
             else:
                 group_stats["未分组"] += 1
         
