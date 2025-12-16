@@ -21,7 +21,7 @@ class AuthService:
 
     async def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """验证用户"""
-        user = await self.user_service.get_user_by_username(username)
+        user = await self.user_service.get_user_by_username_async(username)
         if not user:
             return None
         
