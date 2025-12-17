@@ -19,6 +19,7 @@ from app.services.server import ServerService
 from app.schemas.server import ServerCreate
 from app.models.server import Server
 from app.core.exceptions import ValidationError
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +36,14 @@ class DiscoveryService:
         network: str, 
         port: int = settings.IPMI_DEFAULT_PORT,
         timeout: int = 3,
-        max_workers: int = 50
+        max_workers: int = 30
     ) -> List[Dict[str, Any]]:
         """
         扫描网络范围内的BMC设备
         
         Args:
             network: 网络范围，支持CIDR格式，如 "192.168.1.0/24" 或 "192.168.1.1-192.168.1.100"
-            port: IPMI端口，默认settings.IPMI_DEFAULT_PORT
+            port: IPMI端口，默认使用settings.IPMI_DEFAULT_PORT
             timeout: 超时时间（秒）
             max_workers: 最大并发数
         
