@@ -28,7 +28,7 @@ class PowerStateSchedulerService:
         
         # 限制并发数量，防止瞬间创建过多数据库连接导致连接池耗尽
         # 建议值：数据库连接池大小 (pool_size) 的 50% ~ 80%
-        self._concurrency_limit = 10  # 降低并发数至10，避免数据库连接池耗尽
+        self._concurrency_limit = settings.SCHEDULER_CONCURRENCY_LIMIT
         self._semaphore = asyncio.Semaphore(self._concurrency_limit)
         
     async def start(self):
@@ -117,7 +117,7 @@ class PowerStateSchedulerService:
             # 3. 等待所有任务完成
             # 设置总超时时间，防止任务无限挂起 (假设单台超时30s，计算总缓冲时间)
             # 如果是并发执行，理论最大耗时 = (总数 / 并发数) * 单台超时
-            timeout = max(30, (len(target_server_ids) / self._concurrency_limit + 1.5) * 30)
+            timeout = max(settings.MONITORING_DEFAULT_TIMEOUT, (len(target_server_ids) / self._concurrency_limit + 1.5) * settings.MONITORING_DEFAULT_TIMEOUT)
             
             try:
                 results = await asyncio.wait_for(

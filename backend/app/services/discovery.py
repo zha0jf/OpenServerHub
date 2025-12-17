@@ -33,7 +33,7 @@ class DiscoveryService:
     async def scan_network_range(
         self, 
         network: str, 
-        port: int = 623,
+        port: int = settings.IPMI_DEFAULT_PORT,
         timeout: int = 3,
         max_workers: int = 50
     ) -> List[Dict[str, Any]]:
@@ -42,7 +42,7 @@ class DiscoveryService:
         
         Args:
             network: 网络范围，支持CIDR格式，如 "192.168.1.0/24" 或 "192.168.1.1-192.168.1.100"
-            port: IPMI端口，默认623
+            port: IPMI端口，默认settings.IPMI_DEFAULT_PORT
             timeout: 超时时间（秒）
             max_workers: 最大并发数
         
@@ -67,7 +67,9 @@ class DiscoveryService:
         logger.info(f"将扫描 {len(ip_list)} 个IP地址")
         
         # 限制并发数量，避免网络拥堵
-        semaphore = asyncio.Semaphore(min(max_workers, 50))
+        # 推荐配置：max_workers: 30（网络扫描最大并发数，从50减少到30）
+        # 理由：过高的并发数可能导致网络拥堵和目标设备过载，30个并发数在保证效率的同时减少了网络压力
+        semaphore = asyncio.Semaphore(min(max_workers, 30))
         
         # 创建扫描任务
         tasks = []
@@ -427,7 +429,7 @@ class DiscoveryService:
                     ipmi_ip=device["ip"],
                     ipmi_username=username,
                     ipmi_password=password,
-                    ipmi_port=device.get("port", 623),
+                    ipmi_port=device.get("port", settings.IPMI_DEFAULT_PORT),
                     manufacturer=device.get("manufacturer", ""),
                     model=device.get("model", ""),
                     serial_number=device.get("serial_number", ""),
@@ -528,7 +530,7 @@ class DiscoveryService:
                         raise ValidationError("IPMI IP地址格式无效")
                     
                     # 验证端口
-                    ipmi_port = 623  # 默认端口
+                    ipmi_port = settings.IPMI_DEFAULT_PORT  # 默认端口
                     if cleaned_row.get("ipmi_port"):
                         try:
                             ipmi_port = int(cleaned_row["ipmi_port"])

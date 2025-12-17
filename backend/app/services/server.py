@@ -205,7 +205,7 @@ class ServerService:
         original_ipmi_ip = str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else ""
         original_ipmi_username = str(db_server.ipmi_username) if db_server.ipmi_username is not None else ""
         original_ipmi_password = str(db_server.ipmi_password) if db_server.ipmi_password is not None else ""
-        original_ipmi_port = int(db_server.ipmi_port) if db_server.ipmi_port is not None else 623
+        original_ipmi_port = int(db_server.ipmi_port) if db_server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
         
         # 更新服务器信息
         for field, value in update_data.items():
@@ -218,7 +218,7 @@ class ServerService:
         new_ipmi_ip = str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else ""
         new_ipmi_username = str(db_server.ipmi_username) if db_server.ipmi_username is not None else ""
         new_ipmi_password = str(db_server.ipmi_password) if db_server.ipmi_password is not None else ""
-        new_ipmi_port = int(db_server.ipmi_port) if db_server.ipmi_port is not None else 623
+        new_ipmi_port = int(db_server.ipmi_port) if db_server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
         
         ipmi_changed = (
             original_ipmi_ip != new_ipmi_ip or
@@ -271,7 +271,7 @@ class ServerService:
         original_ipmi_ip = str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else ""
         original_ipmi_username = str(db_server.ipmi_username) if db_server.ipmi_username is not None else ""
         original_ipmi_password = str(db_server.ipmi_password) if db_server.ipmi_password is not None else ""
-        original_ipmi_port = int(db_server.ipmi_port) if db_server.ipmi_port is not None else 623
+        original_ipmi_port = int(db_server.ipmi_port) if db_server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
         
         # 更新服务器信息
         for field, value in update_data.items():
@@ -284,7 +284,7 @@ class ServerService:
         new_ipmi_ip = str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else ""
         new_ipmi_username = str(db_server.ipmi_username) if db_server.ipmi_username is not None else ""
         new_ipmi_password = str(db_server.ipmi_password) if db_server.ipmi_password is not None else ""
-        new_ipmi_port = int(db_server.ipmi_port) if db_server.ipmi_port is not None else 623
+        new_ipmi_port = int(db_server.ipmi_port) if db_server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
         
         ipmi_changed = (
             original_ipmi_ip != new_ipmi_ip or
@@ -433,7 +433,7 @@ class ServerService:
                 username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
                 password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
                 action=action,
-                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
+                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
             )
             
             # 使用异步方式更新服务器最后操作时间
@@ -468,7 +468,7 @@ class ServerService:
                 ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
                 username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
                 password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
-                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
+                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
             )
             
             # 获取系统信息
@@ -476,7 +476,7 @@ class ServerService:
                 ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
                 username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
                 password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
-                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else 623
+                port=int(str(db_server.ipmi_port)) if db_server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
             )
             
             # IPMI检查成功，继续检查Redfish支持情况
@@ -672,8 +672,10 @@ class ServerService:
             task = self._single_power_control_async(server, action)  # 使用异步版本
             tasks.append(task)
         
-        # 并发执行所有任务，最大并发数为10
-        semaphore = asyncio.Semaphore(10)
+        # 并发执行所有任务，最大并发数为15
+        # 推荐配置：semaphore: 15（批量电源控制并发数，从10增加到15）
+        # 理由：适当增加并发数可以提高批量操作的执行效率，与数据库连接池大小协调，避免数据库成为瓶颈
+        semaphore = asyncio.Semaphore(15)
         
         async def limited_task(server, action):
             async with semaphore:
@@ -767,7 +769,7 @@ class ServerService:
                 username=str(server.ipmi_username) if server.ipmi_username is not None else "",
                 password=str(server.ipmi_password) if server.ipmi_password is not None else "",
                 action=action,
-                port=int(str(server.ipmi_port)) if server.ipmi_port is not None else 623
+                port=int(str(server.ipmi_port)) if server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
             )
             
             # 使用异步方式更新服务器最后操作时间
@@ -820,7 +822,7 @@ class ServerService:
             # 调用IPMI服务检查Redfish支持
             result = await self.ipmi_service.check_redfish_support(
                 bmc_ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
-                timeout=10
+                timeout=settings.REDFISH_TIMEOUT
             )
             
             return result
@@ -869,7 +871,7 @@ class ServerService:
                 bmc_ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
                 username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
                 password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
-                timeout=10
+                timeout=settings.REDFISH_TIMEOUT
             )
             
             return result
@@ -921,7 +923,7 @@ class ServerService:
                 username=str(db_server.ipmi_username) if db_server.ipmi_username is not None else "",
                 password=str(db_server.ipmi_password) if db_server.ipmi_password is not None else "",
                 led_state=led_state,
-                timeout=10
+                timeout=settings.REDFISH_TIMEOUT
             )
             
             # 转换结果格式以匹配LedControlResponse模型

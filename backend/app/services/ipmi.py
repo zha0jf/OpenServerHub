@@ -29,8 +29,8 @@ def _mp_create_connection(ip, username, password, port):
         password=password,
         port=port,
         keepalive=False,  # 进程池模式下，每次任务是一次性的，不保持连接
-        interface="lanplus",
-        privlevel=4
+        interface=settings.IPMI_INTERFACE_TYPE,
+        privlevel=settings.IPMI_PRIVILEGE_LEVEL
     )
 
 def _mp_get_power(ip, username, password, port):
@@ -329,12 +329,12 @@ class IPMIService:
     # 公共 API 方法 (保持签名与原代码完全一致)
     # ---------------------------------------------------------------------
 
-    async def get_power_state(self, ip: str, username: str, password: str, port: int = 623) -> str:
+    async def get_power_state(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT) -> str:
         """获取电源状态"""
         port = self._ensure_port_is_int(port)
         try:
             # 增加超时宽限，因为建立连接可能较慢
-            return await self._run_in_process(_mp_get_power, ip, username, password, port, timeout=15)
+            return await self._run_in_process(_mp_get_power, ip, username, password, port, timeout=settings.IPMI_POWER_STATE_TIMEOUT)
         except IPMIError as e:
             # 原代码在这里可能抛出异常，或者返回 unknown。
             # 为了定时任务的健壮性，建议如果是超时或连接失败，记录日志并返回 "unknown"
@@ -342,53 +342,53 @@ class IPMIService:
             logger.warning(f"获取电源状态失败 {ip}: {str(e)}")
             return "unknown"  # 返回字符串，防止 None.lower() 报错
 
-    async def power_control(self, ip: str, username: str, password: str, action: str, port: int = 623) -> Dict[str, Any]:
+    async def power_control(self, ip: str, username: str, password: str, action: str, port: int = settings.IPMI_DEFAULT_PORT) -> Dict[str, Any]:
         """电源控制"""
         port = self._ensure_port_is_int(port)
         # 操作类命令通常很快，但重启可能慢
-        res = await self._run_in_process(_mp_set_power, ip, username, password, port, action, timeout=20)
+        res = await self._run_in_process(_mp_set_power, ip, username, password, port, action, timeout=settings.IPMI_POWER_CONTROL_TIMEOUT)
         return {"action": action, "result": "success", "message": f"电源{action}操作成功", "data": res}
 
-    async def get_system_info(self, ip: str, username: str, password: str, port: int = 623, timeout: int = None) -> Dict[str, Any]:
+    async def get_system_info(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT, timeout: int = None) -> Dict[str, Any]:
         """获取系统信息"""
         port = self._ensure_port_is_int(port)
         # 系统信息获取包含大量命令，需要较长时间
-        return await self._run_in_process(_mp_get_system_info, ip, username, password, port, ip, timeout=timeout or 30)
+        return await self._run_in_process(_mp_get_system_info, ip, username, password, port, ip, timeout=timeout or settings.IPMI_SYSTEM_INFO_TIMEOUT)
 
-    async def get_sensor_data(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
+    async def get_sensor_data(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT) -> Dict[str, Any]:
         """获取传感器数据"""
         port = self._ensure_port_is_int(port)
         # 传感器遍历非常慢，给足时间
-        return await self._run_in_process(_mp_get_sensor_data, ip, username, password, port, timeout=45)
+        return await self._run_in_process(_mp_get_sensor_data, ip, username, password, port, timeout=settings.IPMI_SENSOR_DATA_TIMEOUT)
 
-    async def get_users(self, ip: str, username: str, password: str, port: int = 623) -> List[Dict[str, Any]]:
+    async def get_users(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT) -> List[Dict[str, Any]]:
         """获取用户列表"""
         port = self._ensure_port_is_int(port)
         return await self._run_in_process(_mp_get_users, ip, username, password, port)
 
     async def create_user(self, ip: str, admin_username: str, admin_password: str, 
                          new_userid: int, new_username: str, new_password: str, 
-                         priv_level: str = 'user', port: int = 623) -> bool:
+                         priv_level: str = 'user', port: int = settings.IPMI_DEFAULT_PORT) -> bool:
         port = self._ensure_port_is_int(port)
         kwargs = {'uid': new_userid, 'name': new_username, 'password': new_password, 'privilege_level': priv_level}
         await self._run_in_process(_mp_manage_user, ip, admin_username, admin_password, port, 'create', **kwargs)
         return True
 
     async def set_user_priv(self, ip: str, admin_username: str, admin_password: str,
-                           userid: int, priv_level: str, port: int = 623) -> bool:
+                           userid: int, priv_level: str, port: int = settings.IPMI_DEFAULT_PORT) -> bool:
         port = self._ensure_port_is_int(port)
         kwargs = {'uid': userid, 'privilege_level': priv_level}
         await self._run_in_process(_mp_manage_user, ip, admin_username, admin_password, port, 'set_priv', **kwargs)
         return True
 
     async def set_user_password(self, ip: str, admin_username: str, admin_password: str,
-                               userid: int, new_password: str, port: int = 623) -> bool:
+                               userid: int, new_password: str, port: int = settings.IPMI_DEFAULT_PORT) -> bool:
         port = self._ensure_port_is_int(port)
         kwargs = {'uid': userid, 'password': new_password}
         await self._run_in_process(_mp_manage_user, ip, admin_username, admin_password, port, 'set_password', **kwargs)
         return True
 
-    async def test_connection(self, ip: str, username: str, password: str, port: int = 623) -> Dict[str, Any]:
+    async def test_connection(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT) -> Dict[str, Any]:
         """测试连接"""
         try:
             state = await self.get_power_state(ip, username, password, port)
@@ -403,13 +403,13 @@ class IPMIService:
     # Redfish 方法
     # ---------------------------------------------------------------------
 
-    async def check_redfish_support(self, bmc_ip: str, timeout: int = 10) -> Dict[str, Any]:
+    async def check_redfish_support(self, bmc_ip: str, timeout: int = settings.REDFISH_TIMEOUT) -> Dict[str, Any]:
         """检查 Redfish 支持 (使用原生异步 httpx)"""
         async with self._semaphore:
             start_time = time.time()
             try:
                 # httpx.AsyncClient 原生支持异步，不需要放进线程池/进程池
-                async with httpx.AsyncClient(verify=False, timeout=timeout) as client:
+                async with httpx.AsyncClient(verify=settings.REDFISH_VERIFY_SSL, timeout=timeout) as client:
                     response = await client.get(f"https://{bmc_ip}/redfish/v1/")
                     
                     if response.status_code == 200:
@@ -438,7 +438,7 @@ class IPMIService:
                     "error": str(e), "check_success": False
                 }
 
-    async def get_redfish_led_status(self, bmc_ip: str, username: str, password: str, timeout: int = 10) -> Dict[str, Any]:
+    async def get_redfish_led_status(self, bmc_ip: str, username: str, password: str, timeout: int = settings.REDFISH_TIMEOUT) -> Dict[str, Any]:
         """获取 LED 状态 (同步库，跑在线程池)"""
         def _sync_task():
             try:
@@ -461,7 +461,7 @@ class IPMIService:
 
         return await self._run_in_thread(_sync_task)
 
-    async def set_redfish_led_state(self, bmc_ip: str, username: str, password: str, led_state: str, timeout: int = 10) -> Dict[str, Any]:
+    async def set_redfish_led_state(self, bmc_ip: str, username: str, password: str, led_state: str, timeout: int = settings.REDFISH_TIMEOUT) -> Dict[str, Any]:
         """设置 LED 状态 (同步库，跑在线程池)"""
         def _sync_task(cmd):
             try:
@@ -496,7 +496,7 @@ class IPMIService:
             
         return {"success": False, "message": "Failed", "error": last_error}
 
-    async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = 623) -> bool:
+    async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = settings.IPMI_DEFAULT_PORT) -> bool:
         """确保 openshub 用户存在 (逻辑保持不变，调用新版异步方法)"""
         try:
             # 复用 get_users (已是异步且进程隔离)

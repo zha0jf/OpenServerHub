@@ -203,9 +203,11 @@ start-prod-sqlite.bat
 - `CORS_ORIGINS`: CORS允许的源
 
 #### IPMI配置
-- `IPMI_CONNECTION_POOL_SIZE`: IPMI连接池大小
 - `IPMI_TIMEOUT`: IPMI超时时间
 - `IPMI_RETRY_COUNT`: IPMI重试次数
+- `IPMI_CONCURRENT_LIMIT`: IPMI并发操作限制
+- `IPMI_THREAD_POOL_SIZE`: IPMI线程池大小
+- `IPMI_PROCESS_POOL_SIZE`: IPMI进程池大小
 
 #### 监控配置
 - `MONITORING_ENABLED`: 是否启用监控
@@ -218,6 +220,7 @@ start-prod-sqlite.bat
 - `POWER_STATE_REFRESH_INTERVAL`: 电源状态刷新间隔（分钟）
 - `POWER_STATE_REFRESH_ENABLED`: 是否启用电源状态刷新
 - `SCHEDULER_ENABLED`: 是否启用定时任务
+- `SCHEDULER_CONCURRENCY_LIMIT`: 定时任务并发限制
 
 ### 数据持久化
 

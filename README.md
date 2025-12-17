@@ -14,7 +14,7 @@ OpenServerHub 是一个现代化的服务器管理平台，基于 FastAPI + Reac
 - ✅ JWT 用户认证系统
 - ✅ 用户角色权限管理 (Admin/Operator/User/ReadOnly)
 - ✅ 服务器 CRUD 管理
-- ✅ IPMI 连接池管理（最大50连接）
+- ✅ IPMI 连接池管理（最大25并发）
 - ✅ 电源控制功能（开机/关机/重启）
 - ✅ 服务器状态监控
 - ✅ 监控数据采集和存储

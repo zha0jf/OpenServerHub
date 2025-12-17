@@ -4,6 +4,7 @@ from sqlalchemy.sql import func
 import enum
 
 from app.core.database import Base
+from app.core.config import settings
 
 class ServerStatus(str, enum.Enum):
     ONLINE = "online"
@@ -24,7 +25,7 @@ class Server(Base):
     ipmi_ip = Column(String(15), nullable=False, index=True)
     ipmi_username = Column(String(50), nullable=False)
     ipmi_password = Column(String(255), nullable=False)
-    ipmi_port = Column(Integer, default=623, nullable=False)
+    ipmi_port = Column(Integer, default=settings.IPMI_DEFAULT_PORT, nullable=False)
     
     # 监控启用状态
     # 为了与SQLite兼容，允许为空，但在业务逻辑中 treat NULL as false

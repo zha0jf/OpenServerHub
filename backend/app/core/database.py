@@ -58,9 +58,11 @@ else:
     async_database_url = settings.DATABASE_URL
     # [关键配置] 设置连接池大小，配合 IPMI Service 的 Semaphore
     # 如果 Semaphore=10，这里建议 pool_size >= 20
-    engine_kwargs["pool_size"] = 20
-    engine_kwargs["max_overflow"] = 10
-    engine_kwargs["pool_recycle"] = 3600
+    engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
+    engine_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
+    engine_kwargs["pool_recycle"] = settings.DATABASE_POOL_RECYCLE
+    engine_kwargs["pool_pre_ping"] = settings.DATABASE_POOL_PRE_PING
+    engine_kwargs["echo"] = settings.DATABASE_ECHO
 
 # 创建异步引擎
 async_engine = create_async_engine(

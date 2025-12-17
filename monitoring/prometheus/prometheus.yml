@@ -28,7 +28,8 @@ scrape_configs:
 
   # IPMI服务器监控
   - job_name: 'ipmi-servers'
-    scrape_interval: 1m
+    scrape_interval: 30s
+    scrape_timeout: 25s
     metrics_path: /ipmi
     file_sd_configs:
     - files:

@@ -34,7 +34,7 @@ class ServerMonitoringService:
                     ip=str(server.ipmi_ip) if server.ipmi_ip is not None else "",
                     admin_username=str(server.ipmi_username) if server.ipmi_username is not None else "",
                     admin_password=str(server.ipmi_password) if server.ipmi_password is not None else "",
-                    port=int(str(server.ipmi_port)) if server.ipmi_port is not None else 623
+                    port=int(str(server.ipmi_port)) if server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
                 )
             
             # 2. 同步Prometheus目标配置（仅包含启用监控的服务器）
@@ -81,7 +81,7 @@ class ServerMonitoringService:
                     ip=str(server.ipmi_ip) if server.ipmi_ip is not None else "",
                     admin_username=str(server.ipmi_username) if server.ipmi_username is not None else "",
                     admin_password=str(server.ipmi_password) if server.ipmi_password is not None else "",
-                    port=int(str(server.ipmi_port)) if server.ipmi_port is not None else 623
+                    port=int(str(server.ipmi_port)) if server.ipmi_port is not None else settings.IPMI_DEFAULT_PORT
                 )
             
             # 如果监控状态发生变化，则同步配置
