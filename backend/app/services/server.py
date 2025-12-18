@@ -852,6 +852,8 @@ class ServerService:
         # 检查服务器是否在线
         if db_server.status != ServerStatus.ONLINE:
             return {
+                "server_id": server_id,
+                "status": "Unknown",
                 "supported": False,
                 "led_state": "Unknown",
                 "error": "服务器不在线，无法获取LED状态"
@@ -860,6 +862,8 @@ class ServerService:
         # 检查服务器是否支持Redfish
         if db_server.redfish_supported is not True:
             return {
+                "server_id": server_id,
+                "status": "Unknown",
                 "supported": False,
                 "led_state": "Unknown",
                 "error": "服务器BMC不支持Redfish，无法获取LED状态"
@@ -874,11 +878,20 @@ class ServerService:
                 timeout=settings.REDFISH_TIMEOUT
             )
             
-            return result
+            # 确保返回的数据符合LedStatusResponse模型
+            return {
+                "server_id": server_id,
+                "status": result.get("led_state", "Unknown"),
+                "supported": result.get("supported", False),
+                "led_state": result.get("led_state", "Unknown"),
+                "error": result.get("error")
+            }
             
         except Exception as e:
             logger.error(f"获取服务器 {server_id} LED状态失败: {str(e)}")
             return {
+                "server_id": server_id,
+                "status": "Unknown",
                 "supported": False,
                 "led_state": "Unknown",
                 "error": f"获取LED状态失败: {str(e)}"

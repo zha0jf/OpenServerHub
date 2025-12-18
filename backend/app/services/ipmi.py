@@ -444,7 +444,8 @@ class IPMIService:
             try:
                 redfish_client = redfish.redfish_client(
                     base_url=f"https://{bmc_ip}", username=username, password=password, 
-                    default_prefix='/redfish/v1', timeout=timeout
+                    default_prefix='/redfish/v1', timeout=timeout, 
+                    ca_bundle=settings.REDFISH_VERIFY_SSL  # 使用配置项控制SSL验证
                 )
                 redfish_client.login(auth="session")
                 try:
@@ -467,7 +468,8 @@ class IPMIService:
             try:
                 redfish_client = redfish.redfish_client(
                     base_url=f"https://{bmc_ip}", username=username, password=password, 
-                    default_prefix='/redfish/v1', timeout=timeout
+                    default_prefix='/redfish/v1', timeout=timeout, 
+                    ca_bundle=settings.REDFISH_VERIFY_SSL  # 使用配置项控制SSL验证
                 )
                 redfish_client.login(auth="session")
                 try:

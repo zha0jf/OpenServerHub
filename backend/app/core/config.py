@@ -183,7 +183,7 @@ class Settings(BaseSettings):
     # REDFISH_VERIFY_SSL: Redfish SSL证书验证
     # 建议配置范围: True (生产环境), False (测试环境)
     # 调整考虑因素: 关闭验证会带来安全风险，但在测试环境中可以绕过自签名证书问题
-    REDFISH_VERIFY_SSL: bool = True  # Redfish SSL证书验证
+    REDFISH_VERIFY_SSL: bool = False  # Redfish SSL证书验证
     
     # 定时任务配置
     

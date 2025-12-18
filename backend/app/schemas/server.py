@@ -205,8 +205,10 @@ class RedfishSupportResponse(BaseModel):
 
 class LedStatusResponse(BaseModel):
     server_id: int
-    status: str = Field(description="LED状态") # 注意：路由里可能叫 status 或 state，需与 service 返回一致
+    status: str = Field(description="LED状态")
     supported: bool
+    led_state: Optional[str] = Field(default=None, description="LED具体状态值")
+    error: Optional[str] = Field(default=None, description="错误信息，如果有")
 
 class LedControlResponse(BaseModel):
     server_id: int
