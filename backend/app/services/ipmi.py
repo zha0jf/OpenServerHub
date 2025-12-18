@@ -446,9 +446,7 @@ class IPMIService:
                 logger.debug(f"创建Redfish客户端连接 {bmc_ip}")
                 redfish_client = redfish.redfish_client(
                     base_url=f"https://{bmc_ip}", username=username, password=password, 
-                    default_prefix='/redfish/v1', timeout=timeout, 
-                    ca_bundle=settings.REDFISH_VERIFY_SSL  # 使用配置项控制SSL验证
-                )
+                    default_prefix='/redfish/v1', timeout=timeout)
                 logger.debug(f"登录到Redfish服务器 {bmc_ip}")
                 redfish_client.login(auth="session")
                 try:
@@ -482,9 +480,7 @@ class IPMIService:
                 logger.debug(f"创建Redfish客户端连接 {bmc_ip} 设置LED状态 {cmd}")
                 redfish_client = redfish.redfish_client(
                     base_url=f"https://{bmc_ip}", username=username, password=password, 
-                    default_prefix='/redfish/v1', timeout=timeout, 
-                    ca_bundle=settings.REDFISH_VERIFY_SSL  # 使用配置项控制SSL验证
-                )
+                    default_prefix='/redfish/v1', timeout=timeout)
                 logger.debug(f"登录到Redfish服务器 {bmc_ip} 设置LED状态 {cmd}")
                 redfish_client.login(auth="session")
                 try:
