@@ -844,13 +844,18 @@ class ServerService:
         Returns:
             Dict[str, Any]: 包含LED状态信息的字典
         """
+        logger.debug(f"开始获取服务器 {server_id} 的LED状态")
+        
         # 使用异步方法获取服务器
         db_server = await self.get_server_async(server_id)
         if not db_server:
+            logger.debug(f"服务器 {server_id} 不存在")
             raise ValidationError("服务器不存在")
         
         # 检查服务器是否在线
+        logger.debug(f"服务器 {server_id} 状态: {db_server.status}")
         if db_server.status != ServerStatus.ONLINE:
+            logger.debug(f"服务器 {server_id} 不在线，无法获取LED状态")
             return {
                 "server_id": server_id,
                 "status": "Unknown",
@@ -860,7 +865,9 @@ class ServerService:
             }
         
         # 检查服务器是否支持Redfish
+        logger.debug(f"服务器 {server_id} Redfish支持状态: {db_server.redfish_supported}")
         if db_server.redfish_supported is not True:
+            logger.debug(f"服务器 {server_id} 不支持Redfish，无法获取LED状态")
             return {
                 "server_id": server_id,
                 "status": "Unknown",
@@ -870,6 +877,7 @@ class ServerService:
             }
         
         try:
+            logger.debug(f"开始调用IPMI服务获取服务器 {server_id} 的LED状态")
             # 调用IPMI服务获取LED状态
             result = await self.ipmi_service.get_redfish_led_status(
                 bmc_ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
@@ -878,14 +886,17 @@ class ServerService:
                 timeout=settings.REDFISH_TIMEOUT
             )
             
+            logger.debug(f"服务器 {server_id} LED状态获取结果: {result}")
             # 确保返回的数据符合LedStatusResponse模型
-            return {
+            response = {
                 "server_id": server_id,
                 "status": result.get("led_state", "Unknown"),
                 "supported": result.get("supported", False),
                 "led_state": result.get("led_state", "Unknown"),
                 "error": result.get("error")
             }
+            logger.debug(f"服务器 {server_id} LED状态响应: {response}")
+            return response
             
         except Exception as e:
             logger.error(f"获取服务器 {server_id} LED状态失败: {str(e)}")
@@ -908,13 +919,18 @@ class ServerService:
         Returns:
             Dict[str, Any]: 包含操作结果的字典，符合LedControlResponse模型
         """
+        logger.debug(f"开始设置服务器 {server_id} 的LED状态为 {led_state}")
+        
         # 使用异步方法获取服务器
         db_server = await self.get_server_async(server_id)
         if not db_server:
+            logger.debug(f"服务器 {server_id} 不存在")
             raise ValidationError("服务器不存在")
         
         # 检查服务器是否在线
+        logger.debug(f"服务器 {server_id} 状态: {db_server.status}")
         if db_server.status != ServerStatus.ONLINE:
+            logger.debug(f"服务器 {server_id} 不在线，无法设置LED状态")
             return {
                 "server_id": server_id,
                 "success": False,
@@ -922,7 +938,9 @@ class ServerService:
             }
         
         # 检查服务器是否支持Redfish
+        logger.debug(f"服务器 {server_id} Redfish支持状态: {db_server.redfish_supported}")
         if db_server.redfish_supported is not True:
+            logger.debug(f"服务器 {server_id} 不支持Redfish，无法设置LED状态")
             return {
                 "server_id": server_id,
                 "success": False,
@@ -930,6 +948,7 @@ class ServerService:
             }
         
         try:
+            logger.debug(f"开始调用IPMI服务设置服务器 {server_id} 的LED状态为 {led_state}")
             # 调用IPMI服务设置LED状态
             result = await self.ipmi_service.set_redfish_led_state(
                 bmc_ip=str(db_server.ipmi_ip) if db_server.ipmi_ip is not None else "",
@@ -939,12 +958,15 @@ class ServerService:
                 timeout=settings.REDFISH_TIMEOUT
             )
             
+            logger.debug(f"服务器 {server_id} LED状态设置结果: {result}")
             # 转换结果格式以匹配LedControlResponse模型
-            return {
+            response = {
                 "server_id": server_id,
                 "success": result.get("success", False),
                 "message": result.get("message", result.get("error", "未知错误"))
             }
+            logger.debug(f"服务器 {server_id} LED状态设置响应: {response}")
+            return response
             
         except Exception as e:
             logger.error(f"设置服务器 {server_id} LED状态失败: {str(e)}")

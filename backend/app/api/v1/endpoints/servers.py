@@ -722,9 +722,11 @@ async def get_server_led_status(
     current_user = Depends(get_current_user)
 ):
     """获取服务器LED状态"""
+    logger.debug(f"收到获取服务器 {server_id} LED状态的请求")
     try:
         server_service = ServerService(db)
         result = await server_service.get_server_led_status(server_id)
+        logger.debug(f"服务器 {server_id} LED状态获取完成，结果: {result}")
         return result
     except ValidationError as e:
         logger.warning(f"LED状态获取验证失败: {e.message}")
@@ -741,9 +743,11 @@ async def set_server_led_state_on(
     current_user = Depends(get_current_user)
 ):
     """点亮服务器LED"""
+    logger.debug(f"收到点亮服务器 {server_id} LED的请求")
     try:
         server_service = ServerService(db)
         result = await server_service.set_server_led_state(server_id, "On")
+        logger.debug(f"服务器 {server_id} LED点亮完成，结果: {result}")
         return result
     except ValidationError as e:
         logger.warning(f"LED控制验证失败: {e.message}")
@@ -760,9 +764,11 @@ async def set_server_led_state_off(
     current_user = Depends(get_current_user)
 ):
     """关闭服务器LED"""
+    logger.debug(f"收到关闭服务器 {server_id} LED的请求")
     try:
         server_service = ServerService(db)
         result = await server_service.set_server_led_state(server_id, "Off")
+        logger.debug(f"服务器 {server_id} LED关闭完成，结果: {result}")
         return result
     except ValidationError as e:
         logger.warning(f"LED控制验证失败: {e.message}")

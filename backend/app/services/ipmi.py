@@ -440,63 +440,92 @@ class IPMIService:
 
     async def get_redfish_led_status(self, bmc_ip: str, username: str, password: str, timeout: int = settings.REDFISH_TIMEOUT) -> Dict[str, Any]:
         """获取 LED 状态 (同步库，跑在线程池)"""
+        logger.debug(f"开始获取服务器 {bmc_ip} 的LED状态")
         def _sync_task():
             try:
+                logger.debug(f"创建Redfish客户端连接 {bmc_ip}")
                 redfish_client = redfish.redfish_client(
                     base_url=f"https://{bmc_ip}", username=username, password=password, 
                     default_prefix='/redfish/v1', timeout=timeout, 
                     ca_bundle=settings.REDFISH_VERIFY_SSL  # 使用配置项控制SSL验证
                 )
+                logger.debug(f"登录到Redfish服务器 {bmc_ip}")
                 redfish_client.login(auth="session")
                 try:
+                    logger.debug(f"获取系统信息 {bmc_ip}")
                     sys_resp = redfish_client.get("/redfish/v1/Systems")
                     if sys_resp.dict.get("Members"):
                         sys_url = sys_resp.dict["Members"][0]["@odata.id"]
+                        logger.debug(f"获取LED状态 {bmc_ip}")
                         resp = redfish_client.get(sys_url)
-                        return {"supported": True, "led_state": resp.dict.get("IndicatorLED", "Unknown"), "error": None}
-                    return {"supported": False, "led_state": "Unknown", "error": "System not found"}
+                        result = {"supported": True, "led_state": resp.dict.get("IndicatorLED", "Unknown"), "error": None}
+                        logger.debug(f"获取LED状态成功 {bmc_ip}: {result}")
+                        return result
+                    result = {"supported": False, "led_state": "Unknown", "error": "System not found"}
+                    logger.debug(f"未找到系统信息 {bmc_ip}: {result}")
+                    return result
                 finally:
                     redfish_client.logout()
             except Exception as e:
+                logger.debug(f"获取LED状态异常 {bmc_ip}: {str(e)}")
                 return {"supported": False, "led_state": "Unknown", "error": str(e)}
 
-        return await self._run_in_thread(_sync_task)
+        result = await self._run_in_thread(_sync_task)
+        logger.debug(f"获取服务器 {bmc_ip} LED状态完成: {result}")
+        return result
 
     async def set_redfish_led_state(self, bmc_ip: str, username: str, password: str, led_state: str, timeout: int = settings.REDFISH_TIMEOUT) -> Dict[str, Any]:
         """设置 LED 状态 (同步库，跑在线程池)"""
+        logger.debug(f"开始设置服务器 {bmc_ip} 的LED状态为 {led_state}")
         def _sync_task(cmd):
             try:
+                logger.debug(f"创建Redfish客户端连接 {bmc_ip} 设置LED状态 {cmd}")
                 redfish_client = redfish.redfish_client(
                     base_url=f"https://{bmc_ip}", username=username, password=password, 
                     default_prefix='/redfish/v1', timeout=timeout, 
                     ca_bundle=settings.REDFISH_VERIFY_SSL  # 使用配置项控制SSL验证
                 )
+                logger.debug(f"登录到Redfish服务器 {bmc_ip} 设置LED状态 {cmd}")
                 redfish_client.login(auth="session")
                 try:
+                    logger.debug(f"获取系统信息 {bmc_ip}")
                     sys_resp = redfish_client.get("/redfish/v1/Systems")
                     if sys_resp.dict.get("Members"):
                         sys_url = sys_resp.dict["Members"][0]["@odata.id"]
+                        logger.debug(f"设置LED状态 {bmc_ip} 为 {cmd}")
                         resp = redfish_client.patch(sys_url, body={"IndicatorLED": cmd})
                         success = resp.status in [200, 204]
-                        return {"success": success, "status_code": resp.status, "error": None if success else f"Status: {resp.status}"}
-                    return {"success": False, "status_code": None, "error": "System not found"}
+                        result = {"success": success, "status_code": resp.status, "error": None if success else f"Status: {resp.status}"}
+                        logger.debug(f"设置LED状态结果 {bmc_ip}: {result}")
+                        return result
+                    result = {"success": False, "status_code": None, "error": "System not found"}
+                    logger.debug(f"未找到系统信息 {bmc_ip}: {result}")
+                    return result
                 finally:
                     redfish_client.logout()
             except Exception as e:
+                logger.debug(f"设置LED状态异常 {bmc_ip}: {str(e)}")
                 return {"success": False, "status_code": None, "error": str(e)}
 
         # 尝试不同的命令别名
         commands = {"On": ["On", "Lit"], "Off": ["Off"]}
         cmds_to_try = commands.get(led_state, [led_state])
+        logger.debug(f"尝试设置LED状态 {bmc_ip} 为 {led_state}, 命令列表: {cmds_to_try}")
         
         last_error = None
         for cmd in cmds_to_try:
+            logger.debug(f"尝试命令 {cmd} 设置LED状态 {bmc_ip}")
             res = await self._run_in_thread(_sync_task, cmd)
+            logger.debug(f"命令 {cmd} 执行结果: {res}")
             if res.get("success"):
-                return {"success": True, "message": f"LED set to {led_state}", "error": None}
+                result = {"success": True, "message": f"LED set to {led_state}", "error": None}
+                logger.debug(f"设置LED状态成功 {bmc_ip}: {result}")
+                return result
             last_error = res.get("error")
             
-        return {"success": False, "message": "Failed", "error": last_error}
+        result = {"success": False, "message": "Failed", "error": last_error}
+        logger.debug(f"设置LED状态失败 {bmc_ip}: {result}")
+        return result
 
     async def ensure_openshub_user(self, ip: str, admin_username: str, admin_password: str, port: int = settings.IPMI_DEFAULT_PORT) -> bool:
         """确保 openshub 用户存在 (逻辑保持不变，调用新版异步方法)"""
