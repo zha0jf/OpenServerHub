@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class DiscoveryService:
     """设备发现服务"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db):
         self.db = db
         self.ipmi_service = IPMIService()
         self.server_service = ServerService(db)
@@ -87,7 +87,7 @@ class DiscoveryService:
                 result = await task
                 if result:
                     # 检查设备是否已存在于系统中
-                    existing_server = self.server_service.get_server_by_ipmi_ip(result["ip"])
+                    existing_server = await self.server_service.get_server_by_ipmi_ip_async(result["ip"])
                     if existing_server:
                         result["already_exists"] = True
                         result["existing_server_id"] = existing_server.id
@@ -248,12 +248,6 @@ class DiscoveryService:
                 # OpenBMC / 通用
 
 
-
-
-
-
-
-
                 # 浪潮(Inspur)
                 ("root", "superuser"),
 
@@ -404,7 +398,7 @@ class DiscoveryService:
         for device in discovered_devices:
             try:
                 # 检查IP是否已存在
-                if self.server_service.get_server_by_ipmi_ip(device["ip"]):
+                if await self.server_service.get_server_by_ipmi_ip_async(device["ip"]):
                     failed_count += 1
                     failed_details.append({
                         "ip": device["ip"],
@@ -416,7 +410,7 @@ class DiscoveryService:
                 server_name = self._generate_server_name(device)
                 
                 # 检查名称是否已存在
-                if self.server_service.get_server_by_name(server_name):
+                if await self.server_service.get_server_by_name_async(server_name):
                     # 如果名称已存在，加上IP后缀
                     server_name = f"{server_name}-{device['ip'].replace('.', '-')}"
                 
@@ -439,7 +433,7 @@ class DiscoveryService:
                 )
                 
                 # 创建服务器
-                self.server_service.create_server(server_data)
+                await self.server_service.create_server(server_data)
                 success_count += 1
                 
                 logger.info(f"成功导入服务器: {server_name} ({device['ip']})")
@@ -479,7 +473,7 @@ class DiscoveryService:
         else:
             return f"Server-{ip.replace('.', '-')}"
     
-    def import_from_csv(self, csv_content: str, group_id: Optional[int] = None) -> Dict[str, Any]:
+    async def import_from_csv(self, csv_content: str, group_id: Optional[int] = None) -> Dict[str, Any]:
         """
         从CSV内容导入服务器
         
@@ -541,9 +535,9 @@ class DiscoveryService:
                             raise ValidationError("IPMI端口必须是数字")
                     
                     # 检查名称和IP唯一性
-                    if self.server_service.get_server_by_name(cleaned_row["name"]):
+                    if await self.server_service.get_server_by_name_async(cleaned_row["name"]):
                         raise ValidationError("服务器名称已存在")
-                    if self.server_service.get_server_by_ipmi_ip(cleaned_row["ipmi_ip"]):
+                    if await self.server_service.get_server_by_ipmi_ip_async(cleaned_row["ipmi_ip"]):
                         raise ValidationError("IPMI IP地址已存在")
                     
                     # 创建服务器数据
@@ -561,7 +555,7 @@ class DiscoveryService:
                     )
                     
                     # 创建服务器
-                    self.server_service.create_server(server_data)
+                    await self.server_service.create_server(server_data)
                     success_count += 1
                     
                     logger.info(f"成功导入服务器: {cleaned_row['name']} ({cleaned_row['ipmi_ip']})")

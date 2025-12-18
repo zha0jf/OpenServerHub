@@ -99,7 +99,7 @@ async def scan_network(
             },
             ip_address=get_client_ip(http_request) if http_request else "unknown",
             user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
-            status="success" if len(devices) > 0 else "warning",
+            success=True,
         )
         
         return response
@@ -154,7 +154,7 @@ async def batch_import_servers(
             },
             ip_address=get_client_ip(http_request) if http_request else "unknown",
             user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
-            status="success" if result['failed_count'] == 0 else "warning",
+            success=result['failed_count'] == 0,
         )
         
         return response
@@ -196,7 +196,7 @@ async def import_from_csv(
         audit_service = AuditLogService(db)
         
         # 执行CSV导入
-        result = discovery_service.import_from_csv(
+        result = await discovery_service.import_from_csv(
             csv_content=csv_text,
             group_id=group_id
         )
@@ -221,7 +221,7 @@ async def import_from_csv(
                 },
                 ip_address=get_client_ip(http_request),
                 user_agent=http_request.headers.get("user-agent", "unknown"),
-                status="success" if result['failed_count'] == 0 else "warning",
+                success=True,
             )
         
         return response
@@ -254,7 +254,7 @@ async def import_from_csv_text(
         audit_service = AuditLogService(db)
         
         # 执行CSV导入
-        result = discovery_service.import_from_csv(
+        result = await discovery_service.import_from_csv(
             csv_content=request.csv_content,
             group_id=request.group_id
         )
@@ -278,7 +278,7 @@ async def import_from_csv_text(
             },
             ip_address=get_client_ip(http_request) if http_request else "unknown",
             user_agent=http_request.headers.get("user-agent", "unknown") if http_request else "unknown",
-            status="success" if result['failed_count'] == 0 else "warning",
+            success=result['failed_count'] == 0,
         )
         
         return response
