@@ -628,7 +628,13 @@ async def power_control(
         )
         
         # 调度服务器刷新任务，在1秒和4秒后执行两次刷新
-        scheduler_service.schedule_server_refresh(server_id)
+        try:
+            if scheduler_service is not None:
+                scheduler_service.schedule_server_refresh(server_id)
+            else:
+                logger.warning(f"调度服务未初始化，无法为服务器 {server_id} 调度刷新任务")
+        except Exception as e:
+            logger.error(f"调度服务器 {server_id} 刷新任务失败: {str(e)}")
         
         return result
     except ValidationError as e:
@@ -795,8 +801,12 @@ async def schedule_server_refresh(
     """为特定服务器调度刷新任务，在1秒和4秒后执行两次刷新"""
     try:
         # 调度服务器刷新任务
-        scheduler_service.schedule_server_refresh(server_id)
-        return {"message": f"已为服务器 {server_id} 调度刷新任务，在1秒和4秒后分别执行刷新"}
+        if scheduler_service is not None:
+            scheduler_service.schedule_server_refresh(server_id)
+            return {"message": f"已为服务器 {server_id} 调度刷新任务，在1秒和4秒后分别执行刷新"}
+        else:
+            logger.warning(f"调度服务未初始化，无法为服务器 {server_id} 调度刷新任务")
+            return {"message": f"调度服务未初始化，无法为服务器 {server_id} 调度刷新任务"}
     except Exception as e:
         logger.error(f"调度服务器 {server_id} 刷新任务失败: {str(e)}")
         raise HTTPException(status_code=500, detail="调度刷新任务失败，请稍后重试")

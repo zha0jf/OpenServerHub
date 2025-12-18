@@ -125,8 +125,14 @@ class ServerService:
             asyncio.create_task(server_monitoring_service.on_server_added(db_server))
         
         # 调度服务器状态刷新任务（在0.5秒后执行）
-        scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
-        logger.info(f"服务器 {db_server.id} 创建成功，已调度状态刷新任务")
+        try:
+            if scheduler_service is not None:
+                scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
+                logger.info(f"服务器 {db_server.id} 创建成功，已调度状态刷新任务")
+            else:
+                logger.warning(f"服务器 {db_server.id} 创建成功，但调度服务未初始化，无法调度状态刷新任务")
+        except Exception as e:
+            logger.error(f"调度服务器 {db_server.id} 状态刷新任务失败: {e}")
         
         return db_server
 
@@ -233,8 +239,14 @@ class ServerService:
         
         # 如果IPMI相关信息发生变化，调度服务器状态刷新任务
         if ipmi_changed:
-            scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
-            logger.info(f"服务器 {db_server.id} IPMI信息已更新，已调度状态刷新任务")
+            try:
+                if scheduler_service is not None:
+                    scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
+                    logger.info(f"服务器 {db_server.id} IPMI信息已更新，已调度状态刷新任务")
+                else:
+                    logger.warning(f"服务器 {db_server.id} IPMI信息已更新，但调度服务未初始化，无法调度状态刷新任务")
+            except Exception as e:
+                logger.error(f"调度服务器 {db_server.id} 状态刷新任务失败: {e}")
         
         # 异步处理监控配置更新（仅在启用监控时）
         if settings.MONITORING_ENABLED and (original_monitoring_enabled != bool(db_server.monitoring_enabled) or ipmi_changed):
@@ -300,8 +312,14 @@ class ServerService:
         
         # 如果IPMI相关信息发生变化，调度服务器状态刷新任务
         if ipmi_changed:
-            scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
-            logger.info(f"服务器 {db_server.id} IPMI信息已更新，已调度状态刷新任务")
+            try:
+                if scheduler_service is not None:
+                    scheduler_service.schedule_single_refresh(db_server.id, delay=0.5)
+                    logger.info(f"服务器 {db_server.id} IPMI信息已更新，已调度状态刷新任务")
+                else:
+                    logger.warning(f"服务器 {db_server.id} IPMI信息已更新，但调度服务未初始化，无法调度状态刷新任务")
+            except Exception as e:
+                logger.error(f"调度服务器 {db_server.id} 状态刷新任务失败: {e}")
         
         # 异步处理监控配置更新（仅在启用监控时）
         if settings.MONITORING_ENABLED and (original_monitoring_enabled != bool(db_server.monitoring_enabled) or ipmi_changed):

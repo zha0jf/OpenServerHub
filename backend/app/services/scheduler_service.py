@@ -229,6 +229,95 @@ class PowerStateSchedulerService:
         except Exception as e:
             logger.error(f"获取状态失败: {e}")
             return {"error": str(e)}
+    
+    async def _execute_single_server_refresh(self, server_id: int):
+        """
+        执行单个服务器的电源状态刷新
+        :param server_id: 服务器ID
+        """
+        try:
+            logger.info(f"开始刷新服务器 {server_id} 的电源状态")
+            
+            # 直接调用现有的安全刷新方法
+            success = await self._refresh_single_server_safe(server_id)
+            
+            if success:
+                logger.info(f"服务器 {server_id} 电源状态刷新成功")
+            else:
+                logger.warning(f"服务器 {server_id} 电源状态刷新失败")
+                
+        except Exception as e:
+            logger.error(f"刷新服务器 {server_id} 电源状态时发生错误: {e}")
+    
+    def schedule_single_refresh(self, server_id: int, delay: float = 0.5):
+        """为特定服务器调度单次刷新任务
+        
+        Args:
+            server_id: 服务器ID
+            delay: 延迟时间（秒），默认0.5秒
+        """
+        # 生成唯一的任务ID
+        job_id = f"single_refresh_{server_id}"
+        
+        # 先移除可能存在的旧任务
+        try:
+            self.scheduler.remove_job(job_id)
+        except JobLookupError:
+            pass  # 任务不存在，忽略错误
+        
+        # 添加刷新任务
+        self.scheduler.add_job(
+            self._execute_single_server_refresh,
+            'date',
+            run_date=datetime.now() + timedelta(seconds=delay),
+            id=job_id,
+            replace_existing=True,
+            args=[server_id]
+        )
+        
+        logger.info(f"已为服务器 {server_id} 调度单次刷新任务，在 {delay} 秒后执行")
+    
+    def schedule_server_refresh(self, server_id: int):
+        """为特定服务器调度刷新任务，在1秒和4秒后执行两次刷新
+        
+        Args:
+            server_id: 服务器ID
+        """
+        # 生成唯一的任务ID
+        job_id_base = f"server_refresh_{server_id}"
+        
+        # 先移除可能存在的旧任务
+        try:
+            self.scheduler.remove_job(job_id_base + "_1")
+        except JobLookupError:
+            pass  # 任务不存在，忽略错误
+        
+        try:
+            self.scheduler.remove_job(job_id_base + "_2")
+        except JobLookupError:
+            pass  # 任务不存在，忽略错误
+        
+        # 添加第一次刷新任务（1秒后执行）
+        self.scheduler.add_job(
+            self._execute_single_server_refresh,
+            'date',
+            run_date=datetime.now() + timedelta(seconds=1),
+            id=job_id_base + "_1",
+            replace_existing=True,
+            args=[server_id]
+        )
+        
+        # 添加第二次刷新任务（4秒后执行）
+        self.scheduler.add_job(
+            self._execute_single_server_refresh,
+            'date',
+            run_date=datetime.now() + timedelta(seconds=4),
+            id=job_id_base + "_2",
+            replace_existing=True,
+            args=[server_id]
+        )
+        
+        logger.info(f"已为服务器 {server_id} 调度刷新任务，在1秒和4秒后分别执行刷新")
 
 # 全局变量
 scheduler_service: Optional[PowerStateSchedulerService] = None
