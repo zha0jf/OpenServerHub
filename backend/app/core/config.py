@@ -202,6 +202,21 @@ class Settings(BaseSettings):
     # 调整考虑因素: 增加并发限制以提高任务执行效率；与数据库连接池大小协调，避免数据库成为瓶颈
     SCHEDULER_CONCURRENCY_LIMIT: int = 15  # 定时任务并发限制
     
+    # OFFLINE_SERVER_CHECK_INTERVAL: 离线服务器检查间隔（分钟）
+    # 建议配置范围: 1-10 (根据实时性要求调整)
+    # 调整考虑因素: 过短会增加服务器负载和网络流量，过长可能导致状态更新不及时
+    OFFLINE_SERVER_CHECK_INTERVAL: int = 2  # 离线服务器检查间隔（分钟）
+    
+    # OFFLINE_SERVER_WORKER_COUNT: 离线服务器检查工作者数量
+    # 建议配置范围: 10-30 (根据系统资源调整)
+    # 调整考虑因素: 过多会消耗系统资源，过少可能影响检查效率
+    OFFLINE_SERVER_WORKER_COUNT: int = 10  # 离线服务器检查工作者数量
+    
+    # SERVER_ONLINE_CHECK_TIMEOUT: 服务器在线检查超时时间（秒）
+    # 建议配置范围: 1-10 (根据网络环境调整)
+    # 调整考虑因素: 过短可能导致检查不准确，过长会增加检查时间
+    SERVER_ONLINE_CHECK_TIMEOUT: float = 3.0  # 服务器在线检查超时时间（秒）
+    
     # 监控系统配置
     
     # MONITORING_ENABLED: 是否启用监控功能

@@ -90,12 +90,12 @@ class PowerStateSchedulerService:
             start_time = datetime.now()
             logger.debug(f"[电源状态刷新] 开始执行电源状态刷新任务")
             
-            # 1. 快速获取所有服务器ID列表 (只读操作，用完即释放Session)
+            # 1. 快速获取所有在线服务器ID列表 (只读操作，用完即释放Session)
             db_query_start = datetime.now()
             target_server_ids = []
             async with AsyncSessionLocal() as session:
-                # 仅查询 ID，避免加载整个对象导致 Detached 错误
-                stmt = select(Server.id)
+                # 仅查询在线服务器 ID，避免加载整个对象导致 Detached 错误
+                stmt = select(Server.id).where(Server.status == ServerStatus.ONLINE)
                 result = await session.execute(stmt)
                 target_server_ids = result.scalars().all()
             db_query_time = (datetime.now() - db_query_start).total_seconds()
@@ -105,7 +105,7 @@ class PowerStateSchedulerService:
                 logger.info("当前没有服务器，跳过电源状态刷新")
                 return
 
-            logger.info(f"开始刷新 {len(target_server_ids)} 台服务器的电源状态")
+            logger.info(f"开始刷新 {len(target_server_ids)} 台在线服务器的电源状态")
 
             # 2. 并发刷新 (使用 Semaphore 限制并发)
             tasks = []

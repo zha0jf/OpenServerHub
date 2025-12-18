@@ -49,6 +49,9 @@ health_check_task = None
 # 电源状态定时刷新服务引用
 power_state_scheduler_service = None
 
+# 离线服务器检查服务引用
+offline_server_checker_service = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -87,6 +90,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"启动监控数据采集定时任务服务失败: {e}")
     
+    # 初始化并启动离线服务器检查服务
+    global offline_server_checker_service
+    try:
+        from app.services.offline_server_checker import OfflineServerCheckerService
+        offline_server_checker_service = OfflineServerCheckerService()
+        await offline_server_checker_service.start()
+        logger.info("离线服务器检查服务已启动")
+    except Exception as e:
+        logger.error(f"启动离线服务器检查服务失败: {e}")
+    
     yield
     
     # 关闭时停止电源状态定时刷新服务
@@ -104,6 +117,14 @@ async def lifespan(app: FastAPI):
         logger.info("监控数据采集定时任务服务已停止")
     except Exception as e:
         logger.error(f"停止监控数据采集定时任务服务失败: {e}")
+    
+    # 关闭时停止离线服务器检查服务
+    try:
+        if offline_server_checker_service:
+            await offline_server_checker_service.stop()
+            logger.info("离线服务器检查服务已停止")
+    except Exception as e:
+        logger.error(f"停止离线服务器检查服务失败: {e}")
     
     # 停止数据库健康检查任务
     if health_check_task:
@@ -193,11 +214,14 @@ async def get_scheduler_status():
         power_status = power_state_scheduler_service.get_status() if power_state_scheduler_service else {}
         # 使用模块中的实例
         monitoring_status = monitoring_module.monitoring_scheduler_service.get_status() if monitoring_module.monitoring_scheduler_service else {}
+        # 离线服务器检查服务状态
+        offline_checker_status = offline_server_checker_service.get_status() if offline_server_checker_service else {}
         return {
             "success": True,
             "data": {
                 "power_state_scheduler": power_status,
-                "monitoring_scheduler": monitoring_status
+                "monitoring_scheduler": monitoring_status,
+                "offline_server_checker": offline_checker_status
             }
         }
     except Exception as e:
