@@ -19,6 +19,9 @@ from app.core.config import settings
 from app.services.scheduler_service import scheduler_service
 import logging
 
+# 导入时间装饰器
+from app.core.timing_decorator import timing_debug
+
 logger = logging.getLogger(__name__)
 
 class ServerService:
@@ -81,6 +84,7 @@ class ServerService:
         self.db.refresh(db_server)
         return db_server
 
+    @timing_debug
     async def create_server(self, server_data: ServerCreate) -> Server:
         """创建服务器"""
         # 检查IPMI IP是否已存在
@@ -238,6 +242,7 @@ class ServerService:
         
         return db_server
     
+    @timing_debug
     async def update_server_async(self, server_id: int, server_data: ServerUpdate) -> Optional[Server]:
         """异步更新服务器信息"""
         db_server = await self.get_server_async(server_id)
@@ -325,6 +330,7 @@ class ServerService:
         
         return True
     
+    @timing_debug
     async def delete_server_async(self, server_id: int) -> bool:
         """异步删除服务器"""
         db_server = await self.get_server_async(server_id)
@@ -420,6 +426,7 @@ class ServerService:
             logger.error(f"同步监控配置失败: {e}")
             logger.exception(e)  # 记录完整的异常堆栈
 
+    @timing_debug
     async def power_control(self, server_id: int, action: str) -> Dict[str, Any]:
         """服务器电源控制"""
         # 使用异步方法获取服务器
@@ -454,6 +461,7 @@ class ServerService:
             await self.async_db.commit()
             raise e
 
+    @timing_debug
     async def update_server_status(self, server_id: int) -> Dict[str, Any]:
         """更新服务器状态"""
         # 使用异步方法获取服务器
@@ -643,6 +651,7 @@ class ServerService:
         return True
 
     # 批量操作功能
+    @timing_debug
     async def batch_power_control(self, server_ids: List[int], action: str) -> List[BatchOperationResult]:
         """批量电源控制"""
         results = []
@@ -811,6 +820,7 @@ class ServerService:
                 error=f"内部错误: {str(e)}"
             )
 
+    @timing_debug
     async def check_redfish_support(self, server_id: int) -> Dict[str, Any]:
         """检查服务器BMC是否支持Redfish"""
         # 使用异步方法获取服务器
@@ -834,6 +844,7 @@ class ServerService:
             logger.error(f"检查服务器 {server_id} Redfish支持时发生未知错误: {str(e)}")
             raise IPMIError(f"检查Redfish支持失败: {str(e)}")
     
+    @timing_debug
     async def get_server_led_status(self, server_id: int) -> Dict[str, Any]:
         """
         获取服务器LED状态
@@ -908,6 +919,7 @@ class ServerService:
                 "error": f"获取LED状态失败: {str(e)}"
             }
     
+    @timing_debug
     async def set_server_led_state(self, server_id: int, led_state: str) -> Dict[str, Any]:
         """
         设置服务器LED状态

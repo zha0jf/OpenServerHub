@@ -63,6 +63,11 @@ def setup_logging():
                 "handlers": ["file"],
                 "propagate": False,
             },
+            "aiosqlite": {
+                "level": "INFO",
+                "handlers": ["file"],
+                "propagate": False,
+            },
         },
     }
     

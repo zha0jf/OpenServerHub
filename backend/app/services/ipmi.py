@@ -12,6 +12,8 @@ from pyghmi.exceptions import IpmiException
 
 from app.core.config import settings
 from app.core.exceptions import IPMIError
+# 导入时间装饰器
+from app.core.timing_decorator import timing_debug
 
 logger = logging.getLogger(__name__)
 
@@ -329,6 +331,7 @@ class IPMIService:
     # 公共 API 方法 (保持签名与原代码完全一致)
     # ---------------------------------------------------------------------
 
+    @timing_debug
     async def get_power_state(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT) -> str:
         """获取电源状态"""
         port = self._ensure_port_is_int(port)
@@ -342,6 +345,7 @@ class IPMIService:
             logger.warning(f"获取电源状态失败 {ip}: {str(e)}")
             return "unknown"  # 返回字符串，防止 None.lower() 报错
 
+    @timing_debug
     async def power_control(self, ip: str, username: str, password: str, action: str, port: int = settings.IPMI_DEFAULT_PORT) -> Dict[str, Any]:
         """电源控制"""
         port = self._ensure_port_is_int(port)
@@ -349,18 +353,21 @@ class IPMIService:
         res = await self._run_in_process(_mp_set_power, ip, username, password, port, action, timeout=settings.IPMI_POWER_CONTROL_TIMEOUT)
         return {"action": action, "result": "success", "message": f"电源{action}操作成功", "data": res}
 
+    @timing_debug
     async def get_system_info(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT, timeout: int = None) -> Dict[str, Any]:
         """获取系统信息"""
         port = self._ensure_port_is_int(port)
         # 系统信息获取包含大量命令，需要较长时间
         return await self._run_in_process(_mp_get_system_info, ip, username, password, port, ip, timeout=timeout or settings.IPMI_SYSTEM_INFO_TIMEOUT)
 
+    @timing_debug
     async def get_sensor_data(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT) -> Dict[str, Any]:
         """获取传感器数据"""
         port = self._ensure_port_is_int(port)
         # 传感器遍历非常慢，给足时间
         return await self._run_in_process(_mp_get_sensor_data, ip, username, password, port, timeout=settings.IPMI_SENSOR_DATA_TIMEOUT)
 
+    @timing_debug
     async def get_users(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT) -> List[Dict[str, Any]]:
         """获取用户列表"""
         port = self._ensure_port_is_int(port)
@@ -388,6 +395,7 @@ class IPMIService:
         await self._run_in_process(_mp_manage_user, ip, admin_username, admin_password, port, 'set_password', **kwargs)
         return True
 
+    @timing_debug
     async def test_connection(self, ip: str, username: str, password: str, port: int = settings.IPMI_DEFAULT_PORT) -> Dict[str, Any]:
         """测试连接"""
         try:
@@ -403,6 +411,7 @@ class IPMIService:
     # Redfish 方法
     # ---------------------------------------------------------------------
 
+    @timing_debug
     async def check_redfish_support(self, bmc_ip: str, timeout: int = settings.REDFISH_TIMEOUT) -> Dict[str, Any]:
         """检查 Redfish 支持 (使用原生异步 httpx)"""
         async with self._semaphore:
@@ -438,6 +447,7 @@ class IPMIService:
                     "error": str(e), "check_success": False
                 }
 
+    @timing_debug
     async def get_redfish_led_status(self, bmc_ip: str, username: str, password: str, timeout: int = settings.REDFISH_TIMEOUT) -> Dict[str, Any]:
         """获取 LED 状态 (同步库，跑在线程池)"""
         logger.debug(f"开始获取服务器 {bmc_ip} 的LED状态")
@@ -472,6 +482,7 @@ class IPMIService:
         logger.debug(f"获取服务器 {bmc_ip} LED状态完成: {result}")
         return result
 
+    @timing_debug
     async def set_redfish_led_state(self, bmc_ip: str, username: str, password: str, led_state: str, timeout: int = settings.REDFISH_TIMEOUT) -> Dict[str, Any]:
         """设置 LED 状态 (同步库，跑在线程池)"""
         logger.debug(f"开始设置服务器 {bmc_ip} 的LED状态为 {led_state}")

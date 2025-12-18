@@ -22,6 +22,8 @@ from app.models.audit_log import AuditAction, AuditStatus
 from app.core.config import settings
 # 服务导入
 from app.services.scheduler_service import scheduler_service
+# 导入时间装饰器
+from app.core.timing_decorator import timing_debug
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -56,6 +58,7 @@ async def get_cluster_statistics(
 
 # 批量电源控制
 @router.post("/batch/power", response_model=BatchPowerResponse)
+@timing_debug
 async def batch_power_control(
     request: BatchPowerRequest,
     http_request: Request,
@@ -352,6 +355,7 @@ async def delete_server_group(
 # ==========================================
 
 @router.post("/", response_model=ServerResponse)
+@timing_debug
 async def create_server(
     server_data: ServerCreate,
     request: Request,
@@ -456,6 +460,7 @@ async def get_server(
     return server
 
 @router.put("/{server_id}", response_model=ServerResponse)
+@timing_debug
 async def update_server(
     server_id: int,
     server_data: ServerUpdate,
@@ -527,6 +532,7 @@ async def update_server(
         raise HTTPException(status_code=500, detail="服务器更新失败")
 
 @router.delete("/{server_id}")
+@timing_debug
 async def delete_server(
     server_id: int,
     request: Request,
@@ -585,6 +591,7 @@ async def delete_server(
 
 # 电源控制
 @router.post("/{server_id}/power/{action}")
+@timing_debug
 async def power_control(
     server_id: int,
     action: Literal['on', 'off', 'restart', 'force_off', 'force_restart'], # 使用 Literal 限制
@@ -674,6 +681,7 @@ async def power_control(
 
 # 服务器状态更新
 @router.post("/{server_id}/status")
+@timing_debug
 async def update_server_status(
     server_id: int,
     db: AsyncSession = Depends(get_async_db),
