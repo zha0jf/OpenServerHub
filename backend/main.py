@@ -75,11 +75,10 @@ async def lifespan(app: FastAPI):
     global power_state_scheduler_service
     if settings.POWER_STATE_REFRESH_ENABLED:
         try:
-            from app.services.scheduler_service import PowerStateSchedulerService
-            from app.services import scheduler_service as scheduler_service_global
+            from app.services.scheduler_service import PowerStateSchedulerService, scheduler_service
             power_state_scheduler_service = PowerStateSchedulerService()
             # 同时初始化scheduler_service全局变量
-            scheduler_service_global.scheduler_service = power_state_scheduler_service
+            scheduler_service.scheduler_service = power_state_scheduler_service
             await power_state_scheduler_service.start()
             logger.info("电源状态定时刷新服务已启动")
         except Exception as e:
@@ -87,8 +86,10 @@ async def lifespan(app: FastAPI):
     
     # 在安全的环境里实例化并启动监控数据采集定时任务服务
     try:
-        monitoring_module.monitoring_scheduler_service = MonitoringSchedulerService()
-        await monitoring_module.monitoring_scheduler_service.start()
+        monitoring_scheduler_service = MonitoringSchedulerService()
+        await monitoring_scheduler_service.start()
+        # 将实例赋值给模块属性
+        setattr(monitoring_module, 'monitoring_scheduler_service', monitoring_scheduler_service)
         logger.info("监控数据采集定时任务服务已启动")
     except Exception as e:
         logger.error(f"启动监控数据采集定时任务服务失败: {e}")

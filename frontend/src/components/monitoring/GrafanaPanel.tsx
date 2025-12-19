@@ -26,10 +26,18 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
   useEffect(() => {
     const fetchConfig = async () => {
       try {
+        console.debug('[GrafanaPanel] 开始获取配置');
         const config = await configService.getFrontendConfig();
-        setGrafanaUrl(config.grafana_url);
+        console.debug('[GrafanaPanel] 获取到的配置:', config);
+        if (config && config.grafana_url) {
+          setGrafanaUrl(config.grafana_url);
+          console.debug('[GrafanaPanel] 设置grafanaUrl为:', config.grafana_url);
+        } else {
+          console.warn('[GrafanaPanel] 配置中没有grafana_url或配置为空，使用默认值');
+          setGrafanaUrl('http://localhost:3001');
+        }
       } catch (error) {
-        console.error('获取配置失败，使用默认值:', error);
+        console.error('[GrafanaPanel] 获取配置失败，使用默认值:', error);
         setGrafanaUrl('http://localhost:3001');
       }
     };

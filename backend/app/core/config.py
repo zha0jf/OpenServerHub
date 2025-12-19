@@ -260,6 +260,15 @@ class Settings(BaseSettings):
     # 调整考虑因素: 需与Docker Compose配置一致，供前端浏览器直接访问
     REACT_APP_GRAFANA_URL: str = os.getenv("REACT_APP_GRAFANA_URL", "http://localhost:3001")
     
+    def __init__(self):
+        # 添加调试日志
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"[配置初始化] REACT_APP_GRAFANA_URL环境变量值: {os.getenv('REACT_APP_GRAFANA_URL')}")
+        logger.debug(f"[配置初始化] REACT_APP_GRAFANA_URL最终值: {self.REACT_APP_GRAFANA_URL}")
+        logger.debug(f"[配置初始化] PROJECT_NAME: {self.PROJECT_NAME}")
+        logger.debug(f"[配置初始化] VERSION: {self.VERSION}")
+    
     # PROMETHEUS_TARGETS_PATH: Prometheus目标配置文件路径
     # 建议配置范围: 有效的文件路径，确保目录存在且有写权限
     # 调整考虑因素: 需确保目录存在且有写权限；路径需与Prometheus配置一致
@@ -285,4 +294,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
+# 在创建settings实例之前添加调试
+import logging
+logger = logging.getLogger(__name__)
+logger.debug("[配置] 开始初始化Settings实例")
 settings = Settings()
+logger.debug("[配置] Settings实例初始化完成")
