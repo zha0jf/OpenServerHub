@@ -63,7 +63,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
               <Text code>{config?.version || '未知'}</Text>
               <br />
               <Text type="secondary">项目版本: </Text>
-              <Text code>{VERSION_INFO.version}</Text>
+              <Text code>'OpenServerHub'-{VERSION_INFO.version}</Text>
               {VERSION_INFO.buildTime && (
                 <div style={{ marginTop: '4px' }}>
                   <Text type="secondary">构建时间: </Text>
@@ -84,7 +84,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
             <li>前端：{window.location.origin}</li>
             <li>后端 API：{config?.api_base_url ? `${window.location.origin}${config.api_base_url}` : '未知'}</li>
             <li>API 文档：{window.location.origin}/docs</li>
-            <li>Prometheus：{config?.monitoring_enabled ? 'http://localhost:9090' : '监控未启用'}</li>
+            <li>Prometheus：{config?.monitoring_enabled ? `http://${window.location.origin}:9090` : '监控未启用'}</li>
             <li>Grafana：<a href={config?.grafana_url} target="_blank" rel="noopener noreferrer">{config?.grafana_url || '监控未启用'}</a></li>
           </ul>
         </div>
@@ -95,27 +95,17 @@ const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
 
         {/* 厂商信息 */}
         <div>
-          <Text strong>厂商信息</Text>
+          <Text strong>问题反馈</Text>
           <div style={{ marginTop: '8px' }}>
-            <Text type="secondary">厂商名称: </Text>
-            <Text>{config?.vendor_name || 'opensource'}</Text>
+            <Text type="secondary">主体: </Text>
+            <Text>{config?.vendor_name || '开源项目'}</Text>
             <br />
-            <Text type="secondary">官方网址: </Text>
+            <Text type="secondary">网址: </Text>
             <Text>
               <a href={config?.vendor_url} target="_blank" rel="noopener noreferrer">
                 {config?.vendor_url || 'https://github.com/zha0jf/OpenServerHub'}
               </a>
             </Text>
-          </div>
-        </div>
-
-        <Divider style={{ margin: '8px 0' }} />
-
-        {/* 联系方式 */}
-        <div>
-          <Text strong>联系方式</Text>
-          <div style={{ marginTop: '8px' }}>
-            <Text type="secondary">如有问题，请联系厂商获取技术支持</Text>
           </div>
         </div>
 
