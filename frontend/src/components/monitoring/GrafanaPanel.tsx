@@ -114,14 +114,15 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
           setLoading(false);
           // 检查是否可以访问iframe内容
           try {
-            const iframe = document.querySelector(`iframe[title="${title} - Grafana Panel"]`);
-            if (iframe && iframe.contentDocument === null && iframe.contentWindow === null) {
-              // 如果无法访问iframe内容，可能是由于X-Frame-Options限制
-              handleIframeError();
+            const iframe = document.querySelector<HTMLIFrameElement>(`iframe[title="${title} - Grafana Panel"]`);
+            if (iframe) {
+              // 尝试访问iframe内容，如果被X-Frame-Options阻止会抛出异常
+              iframe.contentDocument;
             }
           } catch (e) {
-            // 跨域访问iframe会抛出异常，这是正常情况
-            console.debug('无法检查iframe访问权限，可能是跨域限制');
+            // 跨域访问iframe会抛出异常，这可能是由于X-Frame-Options限制
+            console.debug('无法访问iframe内容，可能是由于X-Frame-Options限制');
+            handleIframeError();
           }
         }}
       />
