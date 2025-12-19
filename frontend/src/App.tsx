@@ -33,7 +33,11 @@ const App: React.FC = () => {
             <Route path="servers/:id" element={<ServerDetail />} />
             <Route path="clusters" element={<ClusterManagement />} />
             <Route path="discovery" element={<DeviceDiscovery />} />
-            <Route path="users" element={<UserList />} />
+            <Route path="users" element={
+              <AdminRoute>
+                <UserList />
+              </AdminRoute>
+            } />
             <Route path="monitoring" element={<MonitoringDashboard />} />
             <Route path="profile" element={<Profile />} />
             <Route path="audit" element={

@@ -206,19 +206,6 @@ const UserList: React.FC = () => {
     },
   ];
 
-  // 检查当前用户是否为管理员
-  const isAdmin = currentUser?.role === 'admin';
-
-  if (!isAdmin) {
-    return (
-      <Card>
-        <div style={{ textAlign: 'center', padding: '50px' }}>
-          <Title level={3}>权限不足</Title>
-          <p>只有管理员可以访问用户管理页面</p>
-        </div>
-      </Card>
-    );
-  }
 
   return (
     <div>
