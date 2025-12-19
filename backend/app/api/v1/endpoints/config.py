@@ -7,7 +7,7 @@ import logging
 from app.core.timing_decorator import timing_debug
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 
 @router.get("/public")
 @timing_debug
@@ -24,7 +24,7 @@ async def get_public_frontend_config():
     logger.debug(f"[公共配置API] 返回配置信息: {config_data}")
     return config_data
 
-@router.get("/")
+@router.get("")
 @timing_debug
 async def get_frontend_config(current_user = Depends(get_current_user)):
     """获取前端配置信息（需要认证）"""

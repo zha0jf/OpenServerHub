@@ -15,6 +15,7 @@ from app.api.v1.api import api_router
 from app.models import Base
 
 from app.services.monitoring_scheduler import MonitoringSchedulerService  # 导入类本身
+
 # from app.services.ipmi import ipmi_pool  # 已移除，因切换到多进程实现
 
 # Prometheus指标导出
@@ -76,10 +77,11 @@ async def lifespan(app: FastAPI):
     if settings.POWER_STATE_REFRESH_ENABLED:
         try:
             from app.services.scheduler_service import PowerStateSchedulerService
-            from app.services import scheduler_service as scheduler_service_var
+            import app.services.scheduler_service as scheduler_mod
+
             power_state_scheduler_service = PowerStateSchedulerService()
             # 同时初始化scheduler_service全局变量
-            scheduler_service_var.scheduler_service = power_state_scheduler_service
+            scheduler_mod.scheduler_service = power_state_scheduler_service
             await power_state_scheduler_service.start()
             logger.info("电源状态定时刷新服务已启动")
         except Exception as e:
@@ -179,6 +181,15 @@ app.add_middleware(
 # 包含API路由
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+# --- 调试工具：打印所有已注册路由 ---
+@app.on_event("startup")
+async def print_routes():
+    logger.info("--- 注册路由核查 ---")
+    for route in app.routes:
+        if hasattr(route, "path"):
+            logger.info(f"Route: {route.path} | Name: {route.name}")
+
+
 # 添加Prometheus指标端点（如果可用）
 if generate_latest is not None and CONTENT_TYPE_LATEST is not None:
     @app.get("/metrics")
@@ -263,6 +274,11 @@ if settings.ENVIRONMENT == "production":
         # 使用自定义的StaticFiles类来处理SPA路由
         class SPAStaticFiles(StaticFiles):
             async def get_response(self, path: str, scope):
+                # --- 修改点：如果路径以 api 开头但没匹配上，不要返回 index.html ---
+                # 这会防止 API 路径写错时跳转到根目录，而是直接返回 404 JSON/Text
+                if path.startswith("api/") or path.startswith("api"):
+                    return await super().get_response(path, scope)
+
                 try:
                     return await super().get_response(path, scope)
                 except:
