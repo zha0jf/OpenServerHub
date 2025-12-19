@@ -116,6 +116,10 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_SERVER_DOMAIN=${SERVER_IP}
       - GF_SERVER_ROOT_URL=http://${SERVER_IP}:3001
+      # 允许iframe嵌入
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      # 禁用严格的跨域检查
+      - GF_SECURITY_COOKIE_SAMESITE=disabled
       - TZ=Asia/Shanghai
     restart: unless-stopped
     networks:

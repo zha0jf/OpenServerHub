@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Skeleton } from 'antd';
+import { Card, Skeleton, Button, Alert } from 'antd';
 import { configService } from '../../services/config';
 
 interface GrafanaPanelProps {
@@ -19,6 +19,7 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
 }) => {
   const [embedUrl, setEmbedUrl] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   
   // 从后端API获取Grafana URL，如果没有则使用默认值
   const [grafanaUrl, setGrafanaUrl] = useState<string>('');
@@ -73,6 +74,7 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
     }, 1000);
   }, [dashboardUid, panelId, grafanaUrl, queryParams]);
 
+  // 处理加载状态
   if (loading) {
     return (
       <Card title={title} style={{ height: '100%' }}>
@@ -81,8 +83,25 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
     );
   }
 
+  // 处理错误状态 - 提供降级方案
+  const handleIframeError = () => {
+    setError('无法嵌入Grafana面板，点击下方按钮在新窗口中打开');
+  };
+
   return (
     <Card title={title} style={{ height: '100%' }}>
+      {error && (
+        <Alert 
+          message={error}
+          type="warning"
+          action={
+            <Button size="small" type="primary" onClick={() => window.open(embedUrl, '_blank')}>
+              在新窗口打开
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <iframe
         src={embedUrl}
         width="100%"
@@ -90,7 +109,21 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
         frameBorder="0"
         style={{ minHeight: `${height}px` }}
         title={`${title} - Grafana Panel`}
-        onLoad={() => setLoading(false)}
+        onError={handleIframeError}
+        onLoad={() => {
+          setLoading(false);
+          // 检查是否可以访问iframe内容
+          try {
+            const iframe = document.querySelector(`iframe[title="${title} - Grafana Panel"]`);
+            if (iframe && iframe.contentDocument === null && iframe.contentWindow === null) {
+              // 如果无法访问iframe内容，可能是由于X-Frame-Options限制
+              handleIframeError();
+            }
+          } catch (e) {
+            // 跨域访问iframe会抛出异常，这是正常情况
+            console.debug('无法检查iframe访问权限，可能是跨域限制');
+          }
+        }}
       />
     </Card>
   );
