@@ -88,7 +88,6 @@ async def logout(
         username=current_user.username,
         ip_address=client_ip,
         user_agent=user_agent,
-        success=True,
     )
     
     return {"message": "成功登出"}
