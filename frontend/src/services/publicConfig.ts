@@ -1,4 +1,5 @@
 import api from './api';
+import axios from 'axios';
 
 export interface PublicFrontendConfig {
   project_name: string;
@@ -15,9 +16,12 @@ export const publicConfigService = {
     const startTime = Date.now();
     try {
       // 创建一个新的axios实例，不使用默认的拦截器
-      const publicApi = api;
+      const publicApi = axios.create({
+        baseURL: '/api/v1',
+        timeout: 30000,
+      });
       
-      const response = await publicApi.get<PublicFrontendConfig>('/api/v1/config/public');
+      const response = await publicApi.get<PublicFrontendConfig>('/config/public');
       const endTime = Date.now();
       console.debug(`[公共前端配置] 获取公开的前端配置信息完成，耗时: ${endTime - startTime}ms`, response.data);
       
