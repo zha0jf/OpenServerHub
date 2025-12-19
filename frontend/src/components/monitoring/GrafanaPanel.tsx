@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Skeleton } from 'antd';
+import { configService } from '../../services/config';
 
 interface GrafanaPanelProps {
   dashboardUid: string;
@@ -19,8 +20,22 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
   const [embedUrl, setEmbedUrl] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   
-  // 从环境变量获取Grafana URL，如果没有则使用默认值
-  const grafanaUrl = process.env.REACT_APP_GRAFANA_URL || 'http://localhost:3001';
+  // 从后端API获取Grafana URL，如果没有则使用默认值
+  const [grafanaUrl, setGrafanaUrl] = useState<string>('');
+  
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const config = await configService.getFrontendConfig();
+        setGrafanaUrl(config.grafana_url);
+      } catch (error) {
+        console.error('获取配置失败，使用默认值:', error);
+        setGrafanaUrl('http://localhost:3001');
+      }
+    };
+    
+    fetchConfig();
+  }, []);
 
   useEffect(() => {
     // 构建基础参数

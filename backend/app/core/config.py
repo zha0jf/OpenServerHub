@@ -14,6 +14,16 @@ class Settings(BaseSettings):
     # 调整考虑因素: 版本变更应遵循语义化版本规范，影响API文档和客户端兼容性
     VERSION: str = "1.0.0"
     
+    # VENDOR_NAME: 厂商名称
+    # 建议配置范围: 有效的字符串
+    # 调整考虑因素: 用于产品信息页面显示
+    VENDOR_NAME: str = "opensource"
+    
+    # VENDOR_URL: 厂商URL
+    # 建议配置范围: 有效的URL
+    # 调整考虑因素: 用于产品信息页面链接
+    VENDOR_URL: str = "https://github.com/zha0jf/OpenServerHub"
+    
     # ENVIRONMENT: 运行环境标识，用于区分开发、测试、生产环境
     # 建议配置范围: "development", "testing", "production"
     # 调整考虑因素: 不同环境可能启用不同的安全措施、日志级别和调试功能
@@ -244,6 +254,11 @@ class Settings(BaseSettings):
     # 建议配置范围: 有效的Grafana API密钥
     # 调整考虑因素: 必须保密，泄露会导致Grafana安全风险；生产环境必须更换默认值
     GRAFANA_API_KEY: str = os.getenv("GRAFANA_API_KEY", "your-grafana-api-key-here")
+    
+    # REACT_APP_GRAFANA_URL: 前端访问Grafana的URL
+    # 建议配置范围: 有效的HTTP(S) URL，指向Grafana服务的外部访问地址
+    # 调整考虑因素: 需与Docker Compose配置一致，供前端浏览器直接访问
+    REACT_APP_GRAFANA_URL: str = os.getenv("REACT_APP_GRAFANA_URL", "http://localhost:3001")
     
     # PROMETHEUS_TARGETS_PATH: Prometheus目标配置文件路径
     # 建议配置范围: 有效的文件路径，确保目录存在且有写权限

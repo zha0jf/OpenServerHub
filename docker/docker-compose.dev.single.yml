@@ -46,6 +46,10 @@ services:
       REACT_APP_WS_URL: ${REACT_APP_WS_URL}
       REACT_APP_GRAFANA_URL: ${REACT_APP_GRAFANA_URL}
       
+      # 厂商配置
+      VENDOR_NAME: ${VENDOR_NAME}
+      VENDOR_URL: ${VENDOR_URL}
+      
       # 服务器配置
       SERVER_IP: ${SERVER_IP}
     ports:
