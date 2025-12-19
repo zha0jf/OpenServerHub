@@ -1,3 +1,3 @@
-from .scheduler_service import scheduler_service, PowerStateSchedulerService
+# from .scheduler_service import scheduler_service, PowerStateSchedulerService
 # 注释掉监控调度服务的导入，因为现在它在main.py中被直接导入和实例化
 # from .monitoring_scheduler import monitoring_scheduler_service, MonitoringSchedulerService

@@ -20,8 +20,7 @@ from app.services.auth import get_current_user
 from app.services.audit_log import AuditLogService
 from app.models.audit_log import AuditAction, AuditStatus
 from app.core.config import settings
-# 服务导入
-from app.services.scheduler_service import scheduler_service
+
 # 导入时间装饰器
 from app.core.timing_decorator import timing_debug
 
@@ -86,6 +85,8 @@ async def batch_power_control(
         powerChangingActions = ['on', 'off', 'restart', 'force_off', 'force_restart']
         if request.action in powerChangingActions:
             try:
+                # 服务导入
+                from app.services.scheduler_service import scheduler_service
                 for server_id in request.server_ids:
                     scheduler_service.schedule_server_refresh(server_id)
             except Exception as e:
@@ -384,6 +385,8 @@ async def create_server(
         
         # 创建服务器后立即调度刷新任务
         try:
+            # 服务导入
+            from app.services.scheduler_service import scheduler_service
             scheduler_service.schedule_server_refresh(server.id)
         except Exception as e:
             logger.error(f"调度服务器刷新任务失败: {str(e)}")
@@ -629,6 +632,7 @@ async def power_control(
         
         # 调度服务器刷新任务，在1秒和4秒后执行两次刷新
         try:
+            from app.services.scheduler_service import scheduler_service
             if scheduler_service is not None:
                 scheduler_service.schedule_server_refresh(server_id)
             else:
@@ -801,6 +805,7 @@ async def schedule_server_refresh(
     """为特定服务器调度刷新任务，在1秒和4秒后执行两次刷新"""
     try:
         # 调度服务器刷新任务
+        from app.services.scheduler_service import scheduler_service
         if scheduler_service is not None:
             scheduler_service.schedule_server_refresh(server_id)
             return {"message": f"已为服务器 {server_id} 调度刷新任务，在1秒和4秒后分别执行刷新"}
