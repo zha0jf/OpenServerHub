@@ -97,7 +97,7 @@ const GrafanaPanel: React.FC<GrafanaPanelProps> = ({
       {/* 骨架屏遮罩 */}
       {loading && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 2, background: '#fff', padding: 24 }}>
-          <Skeleton active vertical />
+          <Skeleton active />
         </div>
       )}
 
