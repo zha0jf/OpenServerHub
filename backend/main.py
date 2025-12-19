@@ -76,10 +76,10 @@ async def lifespan(app: FastAPI):
     if settings.POWER_STATE_REFRESH_ENABLED:
         try:
             from app.services.scheduler_service import PowerStateSchedulerService
-            import app.services.scheduler_service as scheduler_service_module
+            from app.services import scheduler_service as scheduler_service_var
             power_state_scheduler_service = PowerStateSchedulerService()
             # 同时初始化scheduler_service全局变量
-            scheduler_service_module.scheduler_service = power_state_scheduler_service
+            scheduler_service_var.scheduler_service = power_state_scheduler_service
             await power_state_scheduler_service.start()
             logger.info("电源状态定时刷新服务已启动")
         except Exception as e:

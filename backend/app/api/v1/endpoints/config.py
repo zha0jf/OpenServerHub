@@ -28,7 +28,6 @@ async def get_public_frontend_config():
 @timing_debug
 async def get_frontend_config(current_user = Depends(get_current_user)):
     """获取前端配置信息（需要认证）"""
-    logger.debug(f"[配置API] 用户 {current_user.username if current_user else 'unknown'} 请求配置信息")
     config_data = {
         "project_name": settings.PROJECT_NAME,
         "version": settings.VERSION,
@@ -40,5 +39,4 @@ async def get_frontend_config(current_user = Depends(get_current_user)):
         "vendor_name": settings.VENDOR_NAME,
         "vendor_url": settings.VENDOR_URL,
     }
-    logger.debug(f"[配置API] 返回配置信息: {config_data}")
     return config_data
