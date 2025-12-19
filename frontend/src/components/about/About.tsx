@@ -63,7 +63,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
               <Text code>{config?.version || '未知'}</Text>
               <br />
               <Text type="secondary">项目版本: </Text>
-              <Text code>OpenServerHub {config?.version || '未知'}</Text>
+              <Text code>{VERSION_INFO.version}</Text>
               {VERSION_INFO.buildTime && (
                 <div style={{ marginTop: '4px' }}>
                   <Text type="secondary">构建时间: </Text>
@@ -94,17 +94,35 @@ const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
         <Divider style={{ margin: '8px 0' }} />
 
         {/* 厂商信息 */}
+        <div>
+          <Text strong>厂商信息</Text>
+          <div style={{ marginTop: '8px' }}>
+            <Text type="secondary">厂商名称: </Text>
+            <Text>{config?.vendor_name || 'opensource'}</Text>
+            <br />
+            <Text type="secondary">官方网址: </Text>
+            <Text>
+              <a href={config?.vendor_url} target="_blank" rel="noopener noreferrer">
+                {config?.vendor_url || 'https://github.com/zha0jf/OpenServerHub'}
+              </a>
+            </Text>
+          </div>
+        </div>
+
+        <Divider style={{ margin: '8px 0' }} />
+
+        {/* 联系方式 */}
+        <div>
+          <Text strong>联系方式</Text>
+          <div style={{ marginTop: '8px' }}>
+            <Text type="secondary">如有问题，请联系厂商获取技术支持</Text>
+          </div>
+        </div>
+
+        <Divider style={{ margin: '8px 0' }} />
+
+        {/* 版权和许可证信息 */}
         <div style={{ textAlign: 'center' }}>
-          <Text type="secondary">
-            厂商: {config?.vendor_name || 'opensource'}
-          </Text>
-          <br />
-          <Text type="secondary">
-            <a href={config?.vendor_url} target="_blank" rel="noopener noreferrer">
-              {config?.vendor_url || 'https://github.com/zha0jf/OpenServerHub'}
-            </a>
-          </Text>
-          <br />
           <Text type="secondary">
             许可证: MIT License
           </Text>
